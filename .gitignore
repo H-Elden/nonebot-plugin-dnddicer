@@ -1,0 +1,40 @@
+# ---- Python 通用 ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+wheels/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+junit.xml
+
+# ---- 虚拟环境 ----
+.venv/
+venv/
+env/
+
+# ---- localstore 数据目录----
+data/
+
+# ---- 环境与密钥 ----
+.env
+.env.*.local
+!.env.example
+
+# ---- 本地参考资料----
+.ref/
+
+# ---- 项目内部文档----
+AGENTS.md
+doc/
+
+# ---- 编辑器/系统 ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

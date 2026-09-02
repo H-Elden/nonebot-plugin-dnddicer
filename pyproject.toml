@@ -1,0 +1,95 @@
+# ============================================================
+# DNDDicer（DND 骰子）——专精 DND5e/5r 的 NoneBot2 骰娘插件
+# 项目名（GitHub / PyPI）：nonebot-plugin-dnddicer
+# 模块名：nonebot_plugin_dnddicer
+# 依据：doc/骰娘插件开发计划.md 与 NoneBot 官方发布指南
+#   （https://nonebot.dev/docs/developer/plugin-publishing）
+# ============================================================
+
+[build-system]
+requires = ["hatchling>=1.26.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nonebot-plugin-dnddicer"
+dynamic = ["version"]
+description = "专精 DND5e/5r 跑团的 NoneBot2 骰娘插件（DND 骰子）：掷骰表达式、角色卡与检定、属性生成、HP 管理、先攻列表、战斗轮等，命令手感对齐 nonebot-dicepp"
+readme = "README.md"
+requires-python = ">=3.11"
+# 自有许可为 MIT；掷骰引擎移植自 nonebot-dicepp（MIT, Copyright (c) 2022 pear-studio），
+# 移植落地时引擎文件头将保留 pear-studio 版权声明与 MIT 许可全文（见 README「许可与致谢」）
+license = "MIT"
+keywords = [
+    "nonebot",
+    "nonebot2",
+    "dnd",
+    "dnd5e",
+    "trpg",
+    "dice",
+    "跑团",
+    "骰娘",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Games/Entertainment :: Role-Playing",
+]
+# TODO: GitHub 仓库创建后补上作者信息与真实主页
+# authors = [{ name = "...", email = "..." }]
+dependencies = [
+    # NoneBot2 框架本体（商店要求：必须包含，禁止 == 锁版本，禁止 nonebot V1）
+    "nonebot2>=2.5.0,<3.0.0",
+    # 直接使用的适配器（OneBot V11；商店要求直接使用的适配器必须列入依赖）
+    "nonebot-adapter-onebot>=2.4.6,<3.0.0",
+    # 本地数据存储（商店要求：必须使用 localstore，代码中 require 后再 import）
+    "nonebot-plugin-localstore>=0.7.4,<1.0.0",
+    # 注：lark>=1.1.0 将在掷骰引擎（DicePP ast_engine 移植，里程碑 2）落地时加入
+]
+
+[project.urls]
+# TODO: GitHub 仓库创建后替换为真实地址
+Homepage = "https://github.com/<your-github>/nonebot-plugin-dnddicer"
+Issues = "https://github.com/<your-github>/nonebot-plugin-dnddicer/issues"
+Repository = "https://github.com/<your-github>/nonebot-plugin-dnddicer.git"
+
+[project.optional-dependencies]
+# pip 兼容的开发者依赖（与下方 [dependency-groups].dev 保持一致，改动需两处同步）
+dev = [
+    "pytest>=8.3.0,<9.0.0",
+    "pytest-asyncio>=0.25.0,<1.0.0",
+    "nonebug>=0.4.4,<1.0.0",
+    "nonebot2[fastapi]>=2.5.0,<3.0.0",
+]
+
+[dependency-groups]
+# 开发/测试依赖组（uv / pdm 使用；pip 用户装 [dev] extra，内容与上方保持一致）
+dev = [
+    "pytest>=8.3.0,<9.0.0",
+    "pytest-asyncio>=0.25.0,<1.0.0",
+    # NoneBot 官方测试框架（NoneFlow 商店加载测试同思路）
+    "nonebug>=0.4.4,<1.0.0",
+    "nonebot2[fastapi]>=2.5.0,<3.0.0",
+]
+
+[tool.nonebot]
+# 声明本插件（供 nb-cli / nonebot.load_from_toml 加载，例如本地加载测试）
+plugins = ["nonebot_plugin_dnddicer"]
+
+[tool.hatch.version]
+# 版本号单一来源：nonebot_plugin_dnddicer/version.py
+path = "nonebot_plugin_dnddicer/version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["nonebot_plugin_dnddicer"]
+
+[tool.hatch.metadata]
+license-files = ["LICENSE"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
