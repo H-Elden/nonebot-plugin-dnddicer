@@ -9,9 +9,29 @@
 
 from nonebot import require
 
+
+def _nonebot_initialized() -> bool:
+    """判断 NoneBot 是否已完成初始化（require 的前提）。
+
+    本包可能被两种方式导入：
+    - NoneBot 加载流程（NoneBot load / NoneBug 夹具）：已初始化，require 必须执行；
+    - 直接导入（例如引擎随迁单测在 pytest 收集阶段 import engine 子模块）：
+      尚未初始化，此时跳过 require 即可（localstore 真正缺失时，在已初始化
+      场景下 require 会正常抛错，不会被此判断掩盖）。
+    """
+    try:
+        from nonebot import get_driver
+
+        get_driver()
+        return True
+    except ValueError:
+        return False
+
+
 # 商店合规：依赖其他插件必须先 require() 再 import()
 # （本地数据存储统一走 nonebot-plugin-localstore）
-require("nonebot_plugin_localstore")
+if _nonebot_initialized():
+    require("nonebot_plugin_localstore")
 
 from nonebot.plugin import PluginMetadata  # noqa: E402
 
@@ -41,8 +61,8 @@ __plugin_meta__ = PluginMetadata(
     extra={"version": __version__},
 )
 
-# 命令层 / 数据层子模块随插件加载一并导入：
-# - 保证包结构完整、尽早暴露导入错误；
-# - 各功能 matcher 在 commands 子模块中注册（骨架期暂未注册任何命令响应器，
-#   里程碑 2 起按 doc/骰娘插件开发计划.md 的分期逐模块落地）。
-from . import commands, data  # noqa: E402,F401
+# 子模块随插件加载一并导入：
+# - engine（掷骰引擎，里程碑 2 落地）与 commands（命令注册入口）无初始化副作用，
+#   随包导入以尽早暴露导入错误；data（localstore 存储）依赖运行时目录，改为
+#   首次功能调用时按需导入（其模块内 require/import 需在 NoneBot 初始化后执行）。
+from . import commands, engine  # noqa: E402,F401

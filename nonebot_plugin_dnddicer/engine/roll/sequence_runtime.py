@@ -1,0 +1,63 @@
+# ---------------------------------------------------------------------------
+# 本文件移植自 nonebot-dicepp (https://github.com/pear-studio/nonebot-dicepp)
+# Copyright (c) 2022 pear-studio, MIT License（许可全文见本项目 LICENSE）。
+# Ported from nonebot-dicepp — 逻辑语义与上游一致，仅做 import/路径适配；
+# 改动记录见移植说明文件头注释。
+# ---------------------------------------------------------------------------
+"""SequenceRuntime for deterministic dice rolling.
+
+Provides a runtime that returns values from a fixed sequence,
+throwing IndexError when exhausted (rather than cycling).
+"""
+
+from typing import Sequence
+
+# 必须与引擎共享同一 canonical 模块，才能共享 Karma runtime 的 ContextVar。
+# 若重新引入另一条包路径，`sys.modules` 会出现两个副本，ContextVar 的读写将
+# 分离，`--dice` 序列控制会失效。（适配：原为 plugins.DicePP.module.roll.karma_runtime）
+from .karma_runtime import set_runtime, reset_runtime
+
+
+class SequenceRuntime:
+    """
+    Deterministic runtime backed by a fixed sequence.
+
+    Throws IndexError when the sequence is exhausted (rather than cycling),
+    to expose "consumed more dice than expected" issues early.
+    """
+
+    def __init__(self, seq: Sequence[int]):
+        self._seq = list(seq)
+        self._idx = 0
+
+    def roll(self, dice_type: int) -> int:
+        """Consume one value from sequence and normalize to dice range.
+
+        Args:
+            dice_type: The dice type (e.g., 20 for d20). Must be > 0.
+
+        Raises:
+            AssertionError: If dice_type <= 0 (indicates programming error).
+            IndexError: If sequence is exhausted.
+        """
+        assert dice_type > 0, f"dice_type must be positive, got {dice_type}"
+        if self._idx >= len(self._seq):
+            raise IndexError(
+                f"SequenceRuntime exhausted: requested roll #{self._idx + 1} "
+                f"but only {len(self._seq)} values available"
+            )
+        raw = self._seq[self._idx]
+        self._idx += 1
+        # Normalize into valid dice range [1, dice_type]
+        return ((int(raw) - 1) % dice_type) + 1
+
+    def get_consumed_count(self) -> int:
+        """Return number of values consumed so far."""
+        return self._idx
+
+    def get_remaining_count(self) -> int:
+        """Return number of values remaining in sequence."""
+        return len(self._seq) - self._idx
+
+
+__all__ = ["SequenceRuntime", "set_runtime", "reset_runtime"]

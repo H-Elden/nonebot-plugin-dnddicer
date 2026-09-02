@@ -47,7 +47,8 @@ dependencies = [
     "nonebot-adapter-onebot>=2.4.6,<3.0.0",
     # 本地数据存储（商店要求：必须使用 localstore，代码中 require 后再 import）
     "nonebot-plugin-localstore>=0.7.4,<1.0.0",
-    # 注：lark>=1.1.0 将在掷骰引擎（DicePP ast_engine 移植，里程碑 2）落地时加入
+    # 掷骰表达式引擎文法解析（移植自 nonebot-dicepp ast_engine，上游同款依赖）
+    "lark>=1.1.0,<2.0.0",
 ]
 
 [project.urls]
@@ -93,3 +94,6 @@ license-files = ["LICENSE"]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
+markers = [
+    "quick: 上游 nonebot-dicepp 随迁测试中的快速测试分组标记（本仓库未按该分组筛选，仅注册以免告警）",
+]

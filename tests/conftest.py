@@ -1,16 +1,21 @@
-"""pytest 全局夹具：NoneBot 初始化后注册 OneBot V11 适配器并加载本插件。
+"""pytest 全局初始化：NoneBot 初始化 + 注册 OneBot V11 适配器 + 加载本插件。
 
-写法对齐官方 uv 模板（fllesser/nonebot-plugin-template）：
-- nonebug 提供 session 级 autouse 夹具 ``after_nonebot_init``（NoneBot 已初始化）；
-- 在此之后注册适配器、并按 pyproject.toml 的 [tool.nonebot] 声明加载插件——
-  与 NoneFlow 商店加载测试语义一致。
+关键点：必须在 **pytest 收集测试模块之前**（本 conftest 模块导入时）完成——
+引擎随迁测试（tests/engine/）在收集阶段就会 import ``nonebot_plugin_dnddicer``
+包（导入子模块必先导入父包）；若此时 NoneBot 尚未初始化并注册插件，
+包会被当作普通模块提前装入 ``sys.modules``，导致 NoneBot 后续无法把它
+注册为插件（NoneFlow 商店加载语义同样如此：先 init 再 load）。
+
+- ``nonebot.init()`` 幂等：nonebug 的 session 级 ``_nonebot_init`` 夹具随后
+  再次调用不会冲突；
+- 未来的 nonebug 命令测试（``app.test_matcher``）可直接使用 nonebug 提供的
+  ``app`` 夹具，无需重复初始化。
 """
 
 import os
 from pathlib import Path
 
 import nonebot
-import pytest
 from nonebot.adapters.onebot.v11 import Adapter as OnebotV11Adapter
 
 if Path(".env.dev").exists():
@@ -18,10 +23,8 @@ if Path(".env.dev").exists():
 else:
     os.environ["ENVIRONMENT"] = "test"
 
-
-@pytest.fixture(scope="session", autouse=True)
-async def after_nonebot_init(after_nonebot_init: None) -> None:
-    """NoneBot 初始化完成后：注册 OneBot V11 适配器并加载本插件。"""
-    driver = nonebot.get_driver()
-    driver.register_adapter(OnebotV11Adapter)
-    nonebot.load_from_toml("pyproject.toml")
+# ── 收集前完成：init + 适配器 + 插件加载（与 NoneFlow 商店加载测试语义一致）──
+nonebot.init()
+driver = nonebot.get_driver()
+driver.register_adapter(OnebotV11Adapter)
+nonebot.load_from_toml("pyproject.toml")
