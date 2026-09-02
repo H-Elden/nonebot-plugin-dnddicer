@@ -18,8 +18,9 @@ junit.xml
 venv/
 env/
 
-# ---- localstore 数据目录----
-data/
+# ---- localstore 数据目录（仅仓库根：开发/测试期由 tests/conftest 落于此；
+#      生产环境由宿主 LOCALSTORE_DATA_DIR 指定；不可用裸 data/ 以免误伤插件包内 data 目录）----
+/data/
 
 # ---- 环境与密钥 ----
 .env

@@ -26,6 +26,8 @@ from nonebot.matcher import Matcher
 from nonebot.plugin import on_message
 from nonebot.rule import Rule
 
+from ..config import get_config
+
 #: 本插件自带的命令起始符（英文/中文句号）
 _BUILTIN_STARTS: tuple[str, ...] = (".", "。")
 
@@ -98,32 +100,43 @@ def parse_command_text(text: str) -> Optional[tuple[str, str, str]]:
     return None
 
 
-def command_rule(name: str) -> Rule:
-    """生成只匹配指定命令名的事件响应规则（基于纯文本，兼容所有消息事件）。"""
+def command_rule(*names: str) -> Rule:
+    """生成匹配指定命令名集合的事件响应规则（基于纯文本，兼容所有消息事件）。
+
+    命令名可为多个（含别名），匹配结果只需落在集合内即命中。
+    """
+    target = frozenset(names)
 
     async def _checker(event: MessageEvent) -> bool:
         parsed = parse_command_text(event.get_plaintext())
-        return parsed is not None and parsed[1] == name
+        return parsed is not None and parsed[1] in target
 
     return Rule(_checker)
 
 
-def on_dnd_command(name: str, description: str = "") -> Matcher:
+def on_dnd_command(
+    name: str,
+    description: str = "",
+    *,
+    aliases: tuple[str, ...] = (),
+) -> Matcher:
     """创建一条 DNDDicer 点前缀命令的事件响应器并注册命令名。
 
     Args:
         name: 命令名（如 "r"）；匹配为最长前缀，命令名后无需空格。
-        description: 命令说明（供 .帮助 使用，可为空）。
+        description: 命令帮助全文（供 .帮助 使用，可为空）。
+        aliases: 命令别名（同样注册进匹配表，如 ("帮助",) 使 .帮助 与 .help 等价）。
 
     Returns:
         可直接挂 ``@matcher.handle()`` 的 Matcher。
     """
     register_command(name, description)
+    for alias in aliases:
+        register_command(alias, description)
 
-    from nonebot_plugin_dnddicer.config import get_config
-
+    names = (name, *aliases)
     priority = get_config().dnddicer_command_priority
-    return on_message(command_rule(name), priority=priority, block=True)
+    return on_message(command_rule(*names), priority=priority, block=True)
 
 
 def get_command_rest(event: MessageEvent) -> Optional[str]:

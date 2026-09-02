@@ -41,6 +41,13 @@ TXT_EXP_UNIMPLEMENTED = "「期望值计算」(.r exp) 尚未实现，敬请期�
 TXT_SPECIAL_MODE_UNIMPLEMENTED = "该掷骰模式（{mode}）尚未实现，敬请期待。"
 TXT_NOT_IMPLEMENTED = "该功能尚未实现，敬请期待。"
 
+# ── 群默认骰面 .dset（对齐 DicePP dice_set_command 默认文案）───────────────
+TXT_DSET_SUCCESS = "本群默认掷骰表达式已改为{expr}。"
+TXT_DSET_INVALID = "默认掷骰表达式无效：{reason}"
+TXT_DSET_CURRENT = "当前默认掷骰表达式为{expr}。使用 .dset [表达式] 进行修改。"
+TXT_DSET_GROUP_ONLY = "该指令仅在群聊中可用。"
+TXT_DSET_NO_PERMISSION = "仅群主或管理员可以设置群默认骰面。"
+
 
 def get_roll_state_text(res_list: List[RollResult]) -> str:
     """计算掷骰结果附带的 d20 状态文案（移植 DicePP get_roll_state_loc_text）。

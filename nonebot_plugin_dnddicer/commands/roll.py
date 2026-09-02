@@ -15,7 +15,7 @@
 
 from __future__ import annotations
 
-from typing import List
+from typing import Any, List, Optional
 
 from nonebot import logger
 from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, MessageEvent
@@ -63,14 +63,22 @@ def _render_roll_result(res_list: List[RollResult], is_show_info: bool) -> str:
     return res_list[0].get_exp_val()
 
 
-async def _roll_and_render(args: RollParseArgs) -> str:
+async def _roll_and_render(args: RollParseArgs, group_id: Optional[int] = None) -> str:
     """执行掷骰并渲染结果块；语法/引擎错误时抛出对应异常由调用方处理。
+
+    默认骰面优先级：本群配置 ``default_dice``（.dset 设置）→ 插件全局配置
+    ``dnddicer_default_face``（群配置落地前为默认 d20）。
 
     Raises:
         RollDiceError / RollEngineError: 表达式解析或求值错误（含用户可见信息）。
     """
-    # 默认骰面：群配置落地前取插件全局配置（int 或 "D20" 等格式均可）
-    stored_default = get_config().dnddicer_default_face
+    stored_default: Any = get_config().dnddicer_default_face
+    if group_id is not None:
+        from ..data.group_config import get_group_config
+
+        cfg = await get_group_config(group_id)
+        if cfg.get("default_dice"):
+            stored_default = cfg["default_dice"]
     default_expr = format_default_expr_from_storage(stored_default)
 
     exp_str = preprocess_roll_exp(args.exp_str)
@@ -123,7 +131,8 @@ async def handle_roll(bot: Bot, event: MessageEvent) -> None:
         )
 
     try:
-        final_with_state = await _roll_and_render(args)
+        group_id = getattr(event, "group_id", None)
+        final_with_state = await _roll_and_render(args, group_id=group_id)
     except (RollDiceError, RollEngineError) as e:
         # 语法/引擎错误：直接回显用户可见错误信息（DicePP 同款行为）
         await roll_matcher.finish(e.info if isinstance(e, RollDiceError) else e.message)

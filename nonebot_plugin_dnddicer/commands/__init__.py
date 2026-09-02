@@ -21,5 +21,7 @@
 
 from . import base  # noqa: F401  # 基础设施（注册表/起始符/解析）
 from . import roll  # noqa: F401  # .r / .rh 掷骰命令（模块顶层注册 matcher）
+from . import group_config  # noqa: F401  # .dset 群默认骰面
+from . import help  # noqa: F401  # .帮助 / .help（须在其它命令之后导入以保持列表顺序）
 from . import roll_parse_args  # noqa: F401  # .r 参数解析（上游迁移）
 from . import text  # noqa: F401  # 反馈文案
