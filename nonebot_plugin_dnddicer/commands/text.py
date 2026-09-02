@@ -48,6 +48,10 @@ TXT_DSET_CURRENT = "当前默认掷骰表达式为{expr}。使用 .dset [表达�
 TXT_DSET_GROUP_ONLY = "该指令仅在群聊中可用。"
 TXT_DSET_NO_PERMISSION = "仅群主或管理员可以设置群默认骰面。"
 
+# ── .dnd 属性生成（对齐 DicePP misc/dnd_command 默认文案）─────────────────
+TXT_DND_RES = "{name} DND人物作成——{reason}:\n{result}"
+TXT_DND_RES_NOREASON = "{name} DND人物作成:\n{result}"
+
 # ── 通用 ────────────────────────────────────────────────────────────────
 TXT_GROUP_ONLY = "该指令仅在群聊中可用。"
 
