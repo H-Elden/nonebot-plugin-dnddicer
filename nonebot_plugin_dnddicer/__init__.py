@@ -61,8 +61,13 @@ __plugin_meta__ = PluginMetadata(
     extra={"version": __version__},
 )
 
-# 子模块随插件加载一并导入：
-# - engine（掷骰引擎，里程碑 2 落地）与 commands（命令注册入口）无初始化副作用，
-#   随包导入以尽早暴露导入错误；data（localstore 存储）依赖运行时目录，改为
-#   首次功能调用时按需导入（其模块内 require/import 需在 NoneBot 初始化后执行）。
-from . import commands, engine  # noqa: E402,F401
+# 子模块导入策略：
+# - engine（掷骰引擎）无初始化副作用，随包导入以尽早暴露导入错误（引擎单测在
+#   pytest 收集阶段直接 import 本包时也需要可用）；
+# - commands（命令注册：顶层创建 on_message matcher 并读取插件配置）与 data
+#   （localstore 存储）必须在 NoneBot 初始化后的加载流程中导入，否则跳过——
+#   这正是 NoneBot 加载本插件时的场景（NoneFlow/宿主加载），matcher 照常注册。
+if _nonebot_initialized():
+    from . import commands  # noqa: E402,F401
+    from . import data  # noqa: E402,F401
+from . import engine  # noqa: E402,F401
