@@ -48,6 +48,17 @@ TXT_DSET_CURRENT = "当前默认掷骰表达式为{expr}。使用 .dset [表达�
 TXT_DSET_GROUP_ONLY = "该指令仅在群聊中可用。"
 TXT_DSET_NO_PERMISSION = "仅群主或管理员可以设置群默认骰面。"
 
+# ── 通用 ────────────────────────────────────────────────────────────────
+TXT_GROUP_ONLY = "该指令仅在群聊中可用。"
+
+# ── DND5e 角色卡 .角色卡 / .状态 / 检定（对齐 DicePP character 默认文案）─────
+TXT_CHAR_SET = "角色卡已设置"
+TXT_CHAR_MISS = "找不到角色卡"
+TXT_CHAR_DEL = "角色卡已删除"
+# 检定反馈：{name} 角色名/昵称；{check} 检定条目；{hint} 过程说明；{result} 掷骰过程
+# 注：文案保留 DicePP 默认注册文本（"throw" 为其原样，未本地化，忠实对齐）
+TXT_CHECK_RESULT = "{name} throw {check}\n{hint}\n{result}"
+
 
 def get_roll_state_text(res_list: List[RollResult]) -> str:
     """计算掷骰结果附带的 d20 状态文案（移植 DicePP get_roll_state_loc_text）。
