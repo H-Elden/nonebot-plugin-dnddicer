@@ -64,16 +64,74 @@ class HPInfo(BaseModel):
         self.hp_dice_num = hp_dice_num
         self.hp_dice_max = hp_dice_max
 
+    def is_record_normal(self) -> bool:
+        """当前是否正常记录生命值（拥有 HP 值，而非单纯记录受损）。"""
+        return self.hp_cur > 0 or (self.hp_cur == 0 and not self.is_alive)
+
+    def is_record_damage(self) -> bool:
+        """当前是否是记录受损生命值的情况。"""
+        return not self.is_record_normal()
+
+    def take_damage(self, value: int) -> None:
+        """受到伤害：临时 HP 先吸收，溢出扣当前 HP；降至 0 昏迷。"""
+        if self.hp_temp > 0:
+            if self.hp_temp >= value:
+                self.hp_temp -= value
+                return
+            else:
+                value -= self.hp_temp
+                self.hp_temp = 0
+        if self.is_alive:
+            if self.hp_cur > 0:
+                if self.hp_cur > value:
+                    self.hp_cur -= value
+                else:
+                    self.hp_cur = 0
+                    self.is_alive = False
+            else:
+                self.hp_cur -= value
+
+    def heal(self, value: int) -> None:
+        """治疗：不超过最大 HP；受损模式下向 0 恢复。"""
+        if self.is_record_normal():
+            if self.hp_max == 0:
+                self.hp_cur += value
+            else:
+                self.hp_cur = min(self.hp_max, self.hp_cur + value)
+        else:
+            self.hp_cur = min(0, self.hp_cur + value)
+        self.is_alive = True
+
+    def long_rest(self) -> str:
+        """长休：恢复 HP 至上限、清除临时 HP、回复一半生命骰（至少 1）。"""
+        info = ""
+        if self.hp_max != 0:
+            info = f"生命值回复至上限({self.hp_max})"
+            self.hp_cur = self.hp_max
+        if self.hp_temp != 0:
+            info += f" {self.hp_temp}点临时生命值失效"
+            self.hp_temp = 0
+        if self.hp_dice_max != 0 and self.hp_dice_type != 0:
+            prev_num = self.hp_dice_num
+            self.hp_dice_num = int(max(1, min(
+                self.hp_dice_max,
+                self.hp_dice_num + self.hp_dice_max // 2
+            )))
+            info += f"\n回复{self.hp_dice_num - prev_num}个生命骰, "
+            info += f"当前拥有{self.hp_dice_num}/{self.hp_dice_max}个D{self.hp_dice_type}生命骰"
+        return info.strip()
+
     def get_info(self) -> str:
-        """HP 摘要，如 ``HP:5/10 (4)``。"""
+        """HP 摘要，如 ``HP:5/10 (4)`` 或 ``损失HP:3``。"""
         temp_info = f" ({self.hp_temp})" if self.hp_temp != 0 else ""
-        if self.is_init:
+        if self.is_record_normal():
             max_info = f"/{self.hp_max}" if self.hp_max != 0 else ""
             info = f"HP:{self.hp_cur}{max_info}{temp_info}"
             if not self.is_alive:
                 info += " 昏迷"
-            return info
-        return ""
+        else:
+            info = f"损失HP:{-self.hp_cur}{temp_info}"
+        return info
 
     def get_char_info(self) -> str:
         """角色卡段落，如 ``$生命值$ 5/10 (4)``。"""

@@ -11,10 +11,11 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Tuple
+from typing import Dict, List, Literal, Optional, Tuple
 
 from ..engine.roll.ast_engine.adapter import exec_roll_exp_unified
 from ..engine.roll.roll_utils import RollDiceError
+from ..engine.roll.result import RollResult
 from .constants import (
     ABILITY_LIST,
     ABILITY_NUM,
@@ -371,3 +372,124 @@ def gen_template_char(group_id: str = "", user_id: str = "") -> DNDCharacter:
     character.ability_info.check_ext[EXT_ITEM_INDEX_DICT[SAVING_ALL_KEY]] = "+2"
     character.ability_info.check_ext[EXT_ITEM_INDEX_DICT["敏捷攻击"]] = "+1d4"
     return character
+
+
+class HPService:
+    """HP 相关服务（迁移自 DicePP module/character/dnd5e/services.py HPService）。"""
+
+    @staticmethod
+    def use_hp_dice(hp_info: HPInfo, num: int, con_mod: int) -> str:
+        """使用生命骰恢复 HP，返回修改结果描述。"""
+        if not hp_info.is_init or hp_info.hp_dice_type <= 0:
+            return "尚未设置生命骰"
+        if num <= 0 or num > 1000:
+            return f"无效的生命骰数量({num})"
+        if hp_info.hp_dice_num < num:
+            return f"生命骰数量不足, 还有{hp_info.hp_dice_num}颗生命骰"
+
+        roll_exp = f"1D{hp_info.hp_dice_type}+{con_mod}"
+
+        roll_result_list = []
+        roll_result_val = 0
+        for _ in range(num):
+            try:
+                roll_result = exec_roll_exp_unified(roll_exp)
+            except RollDiceError as e:
+                return f"未知掷骰错误:{e.info}"
+            if num > 1:
+                roll_result_list.append(f"({roll_result.get_info()})")
+            else:
+                roll_result_list.append(roll_result.get_info())
+            roll_val = roll_result.get_val()
+            if roll_val < 0:
+                roll_val = 0
+                roll_result_list[-1] = f"({roll_result_list[-1]}->0)"
+            roll_result_val += roll_val
+
+        roll_result_str = f"{'+'.join(roll_result_list)}={roll_result_val}"
+        mod_info = f"使用{num}颗D{hp_info.hp_dice_type}生命骰, 体质调整值为{con_mod}, 回复{roll_result_str}点生命值\n"
+        hp_info_str_prev = hp_info.get_info()
+        hp_info.hp_dice_num -= num
+        hp_info.heal(roll_result_val)
+        mod_info += f"{hp_info_str_prev} -> {hp_info.get_info()}"
+        return mod_info
+
+    @staticmethod
+    def process_roll_result(
+        hp_info: HPInfo,
+        cmd_type: Literal["=", "+", "-"],
+        hp_cur_mod_result: Optional[RollResult] = None,
+        hp_max_mod_result: Optional[RollResult] = None,
+        hp_temp_mod_result: Optional[RollResult] = None,
+        short_feedback: bool = False,
+    ) -> str:
+        """根据掷骰结果修改 HP，返回修改结果描述。
+
+        Args:
+            hp_info: HP 信息对象
+            cmd_type: "=" 设置, "+" 增加, "-" 减少
+            hp_cur_mod_result: 当前 HP 的掷骰结果
+            hp_max_mod_result: 最大 HP 的掷骰结果
+            hp_temp_mod_result: 临时 HP 的掷骰结果
+            short_feedback: 是否使用短格式反馈（多目标时用）
+        """
+        mod_info = ""
+
+        if cmd_type == "=":
+            hp_info.is_init = True
+            if hp_cur_mod_result:
+                if hp_info.is_record_normal():
+                    hp_info.is_alive = hp_cur_mod_result.get_val() > 0
+                hp_info.hp_cur = hp_cur_mod_result.get_val()
+                mod_info = f"HP={hp_cur_mod_result.get_result()}"
+            if hp_max_mod_result:
+                hp_info.hp_max = hp_max_mod_result.get_val()
+                if hp_info.hp_cur > hp_info.hp_max:
+                    hp_info.take_damage(hp_info.hp_cur - hp_info.hp_max)
+                mod_info = f"HP={hp_cur_mod_result.get_result()}/{hp_max_mod_result.get_result()}"
+            if hp_temp_mod_result:
+                hp_info.hp_temp = hp_temp_mod_result.get_val()
+                if "HP=" in mod_info:
+                    mod_info += f" ({hp_temp_mod_result.get_result()})"
+                else:
+                    mod_info = f"临时HP={hp_temp_mod_result.get_result()}"
+            mod_info += f"\n当前{hp_info.get_info()}"
+
+        elif cmd_type == "+":
+            hp_info_str_prev = hp_info.get_info()
+            if hp_max_mod_result:
+                hp_info.hp_max += hp_max_mod_result.get_val()
+                mod_info += f"最大HP增加{hp_max_mod_result.get_result()}, "
+            if hp_cur_mod_result:
+                hp_info.heal(hp_cur_mod_result.get_val())
+                mod_info += f"当前HP增加{hp_cur_mod_result.get_result()}"
+            if hp_temp_mod_result:
+                hp_info.hp_temp += hp_temp_mod_result.get_val()
+                if mod_info:
+                    mod_info += ", "
+                mod_info += f"临时HP增加{hp_temp_mod_result.get_result()}"
+            mod_info += f"\n{hp_info_str_prev} -> {hp_info.get_info()}"
+
+        else:  # cmd_type == "-"
+            hp_info_str_prev = hp_info.get_info()
+            if hp_temp_mod_result:
+                hp_info.hp_temp = max(0, hp_info.hp_temp - hp_temp_mod_result.get_val())
+                mod_info += f"临时HP减少{hp_temp_mod_result.get_result()}"
+            if hp_max_mod_result:
+                hp_info.hp_max -= hp_max_mod_result.get_val()
+                if mod_info:
+                    mod_info += ", "
+                mod_info += f"最大HP减少{hp_max_mod_result.get_result()}"
+                if hp_info.hp_cur > hp_info.hp_max:
+                    hp_info.take_damage(hp_info.hp_cur - hp_info.hp_max)
+            if hp_cur_mod_result:
+                hp_info.take_damage(hp_cur_mod_result.get_val())
+                if mod_info:
+                    mod_info += ", "
+                mod_info += f"当前HP减少{hp_cur_mod_result.get_result()}"
+            mod_info += f"\n{hp_info_str_prev} -> {hp_info.get_info()}"
+
+        mod_info = mod_info.strip()
+        if short_feedback:
+            mod_info = mod_info.replace("\n", "; ")
+        return mod_info

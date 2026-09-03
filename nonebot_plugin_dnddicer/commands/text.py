@@ -63,6 +63,19 @@ TXT_CHAR_DEL = "角色卡已删除"
 # 注：文案保留 DicePP 默认注册文本（"throw" 为其原样，未本地化，忠实对齐）
 TXT_CHECK_RESULT = "{name} throw {check}\n{hint}\n{result}"
 
+# ── HP 管理 .hp（对齐 DicePP hp_command 默认文案）─────────────────────────
+TXT_HP_INFO = "{name}: {hp_info}"
+TXT_HP_INFO_MISS = "找不到{name}的生命值信息"
+TXT_HP_INFO_MULTI = "存在多个匹配目标：{name_list}"
+TXT_HP_INFO_NONE = "本群没有任何生命值信息"
+TXT_HP_MOD = "{name}: {hp_mod}"
+TXT_HP_MOD_ERR = "修改生命值时出现错误：{error}"
+TXT_HP_DEL = "已删除{name}的生命值信息"
+
+# ── 长休 .长休 ─────────────────────────────────────────────────────────────
+TXT_LONG_REST = "{result}"
+TXT_LONG_REST_MISS = "找不到{name}的角色卡信息"
+
 
 def get_roll_state_text(res_list: List[RollResult]) -> str:
     """计算掷骰结果附带的 d20 状态文案（移植 DicePP get_roll_state_loc_text）。

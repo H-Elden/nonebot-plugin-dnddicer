@@ -95,3 +95,20 @@ async def delete_character(group_id: int | str, user_id: int | str) -> None:
         data = await _load_if_needed()
         data.pop(_key(group_id, user_id), None)
         await _dump_locked(data)
+
+
+async def list_characters_by_group(group_id: int | str) -> list[DNDCharacter]:
+    """列出某群所有已初始化的角色卡。"""
+    async with _get_lock():
+        data = await _load_if_needed()
+        prefix = f"{group_id}:"
+        raw_list = [v for k, v in data.items() if k.startswith(prefix)]
+    result: list[DNDCharacter] = []
+    for raw in raw_list:
+        try:
+            char = DNDCharacter.model_validate(raw)
+            if char.is_init:
+                result.append(char)
+        except Exception:  # noqa: BLE001
+            continue
+    return result
