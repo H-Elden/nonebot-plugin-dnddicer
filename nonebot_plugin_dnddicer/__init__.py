@@ -1,4 +1,4 @@
-"""DNDDicer（DND 骰子）：专精 DND5e / DND5r 的 NoneBot2 骰娘插件（OneBot V11）。
+"""DNDDicer（屠龙骰）：专精 DND5e / DND5r 的 NoneBot2 骰娘插件（OneBot V11）。
 
 项目定位与决策依据见仓库根 ``doc/骰娘插件开发计划.md``：
 - 掷骰引擎移植自 nonebot-dicepp 的 ast_engine（MIT，Copyright (c) 2022 pear-studio，
@@ -41,7 +41,7 @@ from .version import __version__  # noqa: E402
 # 插件元数据必须位于 __init__.py 最外层（NoneFlow 商店自动检查要求）
 __plugin_meta__ = PluginMetadata(
     # 基本信息
-    name="DND 骰子",
+    name="屠龙骰",
     description=(
         "专精 DND5e/5r 跑团的骰娘：掷骰表达式（d20/优势劣势/爆炸骰等）、"
         "角色卡与检定/豁免/攻击、属性生成、HP 管理、先攻列表、战斗轮（.br/.ed）、"

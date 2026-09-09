@@ -64,7 +64,7 @@ TXT_UNKNOWN_ERROR = "骰娘内部发生了错误，请联系管理员反馈。"
 # ── .bot 插件信息与群聊服务开关（宿主新需求 2026-09-09，自研文案，见计划文档 8.5 节）
 # 群聊服务默认关闭（白名单）：未开启的群仅 .bot 命令可用，其余命令静默不响应；
 # 私聊不受群聊服务开关限制
-TXT_BOT_HEAD = "DND 骰子（nonebot-plugin-dnddicer）v{version}"
+TXT_BOT_HEAD = "屠龙骰（nonebot-plugin-dnddicer）v{version}"
 TXT_BOT_INTRO = (
     "专精 DND5e/5r 跑团的骰娘：掷骰表达式、角色卡与检定/豁免/攻击、"
     "属性生成、HP 管理、先攻列表、战斗轮、群配置，命令手感对齐 nonebot-dicepp。"

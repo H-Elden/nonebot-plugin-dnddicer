@@ -22,7 +22,7 @@ def test_plugin_metadata() -> None:
     assert plugin is not None
     meta = plugin.metadata
     assert meta is not None
-    assert meta.name == "DND 骰子"
+    assert meta.name == "屠龙骰"
     assert meta.description
     assert meta.usage
     assert meta.type == "application"

@@ -1,4 +1,4 @@
-# DND 骰子（nonebot-plugin-dnddicer）
+# 屠龙骰（DNDDicer / nonebot-plugin-dnddicer）
 
 > 专精 **DND5e / DND5r** 跑团的 [NoneBot2](https://nonebot.dev/) 骰娘插件（OneBot V11 适配器），
 > 命令手感对齐 [nonebot-dicepp](https://github.com/pear-studio/nonebot-dicepp)（梨子骰子）。

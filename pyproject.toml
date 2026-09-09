@@ -1,5 +1,5 @@
 # ============================================================
-# DNDDicer（DND 骰子）——专精 DND5e/5r 的 NoneBot2 骰娘插件
+# DNDDicer（屠龙骰）——专精 DND5e/5r 的 NoneBot2 骰娘插件
 # 项目名（GitHub / PyPI）：nonebot-plugin-dnddicer
 # 模块名：nonebot_plugin_dnddicer
 # 依据：doc/骰娘插件开发计划.md 与 NoneBot 官方发布指南
@@ -13,7 +13,7 @@ build-backend = "hatchling.build"
 [project]
 name = "nonebot-plugin-dnddicer"
 dynamic = ["version"]
-description = "专精 DND5e/5r 跑团的 NoneBot2 骰娘插件（DND 骰子）：掷骰表达式、角色卡与检定、属性生成、HP 管理、先攻列表、战斗轮等，命令手感对齐 nonebot-dicepp"
+description = "专精 DND5e/5r 跑团的 NoneBot2 骰娘插件（屠龙骰）：掷骰表达式、角色卡与检定、属性生成、HP 管理、先攻列表、战斗轮等，命令手感对齐 nonebot-dicepp"
 readme = "README.md"
 requires-python = ">=3.11"
 # 自有许可为 MIT；掷骰引擎移植自 nonebot-dicepp（MIT, Copyright (c) 2022 pear-studio），
