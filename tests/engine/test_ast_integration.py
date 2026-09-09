@@ -248,3 +248,57 @@ class TestBuildRollResultValList:
         assert "14" in complete
         # info 正确展示过程
         assert "[5]+5+[4]" in complete or "5+5+4" in complete
+
+
+class TestCompoundOperandParentheses:
+    """8.4 #2：抗性/易伤等括号表达式渲染按优先级补括号（求值语义不变）。"""
+
+    def test_resistance_additive_numerator(self):
+        """5+2+3抗性 → 渲染补分子括号：(5+2+3)/2=5"""
+        result = exec_roll_exp_unified("5+2+3抗性")
+        assert result.get_val() == 5
+        assert result.get_info() == "(5+2+3)/2"
+        assert result.get_result() == "(5+2+3)/2=5"
+
+    def test_vulnerability_additive_numerator(self):
+        """5+2+3易伤 → 渲染补分子括号：(5+2+3)*2=20"""
+        result = exec_roll_exp_unified("5+2+3易伤")
+        assert result.get_val() == 20
+        assert result.get_info() == "(5+2+3)*2"
+
+    def test_resistance_dice_expression(self):
+        """1D6+3抗性（骰 3）→ ([3]+3)/2=3"""
+        roller = MockDiceRoller([3])
+        result = exec_roll_exp_unified("1D6+3抗性", dice_roller=roller)
+        assert result.get_val() == 3
+        assert result.get_info() == "([3]+3)/2"
+
+    def test_resistance_single_dice_no_parens(self):
+        """12抗性（纯单操作数）→ 无需括号：12/2=6"""
+        result = exec_roll_exp_unified("12抗性")
+        assert result.get_val() == 6
+        assert result.get_info() == "12/2"
+
+    def test_explicit_parentheses_preserved_in_info(self):
+        """(1+2)*2 → 渲染保留括号：(1+2)*2=6"""
+        result = exec_roll_exp_unified("(1+2)*2")
+        assert result.get_val() == 6
+        assert result.get_info() == "(1+2)*2"
+
+    def test_divide_by_parenthesized_sum(self):
+        """12/(1+2) → 求值 4。注：两侧纯常量（无骰子树）时渲染文本受引擎
+        既有「常量子树无 trace 事件」限制（文本错位/被值替换），非 8.4 #2
+        括号范围，此处仅断言数值。"""
+        result = exec_roll_exp_unified("12/(1+2)")
+        assert result.get_val() == 4
+
+    def test_multiply_by_parenthesized_sum(self):
+        """2*(1+2) → 求值 6。注：渲染文本限制同上例，此处仅断言数值。"""
+        result = exec_roll_exp_unified("2*(1+2)")
+        assert result.get_val() == 6
+
+    def test_left_associative_same_precedence_no_parens(self):
+        """8/2/2 同级左结合 → 不补多余括号：8/2/2=2"""
+        result = exec_roll_exp_unified("8/2/2")
+        assert result.get_val() == 2
+        assert result.get_info() == "8/2/2"

@@ -3,6 +3,13 @@
 # Copyright (c) 2022 pear-studio, MIT License（许可全文见本项目 LICENSE）。
 # Ported from nonebot-dicepp — 逻辑语义与上游一致，仅做 import/路径适配；
 # 改动记录见移植说明文件头注释。
+#
+# ── 本仓库改动记录（上游升级 diff 同步时对照）────────────────────────────
+# 2026-09-09（计划文档 8.4 #2）：OperationEvent 渲染（render()）对复合
+# 操作数按运算优先级补括号。背景：preprocessor 将「expr抗性/易伤」展开为
+# (expr)/2、(expr)*2，但括号节点不产生 trace 事件，栈重建 infix 时复合
+# 操作数不带括号（显示 5+2+3/2，与真实计算值语义不一致）。仅渲染层变化，
+# 求值语义不变。
 # ---------------------------------------------------------------------------
 """
 Structured Trace Model for Roll Expressions
@@ -143,6 +150,51 @@ class TraceRenderer:
     def render_modifier(self, event: ModifierAppliedEvent) -> str:
         """Render a modifier event."""
         raise NotImplementedError
+
+
+#: 渲染文本中成对块字符的闭合映射（骰块/MAX/MIN/XO 追加骰/括号），
+#: 扫描顶层运算符时跳过块内内容（块内 +/- 仅为骰值或修饰参数，非算式运算符）
+_PAIR_CLOSERS = {"[": "]", "{": "}", "(": ")", "\u2039": "\u203a"}
+
+
+def _top_level_operators(text: str) -> str:
+    """返回文本最外层（块外）出现的运算符字符集合（+-*/ 的子集）。"""
+    found = ""
+    closers: List[str] = []
+    for ch in text:
+        if ch in _PAIR_CLOSERS:
+            closers.append(_PAIR_CLOSERS[ch])
+        elif closers and ch == closers[-1]:
+            closers.pop()
+        elif not closers and ch in "+-*/" and ch not in found:
+            found += ch
+    return found
+
+
+def _needs_parens(text: str, op: str, is_left: bool) -> bool:
+    """按运算优先级判断操作数文本拼接时是否需要补括号（8.4 #2）。
+
+    规则（只补语义必需的最小括号）：
+    - 顶层无运算符（原子：骰块/数值/MAX 等）→ 不需要；
+    - +- 左侧永不；+- 右侧仅在 op 为 - 或右侧含 +- 时需要
+      （a-(b+c)、a+(b-c) 无括号会被同级左结合改义；右侧纯 */ 优先级天然更高）；
+    - * / 左侧含 +- 时需要（(a+b)*c）；纯 */ 无需（同级左结合或除法对左安全）；
+    - * 右侧含 +- 或 / 时需要（a*(b/c) ≠ a*b/c）；/ 右侧任意复合都需要
+      （a/(b*c)、a/(b/c) 无括号均改义）。
+    """
+    top = _top_level_operators(text)
+    if not top:
+        return False
+    if op == "+":
+        return False
+    if op == "-":
+        return not is_left and ("+" in top or "-" in top)
+    if op == "/":
+        return ("+" in top or "-" in top) if is_left else True
+    # op == "*"
+    if is_left:
+        return "+" in top or "-" in top
+    return "+" in top or "-" in top or "/" in top
 
 
 class LegacyTextRenderer(TraceRenderer):
@@ -343,6 +395,11 @@ class LegacyTextRenderer(TraceRenderer):
                 else:
                     left = str(event.left_value)
                     right = str(event.right_value)
+                # 复合操作数按优先级补括号（8.4 #2，见 _needs_parens 规则）
+                if _needs_parens(left, event.operator, is_left=True):
+                    left = f"({left})"
+                if _needs_parens(right, event.operator, is_left=False):
+                    right = f"({right})"
                 stack.append(f"{left}{event.operator}{right}")
 
         return stack[0] if stack else ""
