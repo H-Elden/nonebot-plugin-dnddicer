@@ -1,0 +1,22 @@
+# push / PR 全量测试（NoneFlow 商店加载检查同思路的本地回归）
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      # uv sync 默认包含 [dependency-groups].dev，pytest/nonebug 随附
+      - name: 全量测试
+        run: uv run pytest

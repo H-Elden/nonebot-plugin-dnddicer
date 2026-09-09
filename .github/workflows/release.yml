@@ -1,0 +1,42 @@
+# 推 v* tag → 全量测试 → 构建并发布 PyPI（Trusted Publishing）+ 创建 GitHub Release
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: 全量测试
+        run: uv run pytest
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      # 建 GitHub Release
+      contents: write
+      # PyPI Trusted Publishing（OIDC），无需存储 token
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: 构建 sdist + wheel
+        run: uv build
+      - name: 发布到 PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+      - name: 创建 GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
