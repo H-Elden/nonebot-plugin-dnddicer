@@ -154,14 +154,14 @@ async def test_check_saving_and_attack_display_name(app: App):
     finally:
         reset_runtime(token)
 
-    # 伊丽莎白 敏捷14 → 调整+2（攻击默认熟练为 #8 前行为，8.4 #8 落地后同步为「无熟练加值」）
+    # 伊丽莎白 敏捷14 → 调整+2；攻击默认不熟练（8.4 #8），无熟练加值
     token = set_runtime(SequenceRuntime([3]))
     try:
         event = _event(".敏捷攻击", user_id=10009)
         expected = (
             "伊丽莎白进行【敏捷攻击】：\n"
-            "熟练加值:3 敏捷调整值:2\n"
-            "1D20+2+3=[3]+2+3=8"
+            "无熟练加值 敏捷调整值:2\n"
+            "1D20+2=[3]+2=5"
         )
         await _expect(app, check_matcher, event, expected)
     finally:

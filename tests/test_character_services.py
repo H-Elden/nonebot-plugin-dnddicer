@@ -47,17 +47,39 @@ def test_parse_character():
     assert ai.ability == [15, 14, 13, 12, 10, 8]
     # 熟练加值 = 2 + (5-1)//4 = 3
     assert ai.get_prof_bonus() == 3
-    # 力量熟练(1)、隐匿 2*、奥秘 1、全部攻击默认熟练
+    # 力量熟练(1)、隐匿 2*、奥秘 1；攻击默认全部不熟练（8.4 #8）
     from nonebot_plugin_dnddicer.character.constants import CHECK_ITEM_INDEX_DICT
 
     assert ai.check_prof[CHECK_ITEM_INDEX_DICT["力量"]] == 1
     assert ai.check_prof[CHECK_ITEM_INDEX_DICT["隐匿"]] == 2
     assert ai.check_prof[CHECK_ITEM_INDEX_DICT["奥秘"]] == 1
-    assert ai.check_prof[CHECK_ITEM_INDEX_DICT["力量攻击"]] == 1
+    assert ai.check_prof[CHECK_ITEM_INDEX_DICT["力量攻击"]] == 0
     # hp
     assert char.hp_info.hp_cur == 20 and char.hp_info.hp_max == 30
     assert char.hp_info.hp_temp == 5
     assert char.hp_info.hp_dice_type == 8
+
+
+def test_parse_character_attack_prof_explicit():
+    """攻击熟练仅在 $熟练$ 显式声明时生效（8.4 #8）。"""
+    char = CharacterService.parse(
+        "$等级$ 5\n$属性$ 15/14/13/12/10/8\n$熟练$ 力量攻击", "g", "u"
+    )
+    from nonebot_plugin_dnddicer.character.constants import CHECK_ITEM_INDEX_DICT
+
+    assert char.ability_info.check_prof[CHECK_ITEM_INDEX_DICT["力量攻击"]] == 1
+    # 未声明的其他攻击保持不熟练
+    assert char.ability_info.check_prof[CHECK_ITEM_INDEX_DICT["敏捷攻击"]] == 0
+
+
+def test_parse_character_attack_prof_zero_disables():
+    """0*力量攻击 显式关闭 → 不熟练（0* 语义保留）。"""
+    char = CharacterService.parse(
+        "$等级$ 5\n$属性$ 15/14/13/12/10/8\n$熟练$ 0*力量攻击", "g", "u"
+    )
+    from nonebot_plugin_dnddicer.character.constants import CHECK_ITEM_INDEX_DICT
+
+    assert char.ability_info.check_prof[CHECK_ITEM_INDEX_DICT["力量攻击"]] == 0
 
 
 def test_parse_character_missing_level_fails():
