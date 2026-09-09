@@ -1,6 +1,6 @@
 """命令起始符兼容开关测试（config.dnddicer_use_host_command_starts）。
 
-背景（doc/骰娘插件开发计划.md 8.6）：宿主 NoneBot ``COMMAND_START`` 默认含
+背景：宿主 NoneBot ``COMMAND_START`` 默认含
 "/"——若无条件兼容，"/help"、"/bot" 等常见单词命令可能与本插件同时命中宿主
 其他插件（冲突）。约定：默认**只匹配 "." / "。"**；配置为 true 时才叠加宿主
 起始符（此时 "/help"、"/bot" 亦可触发）。

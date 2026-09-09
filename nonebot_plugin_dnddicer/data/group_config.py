@@ -2,7 +2,7 @@
 
 设计：
 - 存储文件：``nonebot_plugin_localstore`` 数据目录下的 ``group_config.json``
-  （宿主月白配置 LOCALSTORE_DATA_DIR=data 时落 ``data/nonebot_plugin_dnddicer/``）；
+  （宿主配置 LOCALSTORE_DATA_DIR=data 时落 ``data/nonebot_plugin_dnddicer/``）；
 - 结构：``{"schema_version": 1, "data": {"<group_id(str)>": {"default_dice": "D20", ...}}}``
   ——后续群配置项（默认骰面、功能开关等）在同一 dict 上扩展；早期 v0 裸字典
   读取时自动按原样使用、首次写入升级 v1（版本化机制见 data/schema.py）；

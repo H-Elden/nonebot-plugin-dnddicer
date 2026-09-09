@@ -25,7 +25,7 @@ else:
     os.environ["ENVIRONMENT"] = "test"
 
 # 本地数据目录指向仓库内 data/（已在 .gitignore）：
-# - 沙箱/CI 无写系统 AppData 权限；语义与宿主月白（LOCALSTORE_DATA_DIR=data）一致；
+# - 沙箱/CI 无写系统 AppData 权限；语义与宿主（LOCALSTORE_DATA_DIR=data）一致；
 # - 必须在 nonebot.init() / localstore 加载之前设置。
 os.environ["LOCALSTORE_DATA_DIR"] = str(Path(__file__).resolve().parent.parent / "data")
 

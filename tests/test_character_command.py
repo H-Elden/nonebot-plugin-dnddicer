@@ -44,7 +44,7 @@ _RECORD = (
 
 @pytest.mark.asyncio
 async def test_char_template(app: App):
-    """.角色卡模板 → 示例角色卡文本 + 属性顺序/额外加值提示（8.4 #5）。"""
+    """.角色卡模板 → 示例角色卡文本 + 属性顺序/额外加值提示。"""
     from nonebot_plugin_dnddicer.character.services import gen_template_char
     from nonebot_plugin_dnddicer.commands.character import _gen_template_feedback, char_matcher
 
@@ -141,7 +141,7 @@ async def test_check_saving_and_attack_display_name(app: App):
 
     await _expect(app, char_matcher, _event(_RECORD, user_id=10009), "角色卡已设置")
 
-    # 伊丽莎白 体质13 → 调整+1，未熟练（8.4 #8 后默认全不熟练）
+    # 伊丽莎白 体质13 → 调整+1，未熟练（默认全不熟练）
     token = set_runtime(SequenceRuntime([9]))
     try:
         event = _event(".体质豁免", user_id=10009)
@@ -154,7 +154,7 @@ async def test_check_saving_and_attack_display_name(app: App):
     finally:
         reset_runtime(token)
 
-    # 伊丽莎白 敏捷14 → 调整+2；攻击默认不熟练（8.4 #8），无熟练加值
+    # 伊丽莎白 敏捷14 → 调整+2；攻击默认不熟练，无熟练加值
     token = set_runtime(SequenceRuntime([3]))
     try:
         event = _event(".敏捷攻击", user_id=10009)

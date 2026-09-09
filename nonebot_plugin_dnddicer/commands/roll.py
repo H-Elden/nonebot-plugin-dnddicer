@@ -53,7 +53,7 @@ roll_matcher = on_dnd_command("r", _HELP)
 def _render_roll_result(res_list: List[RollResult], is_show_info: bool) -> str:
     """渲染最终结果块（非特殊模式；对齐 DicePP process_msg 分支）。"""
     if len(res_list) > 1:
-        # 多次掷骰：#连掷（8.4 #3/#4 修订，见 text.py 模板注释）
+        # 多次掷骰：#连掷（模板说明见 text.py）
         exp = res_list[0].get_exp()
         if is_show_info:
             body = ",\n".join(res.get_result() for res in res_list)

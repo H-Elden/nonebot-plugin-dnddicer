@@ -1,12 +1,10 @@
 """数据层：本地数据存储的统一出口（商店合规要求：必须使用 nonebot-plugin-localstore）。
 
 - 所有数据/缓存/配置文件一律经本模块获取路径，禁止直接写任意磁盘位置；
-- localstore 目录由宿主决定：月白机器人已配置 ``LOCALSTORE_DATA_DIR=data``，
-  数据将落于 ``data/nonebot_plugin_dnddicer/`` 下，与宿主体系兼容；
-- 不得使用宿主项目私有工具（如月白的 makepath.py）——独立插件不能依赖宿主实现。
+- localstore 目录由宿主决定，例如宿主可配置 ``LOCALSTORE_DATA_DIR=data``，
+  数据将落于 ``data/nonebot_plugin_dnddicer/`` 下。
 
-存储格式（json vs aiosqlite）与迁移/备份策略待功能落地时定案
-（见 doc/骰娘插件开发计划.md 第 9 节待讨论项 8）。
+存储格式（json vs aiosqlite）与迁移/备份策略待功能落地时定案。
 """
 
 from pathlib import Path

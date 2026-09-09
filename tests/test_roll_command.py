@@ -82,7 +82,7 @@ async def test_roll_chinese_fullstop(app: App, roll_matcher):
 
 @pytest.mark.asyncio
 async def test_roll_host_command_start(app: App, roll_matcher, monkeypatch):
-    """宿主 COMMAND_START（默认 "/"）兼容由配置显式开启（默认关，见计划文档 8.6）：
+    """宿主 COMMAND_START（默认 "/"）兼容由配置显式开启（默认关）：
     默认 /r 不命中（静默）；dnddicer_use_host_command_starts=true 时 /r 2d6+3 命中。"""
     from nonebot_plugin_dnddicer import config as config_mod
     from nonebot_plugin_dnddicer.commands import base

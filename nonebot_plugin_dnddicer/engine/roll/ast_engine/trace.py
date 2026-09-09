@@ -5,7 +5,7 @@
 # 改动记录见移植说明文件头注释。
 #
 # ── 本仓库改动记录（上游升级 diff 同步时对照）────────────────────────────
-# 2026-09-09（计划文档 8.4 #2）：OperationEvent 渲染（render()）对复合
+# 2026-09-09：OperationEvent 渲染（render()）对复合
 # 操作数按运算优先级补括号。背景：preprocessor 将「expr抗性/易伤」展开为
 # (expr)/2、(expr)*2，但括号节点不产生 trace 事件，栈重建 infix 时复合
 # 操作数不带括号（显示 5+2+3/2，与真实计算值语义不一致）。仅渲染层变化，
@@ -172,7 +172,7 @@ def _top_level_operators(text: str) -> str:
 
 
 def _needs_parens(text: str, op: str, is_left: bool) -> bool:
-    """按运算优先级判断操作数文本拼接时是否需要补括号（8.4 #2）。
+    """按运算优先级判断操作数文本拼接时是否需要补括号。
 
     规则（只补语义必需的最小括号）：
     - 顶层无运算符（原子：骰块/数值/MAX 等）→ 不需要；
@@ -395,7 +395,7 @@ class LegacyTextRenderer(TraceRenderer):
                 else:
                     left = str(event.left_value)
                     right = str(event.right_value)
-                # 复合操作数按优先级补括号（8.4 #2，见 _needs_parens 规则）
+                # 复合操作数按优先级补括号（见 _needs_parens 规则）
                 if _needs_parens(left, event.operator, is_left=True):
                     left = f"({left})"
                 if _needs_parens(right, event.operator, is_left=False):

@@ -19,7 +19,7 @@ TXT_HIDE_RESULT = "{nickname} 的暗骰结果为 {final} {state}"
 TXT_HIDE_RESULT_REASON = "{nickname} 为 {reason} 进行的暗骰结果为 {final} {state}"
 TXT_HIDE_GROUP = "{nickname} 进行了一次暗骰"
 
-#: 多次掷骰（#连掷）的结果块模板（分两种模式，8.4 #3/#4 修订）
+#: 多次掷骰（#连掷）的结果块模板（分两种模式）
 #: 非 s（有过程明细）：去掉 DicePP LOC_ROLL_RESULT_MULTI 原文 "{time}次 {exp}: [{result}]"
 #: 的最外层中括号——result 内部多行（每轮次一行），外层 [] 包裹换行内容难看；
 #: s（只显数值）：单行紧凑 [v1, v2, ...]（逗号+空格，不换行）
@@ -61,7 +61,7 @@ TXT_GROUP_ONLY = "该指令仅在群聊中可用。"
 # 命令处理出现未预期异常时的统一回复（详见 commands/base.py 全局兜底钩子）
 TXT_UNKNOWN_ERROR = "骰娘内部发生了错误，请联系管理员反馈。"
 
-# ── .bot 插件信息与群聊服务开关（宿主新需求 2026-09-09，自研文案，见计划文档 8.5 节）
+# ── .bot 插件信息与群聊服务开关（宿主新需求 2026-09-09，自研文案）
 # 群聊服务默认关闭（白名单）：未开启的群仅 .bot 命令可用，其余命令静默不响应；
 # 私聊不受群聊服务开关限制
 TXT_BOT_HEAD = "屠龙骰（nonebot-plugin-dnddicer）v{version}"
@@ -88,8 +88,8 @@ TXT_CHAR_DEL = "角色卡已删除"
 # 检定反馈：{name} 角色名/昵称；{check} 检定条目展示名（攻击/豁免原名、
 # 属性/技能/先攻追加「检定」，见 commands/character.py）；{hint} 过程说明；
 # {result} 掷骰过程
-# 注：DicePP 默认注册文本为 "{name} throw {check}"（"throw" 未本地化，原忠实
-# 对齐在案）；2026-09-09 验收修订（计划文档 8.4 #7）本地化为中文文案
+# 注：DicePP 默认注册文本为 "{name} throw {check}"（"throw" 未本地化）；
+# 2026-09-09 验收修订为中文文案
 TXT_CHECK_RESULT = "{name}进行【{check}】：\n{hint}\n{result}"
 
 # ── HP 管理 .hp（对齐 DicePP hp_command 默认文案）─────────────────────────
@@ -102,8 +102,7 @@ TXT_HP_MOD_ERR = "修改生命值时出现错误：{error}"
 #: 目标名带 抗性/易伤 后缀但命令不是伤害（-）时的提示（后缀仅对伤害生效）
 TXT_HP_FACTOR_DMG_ONLY = "抗性/易伤后缀仅对伤害生效（用法：.hp 目标[抗性/易伤] -伤害表达式）。"
 TXT_HP_DEL = "已删除{name}的生命值信息"
-#: .hp list 无角色卡名且查不到群名片/昵称时的兜底展示名（8.4 #6，
-#: 不直接显示 QQ 号）
+#: .hp list 无角色卡名且查不到群名片/昵称时的兜底展示名（不直接显示 QQ 号）
 TXT_HP_UNKNOWN_NAME = "未知玩家"
 
 # ── 长休 .长休 ─────────────────────────────────────────────────────────────
@@ -137,7 +136,7 @@ TXT_BR_NO_INIT = "目前先攻列表为空，故不存在回合与轮次。"
 TXT_BR_TURN_END = "{turn_name}的回合结束了。"
 TXT_BR_ROUND_NEW = "新的一轮，现在是第{round}轮。"
 TXT_BR_TURN_NEW = "现在是{turn_name}的回合。"
-# @ 播报（8.4 #1）：原 DicePP 单模板 "现在是{turn_name}的回合。请玩家{at}开始行动。"
+# @ 播报：原 DicePP 单模板 "现在是{turn_name}的回合。请玩家{at}开始行动。"
 # 的 {at} 为 CQ 码文本占位；现拆为 前缀/后缀 两段，at 消息段由命令层用
 # onebot v11 MessageSegment.at 组装（见 commands/battle.py）
 TXT_BR_TURN_NEW_WITH_AT_PREFIX = "现在是{turn_name}的回合。请玩家"

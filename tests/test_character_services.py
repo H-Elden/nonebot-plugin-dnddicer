@@ -47,7 +47,7 @@ def test_parse_character():
     assert ai.ability == [15, 14, 13, 12, 10, 8]
     # 熟练加值 = 2 + (5-1)//4 = 3
     assert ai.get_prof_bonus() == 3
-    # 力量熟练(1)、隐匿 2*、奥秘 1；攻击默认全部不熟练（8.4 #8）
+    # 力量熟练(1)、隐匿 2*、奥秘 1；攻击默认全部不熟练
     from nonebot_plugin_dnddicer.character.constants import CHECK_ITEM_INDEX_DICT
 
     assert ai.check_prof[CHECK_ITEM_INDEX_DICT["力量"]] == 1
@@ -61,7 +61,7 @@ def test_parse_character():
 
 
 def test_parse_character_attack_prof_explicit():
-    """攻击熟练仅在 $熟练$ 显式声明时生效（8.4 #8）。"""
+    """攻击熟练仅在 $熟练$ 显式声明时生效。"""
     char = CharacterService.parse(
         "$等级$ 5\n$属性$ 15/14/13/12/10/8\n$熟练$ 力量攻击", "g", "u"
     )

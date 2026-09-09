@@ -1,9 +1,9 @@
-"""OneBot V11 专属能力适配层（计划文档 8.4 实现约定，2026-09-09 建立）。
+"""OneBot V11 专属能力适配层（2026-09-09 建立）。
 
 命令层只依赖本模块暴露的小接口集，不直接触碰 onebot v11 专属 API
 与事件字段；多平台扩展时按适配器类型分派/替换本模块实现即可。
 
-接口集（随 8.4 修复收敛的现有 onebot 依赖点）：
+接口集（随验收修复收敛的现有 onebot 依赖点）：
 - ``at_segment``：@ 消息段（battle.py 播报，原 ``_cq_at`` 拼 CQ 码文本）；
 - ``event_sender_nickname``：事件 sender 字段的离线展示名（base.py
   get_display_name 回退链，群名片 → 昵称）；

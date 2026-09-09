@@ -1,16 +1,16 @@
 """命令层：DNDDicer 全部可交互指令的注册入口。
 
-设计约定（与 doc/骰娘插件开发计划.md 及 commands/base.py 一致）：
+设计约定（与 commands/base.py 一致）：
 - 命令风格：点号前缀（`.r` / `.rh` / 后续 `.st` / `.hp` / `.init` / `.br` /
   `.ed` / `.帮助` 等），中英文别名对齐 nonebot-dicepp（DNDDicer 手感基准）；
 - 起始符：默认仅英文/中文句号；宿主 COMMAND_START 兼容由配置
-  ``dnddicer_use_host_command_starts`` 显式开启（默认关，见 base.py 与计划文档 8.6）；
+  ``dnddicer_use_host_command_starts`` 显式开启（默认关，见 base.py）；
 - 协同：matcher 统一以 ``dnddicer_command_priority``（Config，默认 10）为基准
   设置优先级并 ``block=True``，与宿主 bot 其他插件（AIchat 等）协同；
 - 本包**只在 NoneBot 已初始化时被导入**（由插件包根 ``__init__.py`` 在加载
   流程中导入），因此各命令模块顶层的 ``on_message`` matcher 创建是安全的。
 
-规划拆分（第一期 = T0 + T1 + 战斗轮简化版；见 doc/骰娘插件开发计划.md 第 4 节）：
+规划拆分（第一期 = T0 + T1 + 战斗轮简化版）：
 - roll.py          ★ 掷骰（.r / .rh，2026-09-02 已落地；暗骰/连掷/默认骰面/原因）
 - character.py     角色卡与检定（.角色卡/.状态 + 检定/豁免/攻击 点命令，已落地）
 - dnd.py           属性生成（.dnd 4D6K3 掷点，已落地；标准购点另行规划）

@@ -14,8 +14,8 @@
   把随机源接到引擎同款 karma_runtime 注入点（``get_runtime()`` 存在时用其
   ``roll(6)``，否则回退 ``random.randint``），使 nonebug 测试可用 SequenceRuntime
   做确定性断言（与 ``.r`` 测试同思路），掷骰语义不变；
-- 「标准购点（27 点）」DicePP/海豹骰均无先例，本期**不做**（另行规划，
-  见 doc/骰娘插件开发计划.md 待讨论事项），仅实现 DicePP 对齐的 4D6K3 掷点。
+- 「标准购点（27 点）」DicePP/海豹骰均无先例，本期**不做**（另行规划），
+  仅实现 DicePP 对齐的 4D6K3 掷点。
 """
 
 from __future__ import annotations

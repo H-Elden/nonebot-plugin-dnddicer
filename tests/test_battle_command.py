@@ -242,7 +242,7 @@ async def test_ed_announce_with_at_for_player(app: App):
 
 @pytest.mark.asyncio
 async def test_turn_jump_to_player_announces_with_at(app: App):
-    """.回合 跳到绑定 QQ 玩家的回合 → @ 消息段播报（8.4 #1 消息段接口）。"""
+    """.回合 跳到绑定 QQ 玩家的回合 → @ 消息段播报。"""
     from nonebot_plugin_dnddicer.commands.battle import turn_matcher
     from nonebot_plugin_dnddicer.data.initiative import get_init_list, save_init_list
 

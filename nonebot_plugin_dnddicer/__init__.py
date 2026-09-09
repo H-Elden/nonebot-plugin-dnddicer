@@ -1,6 +1,6 @@
 """DNDDicer（屠龙骰）：专精 DND5e / DND5r 的 NoneBot2 骰娘插件（OneBot V11）。
 
-项目定位与决策依据见仓库根 ``doc/骰娘插件开发计划.md``：
+项目定位与决策依据：
 - 掷骰引擎移植自 nonebot-dicepp 的 ast_engine（MIT，Copyright (c) 2022 pear-studio，
   移植落地时引擎文件头保留版权声明与 MIT 许可全文）；
 - 业务层全部自研；范围为 DND5e/5r（不做 COC/d100 体系、不做 .mode）；

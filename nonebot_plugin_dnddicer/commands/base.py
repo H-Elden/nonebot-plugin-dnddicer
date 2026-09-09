@@ -4,9 +4,8 @@
 - **命令起始符**：默认**仅**匹配本插件自带的英文句号 ``.`` 与中文句号 ``。``
   （全角输入法直发）；宿主 ``COMMAND_START``（NoneBot 默认含 ``/``）中声明的
   起始符**默认不兼容**——/.help、/bot 等常见单词命令易与宿主其他插件冲突，
-  需由 ``dnddicer_use_host_command_starts`` 配置显式开启（冲突背景与决策见
-  doc/骰娘插件开发计划.md 8.6 节）。起始符集合惰性读取并缓存，未初始化
-  （引擎单测直接导入）时退化为仅中英文句号；
+  需由 ``dnddicer_use_host_command_starts`` 配置显式开启。起始符集合
+  惰性读取并缓存，未初始化（引擎单测直接导入）时退化为仅中英文句号；
 - **命令名注册表 + 最长前缀匹配**：命令体（起始符后的文本）以任一已注册命令名
   开头即命中、取最长者（保证 ``.ra`` 命中 ``ra`` 而不是 ``r``）；命令名后的
   剩余文本原样交给命令处理（因此 ``.r2d6+3`` 与 ``.r 2d6+3`` 等价——与
@@ -60,7 +59,7 @@ def _compute_command_starts() -> tuple[str, ...]:
     ``/bot`` 等常见单词命令可能同时命中本插件与宿主其他插件（冲突）。
     因此默认**只匹配英文句号 ``.`` 与中文句号 ``。``**；需兼容宿主起始符
     （含环境变量 ``DNDDICER_USE_HOST_COMMAND_STARTS=true``）时由
-    config.dnddicer_use_host_command_starts 开启（见 doc/骰娘插件开发计划.md 8.6）。
+    config.dnddicer_use_host_command_starts 开启。
     """
     starts = list(_BUILTIN_STARTS)
     try:
@@ -197,7 +196,7 @@ def get_display_name(event: MessageEvent) -> str:
 
     说明：DicePP 无自设昵称时回退到 QQ 号；本插件优先使用消息事件自带的
     群名片/昵称字段（离线可用、无需额外 API 调用），最后回退 QQ 号。
-    onebot v11 事件字段读取收敛于 platform/onebot_v11（8.4 实现约定）。
+    onebot v11 事件字段读取收敛于 platform/onebot_v11。
     """
     name = onebot_v11.event_sender_nickname(event)
     if name:
@@ -206,7 +205,7 @@ def get_display_name(event: MessageEvent) -> str:
 
 
 # =========================================================================
-# 命令层全局异常兜底（见 doc/NoneBot最佳实践调研报告.md 1.3 节）
+# 命令层全局异常兜底
 # =========================================================================
 
 #: 本插件的模块名前缀（兜底钩子只接管本插件的 matcher，不碰宿主其他插件）

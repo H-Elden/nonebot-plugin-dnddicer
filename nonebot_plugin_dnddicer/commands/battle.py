@@ -89,9 +89,9 @@ async def _finish_battle_lines(
     """播报行收尾发送（行间换行）。
 
     at_owner 非空（下一行动者绑定 QQ）时，末行拆为「at 前缀文本 +
-    @消息段 + at 后缀文本」组装消息（8.4 #1：@ 用 onebot v11
-    MessageSegment.at，弃用原 CQ 码文本拼接）；前序行 + at 前缀合并为
-    单个文本段。无 at 时按纯文本发送（与既有输出一致）。
+    @消息段 + at 后缀文本」组装消息（@ 用 onebot v11 MessageSegment.at，
+    弃用原 CQ 码文本拼接）；前序行 + at 前缀合并为单个文本段。
+    无 at 时按纯文本发送（与既有输出一致）。
     """
     if not at_owner:
         await matcher.finish("\n".join(rows))

@@ -185,7 +185,7 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
             feedback = text.TXT_HP_INFO_MISS.format(name=name)
         await hp_matcher.finish(feedback)
 
-    # 列表（8.4 #6：无卡记录不再直接显示 QQ 号——名称回退链
+    # 列表（无卡记录不再直接显示 QQ 号——名称回退链
     # 角色卡名 → 群名片 → QQ 昵称 → 「未知玩家」；无卡名成员需调
     # get_group_member_info，本插件放宽「离线可用」原则的唯一一处，
     # API 失败/异常由适配层吞掉、名称回退下一级，不影响列表主流程）

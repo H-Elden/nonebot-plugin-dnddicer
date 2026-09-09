@@ -95,8 +95,8 @@ class AbilityService:
                 raise AssertionError(f"{ABILITY_LIST[index]}属性值{raw}必须为正整数")
             ability[index] = val
 
-        # 熟练项：默认全部不熟练，$熟练$ 声明了哪些条目才熟练（8.4 #8 修订：
-        # 上游 DicePP 默认所有攻击熟练与 PHB 不符——攻击检定加熟练仅限熟练的
+        # 熟练项：默认全部不熟练，$熟练$ 声明了哪些条目才熟练（修订：上游
+        # DicePP 默认所有攻击熟练，与 PHB 不符——攻击检定加熟练仅限熟练的
         # 武器/法术攻击；支持 N*名称 多倍熟练与 0*名称 显式关闭）
         check_prof = [0] * len(CHECK_ITEM_LIST)
         for raw in prof_list:

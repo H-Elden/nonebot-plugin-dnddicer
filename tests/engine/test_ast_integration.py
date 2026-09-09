@@ -251,7 +251,7 @@ class TestBuildRollResultValList:
 
 
 class TestCompoundOperandParentheses:
-    """8.4 #2：抗性/易伤等括号表达式渲染按优先级补括号（求值语义不变）。"""
+    """抗性/易伤等括号表达式渲染按优先级补括号（求值语义不变）。"""
 
     def test_resistance_additive_numerator(self):
         """5+2+3抗性 → 渲染补分子括号：(5+2+3)/2=5"""
@@ -287,8 +287,7 @@ class TestCompoundOperandParentheses:
 
     def test_divide_by_parenthesized_sum(self):
         """12/(1+2) → 求值 4。注：两侧纯常量（无骰子树）时渲染文本受引擎
-        既有「常量子树无 trace 事件」限制（文本错位/被值替换），非 8.4 #2
-        括号范围，此处仅断言数值。"""
+        既有「常量子树无 trace 事件」限制（文本错位/被值替换），此处仅断言数值。"""
         result = exec_roll_exp_unified("12/(1+2)")
         assert result.get_val() == 4
 
