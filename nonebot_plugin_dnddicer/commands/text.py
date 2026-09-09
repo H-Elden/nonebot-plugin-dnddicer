@@ -61,9 +61,12 @@ TXT_UNKNOWN_ERROR = "骰娘内部发生了错误，请联系管理员反馈。"
 TXT_CHAR_SET = "角色卡已设置"
 TXT_CHAR_MISS = "找不到角色卡"
 TXT_CHAR_DEL = "角色卡已删除"
-# 检定反馈：{name} 角色名/昵称；{check} 检定条目；{hint} 过程说明；{result} 掷骰过程
-# 注：文案保留 DicePP 默认注册文本（"throw" 为其原样，未本地化，忠实对齐）
-TXT_CHECK_RESULT = "{name} throw {check}\n{hint}\n{result}"
+# 检定反馈：{name} 角色名/昵称；{check} 检定条目展示名（攻击/豁免原名、
+# 属性/技能/先攻追加「检定」，见 commands/character.py）；{hint} 过程说明；
+# {result} 掷骰过程
+# 注：DicePP 默认注册文本为 "{name} throw {check}"（"throw" 未本地化，原忠实
+# 对齐在案）；2026-09-09 验收修订（计划文档 8.4 #7）本地化为中文文案
+TXT_CHECK_RESULT = "{name}进行【{check}】：\n{hint}\n{result}"
 
 # ── HP 管理 .hp（对齐 DicePP hp_command 默认文案）─────────────────────────
 TXT_HP_INFO = "{name}: {hp_info}"

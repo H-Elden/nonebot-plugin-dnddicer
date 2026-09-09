@@ -24,8 +24,10 @@ from nonebot.plugin import on_message
 
 from ..character.constants import (
     ABILITY_LIST,
+    ATTACK_LIST,
     CHECK_ITEM_INDEX_DICT,
     CHECK_ITEM_LIST,
+    SAVING_LIST,
     SKILL_SYNONYM_DICT,
 )
 from ..character.models import DNDCharacter
@@ -226,7 +228,12 @@ async def handle_check(event: GroupMessageEvent) -> None:
         await check_matcher.finish(str(exc))
 
     name = character.name or base.get_display_name(event)
-    display_check = check_name if times == 1 else f"{times}次{check_name}"
+    # 展示名：攻击/豁免用原名（敏捷攻击/敏捷豁免），属性/技能/先攻追加「检定」
+    if check_name in ATTACK_LIST or check_name in SAVING_LIST:
+        display_item = check_name
+    else:
+        display_item = f"{check_name}检定"
+    display_check = display_item if times == 1 else f"{times}次{display_item}"
     feedback = text.TXT_CHECK_RESULT.format(
         name=name,
         check=display_check,

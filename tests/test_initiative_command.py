@@ -413,7 +413,7 @@ async def test_check_initiative_linkage(app: App):
     try:
         await _expect(
             app, check_matcher, _event(100020, ".先攻检定", user_id=30001),
-            "伊丽莎白 throw 先攻\n无熟练加值 敏捷调整值:0\n"
+            "伊丽莎白进行【先攻检定】：\n无熟练加值 敏捷调整值:0\n"
             "伊丽莎白的先攻值是 1D20=[5]=5",
         )
     finally:
@@ -440,7 +440,7 @@ async def test_check_initiative_reroll_replaces(app: App):
     try:
         await _expect(
             app, check_matcher, _event(100021, ".先攻检定", user_id=30002),
-            "伊丽莎白 throw 先攻\n无熟练加值 敏捷调整值:0\n"
+            "伊丽莎白进行【先攻检定】：\n无熟练加值 敏捷调整值:0\n"
             "伊丽莎白的先攻值是 1D20=[5]=5",
         )
     finally:
@@ -451,7 +451,7 @@ async def test_check_initiative_reroll_replaces(app: App):
     try:
         await _expect(
             app, check_matcher, _event(100021, ".先攻检定", user_id=30002),
-            "伊丽莎白 throw 先攻\n无熟练加值 敏捷调整值:0\n"
+            "伊丽莎白进行【先攻检定】：\n无熟练加值 敏捷调整值:0\n"
             "你重复投掷了先攻\n伊丽莎白的先攻值是 1D20=[9]=9",
         )
     finally:

@@ -108,7 +108,7 @@ async def test_char_delete(app: App):
 
 @pytest.mark.asyncio
 async def test_check_strength_full_feedback(app: App):
-    """.力量检定 → 完整 throw 反馈（骰 10，力量 15 → 12）。"""
+    """.力量检定 → 完整检定反馈（属性检定展示名=力量检定；骰 10，力量 15 → 15）。"""
     from nonebot_plugin_dnddicer.commands.character import char_matcher, check_matcher
 
     await _expect(app, char_matcher, _event(_RECORD, user_id=10006), "角色卡已设置")
@@ -118,9 +118,43 @@ async def test_check_strength_full_feedback(app: App):
         event = _event(".力量检定", user_id=10006)
         # 伊丽莎白 5级 力量15：熟练(力量熟练)加值 3 + 力量调整 2，骰 10 → 15
         expected = (
-            "伊丽莎白 throw 力量\n"
+            "伊丽莎白进行【力量检定】：\n"
             "熟练加值:3 力量调整值:2\n"
             "1D20+2+3=[10]+2+3=15"
+        )
+        await _expect(app, check_matcher, event, expected)
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_check_saving_and_attack_display_name(app: App):
+    """.体质豁免/.敏捷攻击 → 展示名用原名（不含「检定」后缀）。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher, check_matcher
+
+    await _expect(app, char_matcher, _event(_RECORD, user_id=10009), "角色卡已设置")
+
+    # 伊丽莎白 体质13 → 调整+1，未熟练（8.4 #8 后默认全不熟练）
+    token = set_runtime(SequenceRuntime([9]))
+    try:
+        event = _event(".体质豁免", user_id=10009)
+        expected = (
+            "伊丽莎白进行【体质豁免】：\n"
+            "无熟练加值 体质调整值:1\n"
+            "1D20+1=[9]+1=10"
+        )
+        await _expect(app, check_matcher, event, expected)
+    finally:
+        reset_runtime(token)
+
+    # 伊丽莎白 敏捷14 → 调整+2（攻击默认熟练为 #8 前行为，8.4 #8 落地后同步为「无熟练加值」）
+    token = set_runtime(SequenceRuntime([3]))
+    try:
+        event = _event(".敏捷攻击", user_id=10009)
+        expected = (
+            "伊丽莎白进行【敏捷攻击】：\n"
+            "熟练加值:3 敏捷调整值:2\n"
+            "1D20+2+3=[3]+2+3=8"
         )
         await _expect(app, check_matcher, event, expected)
     finally:
