@@ -38,8 +38,7 @@ classifiers = [
     "Operating System :: OS Independent",
     "Topic :: Games/Entertainment :: Role-Playing",
 ]
-# TODO: GitHub 仓库创建后补上作者信息与真实主页
-# authors = [{ name = "...", email = "..." }]
+authors = [{ name = "Elden" }]
 dependencies = [
     # NoneBot2 框架本体（商店要求：必须包含，禁止 == 锁版本，禁止 nonebot V1）
     "nonebot2>=2.5.0,<3.0.0",
@@ -52,10 +51,9 @@ dependencies = [
 ]
 
 [project.urls]
-# TODO: GitHub 仓库创建后替换为真实地址
-Homepage = "https://github.com/<your-github>/nonebot-plugin-dnddicer"
-Issues = "https://github.com/<your-github>/nonebot-plugin-dnddicer/issues"
-Repository = "https://github.com/<your-github>/nonebot-plugin-dnddicer.git"
+Homepage = "https://github.com/H-Elden/nonebot-plugin-dnddicer"
+Issues = "https://github.com/H-Elden/nonebot-plugin-dnddicer/issues"
+Repository = "https://github.com/H-Elden/nonebot-plugin-dnddicer.git"
 
 [project.optional-dependencies]
 # pip 兼容的开发者依赖（与下方 [dependency-groups].dev 保持一致，改动需两处同步）

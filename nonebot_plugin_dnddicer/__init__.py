@@ -53,8 +53,7 @@ __plugin_meta__ = PluginMetadata(
     ),
     # 发布额外信息
     type="application",
-    # TODO: GitHub 仓库创建后替换为真实主页
-    homepage="https://github.com/<your-github>/nonebot-plugin-dnddicer",
+    homepage="https://github.com/H-Elden/nonebot-plugin-dnddicer",
     config=Config,
     # 仅支持 OneBot V11 适配器（~ 代表前缀 nonebot.adapters.）
     supported_adapters={"~onebot.v11"},
