@@ -32,11 +32,16 @@ def _group_event(
     role: str = "member",
     nickname: str = "member",
     group_id: int = _G_STATE,
+    to_me: bool = True,
 ):
+    """群消息事件。.bot 在群聊中需 @ 机器人（to_me=True）才响应；适配器剥除
+    at 段后命令文本为纯文本，故测试消息不含 at 段、默认 to_me=True，
+    未 @ 场景显式传 to_me=False。"""
     return fake_group_message_event_v11(
         message=Message(text_str),
         group_id=group_id,
         sender=Sender(card="", nickname=nickname, role=role),
+        to_me=to_me,
     )
 
 
@@ -140,6 +145,22 @@ async def test_bot_private_on_rejected(app: App):
 
     event = fake_private_message_event_v11(message=Message(".bot on"))
     await _expect(app, bot_matcher, event, text.TXT_GROUP_ONLY)
+
+
+@pytest.mark.asyncio
+async def test_bot_group_requires_to_me(app: App):
+    """群聊中未 @ 机器人（to_me=False）：.bot 系列一律不响应（静默）。"""
+    from nonebot_plugin_dnddicer.commands.bot import bot_matcher
+
+    await _set(_G_STATE, False)
+    # 普通成员未 @ 发 .bot（信息查询）
+    await _expect_silence(app, bot_matcher, _group_event(".bot", to_me=False))
+    # 管理员未 @ 发 .bot on（即使权限足够也不响应）
+    await _expect_silence(
+        app,
+        bot_matcher,
+        _group_event(".bot on", role="owner", nickname="owner", to_me=False),
+    )
 
 
 @pytest.mark.asyncio

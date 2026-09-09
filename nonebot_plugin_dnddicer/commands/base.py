@@ -26,7 +26,7 @@ from nonebot.adapters.onebot.v11 import MessageEvent
 from nonebot.matcher import Matcher
 from nonebot.message import run_postprocessor
 from nonebot.plugin import on_message
-from nonebot.rule import Rule
+from nonebot.rule import Rule, to_me
 
 from ..config import get_config
 from ..data import service_state
@@ -145,6 +145,7 @@ def on_dnd_command(
     description: str = "",
     *,
     aliases: tuple[str, ...] = (),
+    require_to_me: bool = False,
 ) -> Matcher:
     """创建一条 DNDDicer 点前缀命令的事件响应器并注册命令名。
 
@@ -152,6 +153,9 @@ def on_dnd_command(
         name: 命令名（如 "r"）；匹配为最长前缀，命令名后无需空格。
         description: 命令帮助全文（供 .帮助 使用，可为空）。
         aliases: 命令别名（同样注册进匹配表，如 ("帮助",) 使 .帮助 与 .help 等价）。
+        require_to_me: 群聊中是否必须 @ 机器人（to_me）才响应。onebot v11
+            群聊仅开头/结尾 @ 机器人时为 to_me（at 段被适配器剥除后命令文本
+            正常解析）；私聊事件 to_me 恒为 True，不受该选项影响。
 
     Returns:
         可直接挂 ``@matcher.handle()`` 的 Matcher。
@@ -161,9 +165,12 @@ def on_dnd_command(
         register_command(alias, description)
 
     names = (name, *aliases)
+    rule = command_rule(*names)
+    if require_to_me:
+        rule = rule & to_me()
     # 群聊服务门禁：.bot 为服务开关管理命令，始终放行（见 commands/bot.py）
     manage = (name,) if name.lower() == "bot" else ()
-    rule = command_rule(*names) & group_service_rule(*manage)
+    rule = rule & group_service_rule(*manage)
     priority = get_config().dnddicer_command_priority
     return on_message(rule, priority=priority, block=True)
 

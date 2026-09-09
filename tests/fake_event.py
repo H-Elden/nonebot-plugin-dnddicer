@@ -61,6 +61,7 @@ def fake_private_message_event_v11(**field) -> "PrivateMessageEventV11":
         raw_message: str = "test"
         font: int = 0
         sender: Sender = Sender(nickname="test")
-        to_me: bool = False
+        # onebot v11 适配器对私聊消息事件恒置 to_me=True（见 v11 bot.py 检查逻辑）
+        to_me: bool = True
 
     return FakeEvent(**field)
