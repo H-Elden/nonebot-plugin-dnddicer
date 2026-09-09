@@ -47,6 +47,21 @@ _HELP_STATE = "查看本角色当前 HP 与生命骰状态。"
 state_matcher = base.on_dnd_command("状态", _HELP_STATE)
 
 
+def _gen_template_feedback() -> str:
+    """.角色卡模板 输出：示例卡 + 段落使用提示。
+
+    提示为纯说明文字，禁含 $ 字符——记录解析按 $ 分段，说明会污染
+    「复制模板再记录」的解析（计划文档 8.4 #5）。
+    """
+    tips = (
+        "\n\n——提示（记录时请仅复制上方模板段并修改）——\n"
+        "属性段六个数值依次对应: 力量/敏捷/体质/智力/感知/魅力\n"
+        "额外加值段键 = 六属性/技能/豁免/攻击条目, 另有作用于全部的全局键: 豁免 与 攻击\n"
+        "额外加值取值 = 可选 优势/劣势 前缀 + ±掷骰表达式, 如: 隐匿:优势+2"
+    )
+    return gen_template_char().get_char_info() + tips
+
+
 # =========================================================================
 # 检定类点命令（模式匹配，非固定命令名）
 # =========================================================================
@@ -162,7 +177,7 @@ async def handle_character(event: GroupMessageEvent) -> None:
         await char_matcher.finish(text.TXT_CHAR_DEL)
 
     if rest.startswith("模板"):
-        await char_matcher.finish(gen_template_char().get_char_info())
+        await char_matcher.finish(_gen_template_feedback())
 
     await char_matcher.finish("可用的角色卡指令: [记录, 清除, 模板]")
 
