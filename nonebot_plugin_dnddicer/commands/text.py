@@ -61,6 +61,26 @@ TXT_GROUP_ONLY = "该指令仅在群聊中可用。"
 # 命令处理出现未预期异常时的统一回复（详见 commands/base.py 全局兜底钩子）
 TXT_UNKNOWN_ERROR = "骰娘内部发生了错误，请联系管理员反馈。"
 
+# ── .bot 插件信息与群聊服务开关（宿主新需求 2026-09-09，自研文案，见计划文档 8.5 节）
+# 群聊服务默认关闭（白名单）：未开启的群仅 .bot 命令可用，其余命令静默不响应；
+# 私聊不受群聊服务开关限制
+TXT_BOT_HEAD = "DND 骰子（nonebot-plugin-dnddicer）v{version}"
+TXT_BOT_INTRO = (
+    "专精 DND5e/5r 跑团的骰娘：掷骰表达式、角色卡与检定/豁免/攻击、"
+    "属性生成、HP 管理、先攻列表、战斗轮、群配置，命令手感对齐 nonebot-dicepp。"
+)
+TXT_BOT_STATE_PRIVATE = "私聊可直接使用本插件的全部功能，不受群聊服务开关影响。"
+TXT_BOT_STATE_ON = "本群服务已开启，可直接使用本插件的全部命令。"
+TXT_BOT_STATE_OFF = "本群服务未开启，仅 .bot 命令可用。发送 .bot on（需群主或管理员权限）可开启。"
+TXT_BOT_USAGE = "用法：.bot on / .bot off——仅限群聊，需群主或管理员权限。"
+TXT_BOT_ON = "本群服务已开启。"
+TXT_BOT_OFF = "本群服务已关闭，本群将不再响应本插件的其他命令（.bot 不受影响）。"
+TXT_BOT_NO_PERMISSION = "仅群主或管理员可以开启或关闭本群服务。"
+TXT_BOT_BAD_ARG = (
+    "无效参数。用法：.bot 查看插件信息；.bot on / .bot off 开启/关闭本群服务"
+    "（仅限群聊，需群主或管理员权限）。"
+)
+
 # ── DND5e 角色卡 .角色卡 / .状态 / 检定（对齐 DicePP character 默认文案）─────
 TXT_CHAR_SET = "角色卡已设置"
 TXT_CHAR_MISS = "找不到角色卡"

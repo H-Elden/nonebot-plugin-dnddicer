@@ -81,7 +81,10 @@ _SUB_COMMANDS: Tuple[Tuple[str, str, int], ...] = (
 
 
 def _initiative_rule() -> Rule:
-    """命中 .init/.先攻/.ri；.先攻检定 交给角色卡检定点命令（对齐 DicePP）。"""
+    """命中 .init/.先攻/.ri；.先攻检定 交给角色卡检定点命令（对齐 DicePP）。
+
+    群聊服务门禁与固定命令一致（未开启服务的群不响应，见 base.group_service_rule）。
+    """
 
     async def _checker(event: MessageEvent) -> bool:
         parsed = base.parse_command_text(event.get_plaintext())
@@ -94,7 +97,7 @@ def _initiative_rule() -> Rule:
             return False
         return True
 
-    return Rule(_checker)
+    return Rule(_checker) & base.group_service_rule()
 
 
 for _name in ("init", "先攻"):

@@ -96,4 +96,5 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 markers = [
     "quick: 上游 nonebot-dicepp 随迁测试中的快速测试分组标记（本仓库未按该分组筛选，仅注册以免告警）",
+    "service_gate: 走真实群聊服务白名单门禁的命令测试（其余测试由 conftest 自动旁路门禁，见 tests/conftest.py）",
 ]

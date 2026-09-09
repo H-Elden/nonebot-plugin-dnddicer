@@ -15,6 +15,7 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageEvent
 from ..data.group_config import get_group_config, set_group_config_field
 from ..engine.roll.default_dice import format_default_expr_from_input, format_default_expr_from_storage
 from ..engine.roll.roll_utils import RollDiceError
+from ..platform import onebot_v11
 from . import base, text
 
 _HELP = (
@@ -24,15 +25,6 @@ _HELP = (
 )
 
 dset_matcher = base.on_dnd_command("dset", _HELP)
-
-_MANAGER_ROLES = ("owner", "admin")
-
-
-def _is_manager(event: GroupMessageEvent) -> bool:
-    """是否为群主/管理员（OneBot V11 事件 sender.role）。"""
-    sender = getattr(event, "sender", None)
-    role = getattr(sender, "role", "") if sender is not None else ""
-    return role in _MANAGER_ROLES
 
 
 @dset_matcher.handle()
@@ -52,7 +44,7 @@ async def handle_dset(event: MessageEvent) -> None:
         )
 
     # 修改默认：需群主/管理员权限
-    if not _is_manager(event):
+    if not onebot_v11.is_group_manager(event):
         await dset_matcher.finish(text.TXT_DSET_NO_PERMISSION)
 
     try:

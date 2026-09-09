@@ -131,7 +131,8 @@ def _check_command_rule() -> "Rule":
                 return False
         return parse_check_body(body) is not None
 
-    return Rule(_checker)
+    # 群聊服务门禁（与固定命令一致：未开启服务的群不响应，见 base.group_service_rule）
+    return Rule(_checker) & base.group_service_rule()
 
 
 def _make_check_matcher() -> Matcher:

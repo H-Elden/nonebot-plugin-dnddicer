@@ -29,6 +29,7 @@ from nonebot.plugin import on_message
 from nonebot.rule import Rule
 
 from ..config import get_config
+from ..data import service_state
 from ..platform import onebot_v11
 from . import text
 
@@ -118,6 +119,27 @@ def command_rule(*names: str) -> Rule:
     return Rule(_checker)
 
 
+def group_service_rule(*manage_commands: str) -> Rule:
+    """群聊服务门禁规则（白名单：默认关闭，见 data/service_state.py）。
+
+    未开启服务的群内，本插件命令不命中（matcher 不触发、无任何回复，事件继续
+    交给宿主其他插件）；私聊等非群聊事件不受门禁限制。``manage_commands`` 中
+    的管理命令（如 .bot）在关闭的群里始终放行——否则关闭服务的群将无法再开启。
+    """
+
+    async def _checker(event: MessageEvent) -> bool:
+        group_id = getattr(event, "group_id", None)
+        if group_id is None:
+            return True
+        if manage_commands:
+            parsed = parse_command_text(event.get_plaintext())
+            if parsed is not None and parsed[1].lower() in manage_commands:
+                return True
+        return await service_state.is_service_enabled(group_id)
+
+    return Rule(_checker)
+
+
 def on_dnd_command(
     name: str,
     description: str = "",
@@ -139,8 +161,11 @@ def on_dnd_command(
         register_command(alias, description)
 
     names = (name, *aliases)
+    # 群聊服务门禁：.bot 为服务开关管理命令，始终放行（见 commands/bot.py）
+    manage = (name,) if name.lower() == "bot" else ()
+    rule = command_rule(*names) & group_service_rule(*manage)
     priority = get_config().dnddicer_command_priority
-    return on_message(command_rule(*names), priority=priority, block=True)
+    return on_message(rule, priority=priority, block=True)
 
 
 def get_command_rest(event: MessageEvent) -> Optional[str]:

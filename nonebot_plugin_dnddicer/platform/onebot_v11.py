@@ -26,6 +26,21 @@ def at_segment(user_id: Union[int, str]) -> MessageSegment:
     return MessageSegment.at(str(user_id))
 
 
+#: 群管理角色（群主/管理员；sender.role 字段取值）
+MANAGER_ROLES = ("owner", "admin")
+
+
+def event_sender_role(event: MessageEvent) -> str:
+    """取消息事件 sender 的角色字段（群聊：owner/admin/member；私聊等为空）。"""
+    sender = getattr(event, "sender", None)
+    return getattr(sender, "role", "") if sender is not None else ""
+
+
+def is_group_manager(event: MessageEvent) -> bool:
+    """判断发送者是否为群主/管理员（.dset 修改与 .bot on/off 共用口径）。"""
+    return event_sender_role(event) in MANAGER_ROLES
+
+
 def event_sender_nickname(event: MessageEvent) -> str:
     """取事件 sender 字段的展示名（群名片 → 昵称），无则返回空串。
 
