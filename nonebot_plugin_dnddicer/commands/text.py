@@ -80,6 +80,9 @@ TXT_HP_INFO_NONE = "本群没有任何生命值信息"
 TXT_HP_MOD = "{name}: {hp_mod}"
 TXT_HP_MOD_ERR = "修改生命值时出现错误：{error}"
 TXT_HP_DEL = "已删除{name}的生命值信息"
+#: .hp list 无角色卡名且查不到群名片/昵称时的兜底展示名（8.4 #6，
+#: 不直接显示 QQ 号）
+TXT_HP_UNKNOWN_NAME = "未知玩家"
 
 # ── 长休 .长休 ─────────────────────────────────────────────────────────────
 TXT_LONG_REST = "{result}"

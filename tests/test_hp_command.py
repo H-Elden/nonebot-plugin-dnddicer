@@ -198,7 +198,7 @@ async def test_hp_dice_heal(app: App):
 
 @pytest.mark.asyncio
 async def test_hp_list(app: App):
-    """.hp list → 列出群内所有 PC HP。"""
+    """.hp list → 列出群内所有 PC HP；无卡名成员名称回退链走群成员信息 API。"""
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
 
     await _expect(app, hp_matcher, _event_in_group(_LIST_GROUP, ".hp 20/30", user_id=20010), "test: HP=20/30\n当前HP:20/30")
@@ -208,7 +208,71 @@ async def test_hp_list(app: App):
     async with app.test_matcher(hp_matcher) as ctx:
         adapter = ctx.create_adapter(base=OnebotV11Adapter)
         bot = ctx.create_bot(base=Bot, adapter=adapter)
-        ctx.should_call_send(event, "20010 HP:20/30\n20011 HP:15/25")
+        # 无卡名成员逐个查询：20010 无群名片 → QQ 昵称「阿强」；
+        # 20011 群名片「铁匠铺」优先于昵称「阿花」
+        ctx.should_call_api(
+            "get_group_member_info",
+            data={"group_id": _LIST_GROUP, "user_id": 20010},
+            result={"user_id": 20010, "card": "", "nickname": "阿强"},
+        )
+        ctx.should_call_api(
+            "get_group_member_info",
+            data={"group_id": _LIST_GROUP, "user_id": 20011},
+            result={"user_id": 20011, "card": "铁匠铺", "nickname": "阿花"},
+        )
+        ctx.should_call_send(event, "阿强 HP:20/30\n铁匠铺 HP:15/25")
+        ctx.receive_event(bot, event)
+
+
+@pytest.mark.asyncio
+async def test_hp_list_char_name_takes_priority(app: App):
+    """.hp list 有角色卡名的成员直接用卡名，不触发群成员信息 API。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    await _expect(
+        app, char_matcher,
+        _event_in_group(_LIST_GROUP,
+                        ".角色卡记录 $姓名$ 战士小明\n$等级$ 1\n$属性$ 10/10/10/10/10/10\n$生命值$ 20/30",
+                        user_id=20014),
+        "角色卡已设置",
+    )
+    await _expect(
+        app, hp_matcher, _event_in_group(_LIST_GROUP, ".hp 10/20", user_id=20015),
+        "test: HP=10/20\n当前HP:10/20",
+    )
+
+    event = _event_in_group(_LIST_GROUP, ".hp list", user_id=20014)
+    async with app.test_matcher(hp_matcher) as ctx:
+        adapter = ctx.create_adapter(base=OnebotV11Adapter)
+        bot = ctx.create_bot(base=Bot, adapter=adapter)
+        # 20015 无卡名仍需查询（结果昵称「阿花」）
+        ctx.should_call_api(
+            "get_group_member_info",
+            data={"group_id": _LIST_GROUP, "user_id": 20015},
+            result={"user_id": 20015, "card": "", "nickname": "阿花"},
+        )
+        ctx.should_call_send(event, "战士小明 HP:20/30\n阿花 HP:10/20")
+        ctx.receive_event(bot, event)
+
+
+@pytest.mark.asyncio
+async def test_hp_list_api_failure_falls_back(app: App):
+    """.hp list 群成员 API 失败 → 回退「未知玩家」（非 QQ 号），列表不受影响。"""
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    await _expect(app, hp_matcher, _event_in_group(_LIST_GROUP, ".hp 20/30", user_id=20016), "test: HP=20/30\n当前HP:20/30")
+
+    event = _event_in_group(_LIST_GROUP, ".hp list", user_id=20016)
+    async with app.test_matcher(hp_matcher) as ctx:
+        adapter = ctx.create_adapter(base=OnebotV11Adapter)
+        bot = ctx.create_bot(base=Bot, adapter=adapter)
+        ctx.should_call_api(
+            "get_group_member_info",
+            data={"group_id": _LIST_GROUP, "user_id": 20016},
+            exception=Exception("群成员查询失败"),
+        )
+        ctx.should_call_send(event, "未知玩家 HP:20/30")
         ctx.receive_event(bot, event)
 
 

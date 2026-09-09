@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 from typing import List, Optional, Tuple
 
-from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageEvent
+from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, MessageEvent
 
 from ..character.models import DNDCharacter
 from ..character.services import HPService
@@ -25,6 +25,7 @@ from ..data.characters import (
 from ..engine.roll.ast_engine.adapter import exec_roll_exp_unified
 from ..engine.roll.result import RollResult
 from ..engine.roll.roll_utils import RollDiceError
+from ..platform.onebot_v11 import get_group_member_nickname
 from . import base, text
 
 # =========================================================================
@@ -149,7 +150,7 @@ def _parse_hp_args(arg_str: str) -> Tuple[
 
 
 @hp_matcher.handle()
-async def handle_hp(event: MessageEvent) -> None:
+async def handle_hp(bot: Bot, event: MessageEvent) -> None:
     """处理 .hp 命令。"""
     if not isinstance(event, GroupMessageEvent):
         await hp_matcher.finish(text.TXT_GROUP_ONLY)
@@ -167,13 +168,21 @@ async def handle_hp(event: MessageEvent) -> None:
             feedback = text.TXT_HP_INFO_MISS.format(name=name)
         await hp_matcher.finish(feedback)
 
-    # 列表
+    # 列表（8.4 #6：无卡记录不再直接显示 QQ 号——名称回退链
+    # 角色卡名 → 群名片 → QQ 昵称 → 「未知玩家」；无卡名成员需调
+    # get_group_member_info，本插件放宽「离线可用」原则的唯一一处，
+    # API 失败/异常由适配层吞掉、名称回退下一级，不影响列表主流程）
     if arg_str.startswith("list"):
         chars = await list_characters_by_group(event.group_id)
         feedback = ""
         for char in chars:
             if char.hp_info.is_init:
-                name = char.name or str(char.user_id)
+                name = char.name
+                if not name:
+                    name = await get_group_member_nickname(
+                        bot, event.group_id, int(char.user_id)
+                    )
+                    name = name or text.TXT_HP_UNKNOWN_NAME
                 feedback += f"{name} {char.hp_info.get_info()}\n"
         feedback = feedback.strip()
         if not feedback:
