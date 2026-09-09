@@ -1,24 +1,20 @@
 # 屠龙骰（DNDDicer）使用文档
 
-屠龙骰是专精 **DND5e / DND5r** 跑团的 [NoneBot2](https://nonebot.dev/) 骰娘插件
-（OneBot V11 适配器），为 QQ 群跑团提供一站式支持：掷骰表达式、角色卡与检定点命令、
-HP 管理、先攻列表与战斗轮。命令手感对齐
-[nonebot-dicepp](https://github.com/pear-studio/nonebot-dicepp)（梨子骰子）。
+屠龙骰是专精 **DND5e / DND5r** 跑团的 [NoneBot2](https://nonebot.dev/) 骰娘插件（OneBot V11 适配器），为 QQ 群跑团提供一站式支持：掷骰表达式、角色卡与检定点命令、HP 管理、先攻列表与战斗轮。命令手感对齐 [nonebot-dicepp](https://github.com/pear-studio/nonebot-dicepp)（梨骰）。
 
-> **版本**：v0.1.0（第一期）。规则范围：**仅 DND5e/5r**——不做 COC/d100 体系与
-> `.mode` 规则切换。安装与配置见 [快速开始](./guide/quickstart)。
+> **版本**：v0.1.0（第一期）。规则范围：**仅 DND5e/5r**——不做 COC/d100 体系与 `.mode` 规则切换。安装与配置见 [快速开始](./guide/quickstart.md)。
 
 ## 功能一览
 
 | 功能 | 说明 | 文档 |
 | --- | --- | --- |
-| 🎲 掷骰表达式 | d20/优势劣势/保留最高/重掷/爆炸骰/连掷/暗骰/原因，仅 d20 有大成功/大失败播报 | [掷骰语法](./guide/roll-syntax) |
-| 📋 角色卡与检定 | `$…$` 模板建卡；`.力量检定` `.敏捷豁免` `.敏捷攻击` 点命令自动代入调整值/熟练/加值 | [角色卡与检定](./guide/character-card) |
-| 🎯 属性生成 | `.dnd` 4D6K3 掷点（附合计与降序） | [属性生成](./guide/attributes) |
-| ❤️ HP 管理 | `.hp` 记录/伤害/治疗/临时 HP/列表；`.长休` 一键结算 | [HP 管理](./guide/hp-rest) |
-| ⚔️ 先攻列表 | `.ri` 掷先攻入表、`.init/.先攻` 查看与删除/提前/交换；`.先攻检定` 自动联动 | [先攻列表](./guide/initiative) |
-| 🔄 战斗轮 | `.br` 开局，`.回合/.轮次/.跳过/.ed` 推进，轮到玩家自动 @ 提醒 | [战斗轮](./guide/battle) |
-| ⚙️ 群管理 | `.dset` 群默认骰面；`.bot` 群聊服务开关（白名单）与常见问题 | [群管理与 FAQ](./guide/faq) |
+| 🎲 掷骰表达式 | d20/优势劣势/保留最高/重掷/爆炸骰/连掷/暗骰/原因，仅 d20 有大成功/大失败播报 | [掷骰语法](./guide/roll-syntax.md) |
+| 📋 角色卡与检定 | `$…$` 模板建卡；`.力量检定` `.敏捷豁免` `.敏捷攻击` 点命令自动代入调整值/熟练/加值 | [角色卡与检定](./guide/character-card.md) |
+| 🎯 属性生成 | `.dnd` 4D6K3 掷点（附合计与降序） | [属性生成](./guide/attributes.md) |
+| ❤️ HP 管理 | `.hp` 记录/伤害/治疗/临时 HP/列表；`.长休` 一键结算 | [HP 管理](./guide/hp-rest.md) |
+| ⚔️ 先攻列表 | `.ri` 掷先攻入表、`.init/.先攻` 查看与删除/提前/交换；`.先攻检定` 自动联动 | [先攻列表](./guide/initiative.md) |
+| 🔄 战斗轮 | `.br` 开局，`.回合/.轮次/.跳过/.ed` 推进，轮到玩家自动 @ 提醒 | [战斗轮](./guide/battle.md) |
+| ⚙️ 群管理 | `.dset` 群默认骰面；`.bot` 群聊服务开关（白名单）与常见问题 | [群管理与 FAQ](./guide/faq.md) |
 
 ## 命令总表
 
@@ -28,7 +24,6 @@ HP 管理、先攻列表与战斗轮。命令手感对齐
 | --- | --- |
 | `.r [N#][hs][表达式] [原因]` | 掷骰表达式（`#` 连掷 1~10、`h` 暗骰、`s` 只显数值） |
 | `.rh [表达式] [原因]` | 暗骰（群内提示、结果私聊） |
-| `.帮助` / `.help [命令]` | 命令总览 / 指定命令详细用法（如 `.help r`） |
 
 ### 角色卡与检定（群聊）
 
@@ -75,16 +70,21 @@ HP 管理、先攻列表与战斗轮。命令手感对齐
 | `.dset [表达式]` | 设置/查看群默认骰面（群主/管理员） |
 | `.bot [on/off]` | 插件信息与群聊服务开关（群主/管理员，需 @） |
 
+### 帮助
+
+| 命令 | 说明 |
+| --- | --- |
+| `.帮助` / `.help` | 命令总览 |
+| `.help <命令>` | 指定命令的详细用法（如 `.help r`、`.帮助 战斗轮`） |
+
 ## 开始使用
 
-1. 安装插件并开启群服务：[快速开始](./guide/quickstart)
-2. 掷个骰感受语法：[掷骰语法](./guide/roll-syntax)
-3. 建立角色卡开始跑团：[角色卡与检定](./guide/character-card)
+1. 安装插件并开启群服务：[快速开始](./guide/quickstart.md)
+2. 掷个骰感受语法：[掷骰语法](./guide/roll-syntax.md)
+3. 建立角色卡开始跑团：[角色卡与检定](./guide/character-card.md)
 
 ## 开发与致谢
 
-- 本项目以 MIT License 发布；**掷骰引擎与命令语法移植自
-  [nonebot-dicepp](https://github.com/pear-studio/nonebot-dicepp)**
-  （Copyright (c) 2022 pear-studio，MIT），业务层为独立实现；
+- 本项目以 MIT License 发布；**掷骰引擎与命令语法移植自 [nonebot-dicepp](https://github.com/pear-studio/nonebot-dicepp)**（Copyright (c) 2022 pear-studio，MIT），业务层为独立实现；
 - 规则查询类资料内容不随插件分发，需要时由使用者自行提供；
 - 发布、配置与开发信息见仓库 README。
