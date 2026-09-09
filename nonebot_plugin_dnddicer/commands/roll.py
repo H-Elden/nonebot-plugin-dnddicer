@@ -7,7 +7,8 @@
 - ``.r s 表达式``：只显示最终数值，不展示逐骰过程；
 - 默认骰面：表达式中的裸 ``D`` / ``3D`` 注入默认骰面（Config
   ``dnddicer_default_face``，默认 20；群配置落地前为全局默认）；
-- 原因后缀、中英文句号/宿主 COMMAND_START 起始符、大小写不敏感命令名见 base.py。
+- 原因后缀、起始符（默认仅中英文句号；宿主 COMMAND_START 兼容需配置开启，
+  见 base.py）与大小写不敏感命令名见 base.py。
 
 暂未实现（第一期范围外，显式提示而非静默）：``exp`` 期望值采样（待上游
 ``test_rexp_sampling_optimization`` 随迁一并落地）、``a/n`` 特殊判定模式。

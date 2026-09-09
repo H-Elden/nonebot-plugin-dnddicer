@@ -1,10 +1,12 @@
 """命令层基础设施：DNDDicer 点前缀命令的注册、匹配与事件响应器创建。
 
 设计（对齐 nonebot-dicepp 命令手感 + NoneBot 商店合规）：
-- **命令起始符**：本插件自带英文句号 ``.`` 与中文句号 ``。``（全角输入法直发），
-  另**兼容宿主全局配置 ``COMMAND_START``**（NoneBot 默认含 ``/``）中声明的
-  起始符——起始符集合惰性读取并缓存，未初始化（引擎单测直接导入）时退化为
-  仅中英文句号；
+- **命令起始符**：默认**仅**匹配本插件自带的英文句号 ``.`` 与中文句号 ``。``
+  （全角输入法直发）；宿主 ``COMMAND_START``（NoneBot 默认含 ``/``）中声明的
+  起始符**默认不兼容**——/.help、/bot 等常见单词命令易与宿主其他插件冲突，
+  需由 ``dnddicer_use_host_command_starts`` 配置显式开启（冲突背景与决策见
+  doc/骰娘插件开发计划.md 8.6 节）。起始符集合惰性读取并缓存，未初始化
+  （引擎单测直接导入）时退化为仅中英文句号；
 - **命令名注册表 + 最长前缀匹配**：命令体（起始符后的文本）以任一已注册命令名
   开头即命中、取最长者（保证 ``.ra`` 命中 ``ra`` 而不是 ``r``）；命令名后的
   剩余文本原样交给命令处理（因此 ``.r2d6+3`` 与 ``.r 2d6+3`` 等价——与
@@ -52,9 +54,18 @@ def get_registered_commands() -> dict[str, str]:
 
 @lru_cache(maxsize=1)
 def _compute_command_starts() -> tuple[str, ...]:
-    """计算可用命令起始符：本插件自带 + 宿主 COMMAND_START 配置。"""
+    """计算可用命令起始符：默认仅本插件自带句号；兼容开关开启时叠加宿主配置。
+
+    NoneBot 宿主 ``COMMAND_START`` 默认含 ``/``——若无条件兼容，``/help``、
+    ``/bot`` 等常见单词命令可能同时命中本插件与宿主其他插件（冲突）。
+    因此默认**只匹配英文句号 ``.`` 与中文句号 ``。``**；需兼容宿主起始符
+    （含环境变量 ``DNDDICER_USE_HOST_COMMAND_STARTS=true``）时由
+    config.dnddicer_use_host_command_starts 开启（见 doc/骰娘插件开发计划.md 8.6）。
+    """
     starts = list(_BUILTIN_STARTS)
     try:
+        if not get_config().dnddicer_use_host_command_starts:
+            return tuple(starts)
         host_starts = get_driver().config.command_start
         for s in host_starts or ():
             # 空起始符（NoneBot 允许 "" = 无前缀直发命令）风险过大，不采纳

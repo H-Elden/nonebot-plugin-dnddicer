@@ -81,14 +81,37 @@ async def test_roll_chinese_fullstop(app: App, roll_matcher):
 
 
 @pytest.mark.asyncio
-async def test_roll_host_command_start(app: App, roll_matcher):
-    """兼容宿主 COMMAND_START（默认 "/"）：/r 2d6+3。"""
+async def test_roll_host_command_start(app: App, roll_matcher, monkeypatch):
+    """宿主 COMMAND_START（默认 "/"）兼容由配置显式开启（默认关，见计划文档 8.6）：
+    默认 /r 不命中（静默）；dnddicer_use_host_command_starts=true 时 /r 2d6+3 命中。"""
+    from nonebot_plugin_dnddicer import config as config_mod
+    from nonebot_plugin_dnddicer.commands import base
+
+    async def _set_host_starts(enabled: bool) -> None:
+        monkeypatch.setattr(
+            config_mod,
+            "_config",
+            config_mod.Config(dnddicer_use_host_command_starts=enabled),
+        )
+        base._compute_command_starts.cache_clear()
+
+    event = fake_group_message_event_v11(message=Message("/r 2d6+3"))
+
+    # 默认（false）：斜杠起始符不命中 → 静默
+    await _set_host_starts(False)
+    async with app.test_matcher(roll_matcher) as ctx:
+        adapter = ctx.create_adapter(base=OnebotV11Adapter)
+        bot = ctx.create_bot(base=Bot, adapter=adapter)
+        ctx.receive_event(bot, event)
+
+    # 开启兼容：/r 2d6+3 命中并正常掷骰
     token = set_runtime(SequenceRuntime([3, 5]))
     try:
-        event = fake_group_message_event_v11(message=Message("/r 2d6+3"))
+        await _set_host_starts(True)
         await _expect_send(app, roll_matcher, event, "test 的掷骰结果为 2D6+3=[3+5]+3=11")
     finally:
         reset_runtime(token)
+        base._compute_command_starts.cache_clear()
 
 
 @pytest.mark.asyncio

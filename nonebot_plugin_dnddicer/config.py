@@ -33,6 +33,13 @@ class Config(BaseModel):
     #: 用于宿主需要临时禁用本插件功能但保留加载的场景。
     dnddicer_enabled: bool = True
 
+    #: 是否兼容宿主全局配置 COMMAND_START 中声明的命令起始符（NoneBot 默认
+    #: 含 "/"，开启后 /.help、/bot on 等亦可触发）。默认 False：只匹配本插件
+    #: 自带的 "." / "。"——避免 "/help"、"/bot" 等常见单词命令与本插件同时
+    #: 命中宿主其他插件（冲突）。宿主环境明确需要时设 true（见 doc/骰娘插件
+    #: 开发计划.md 8.6 节：冲突背景与决策记录）。
+    dnddicer_use_host_command_starts: bool = False
+
     # 注：更多配置项（第一期落地时逐步补充，例如连掷上限、暗骰私聊开关等）
     # 将在对应功能实现时按需追加，保持「全部有默认值」的零配置原则。
 

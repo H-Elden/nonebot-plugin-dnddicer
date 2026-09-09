@@ -3,7 +3,8 @@
 设计约定（与 doc/骰娘插件开发计划.md 及 commands/base.py 一致）：
 - 命令风格：点号前缀（`.r` / `.rh` / 后续 `.st` / `.hp` / `.init` / `.br` /
   `.ed` / `.帮助` 等），中英文别名对齐 nonebot-dicepp（DNDDicer 手感基准）；
-- 起始符：英文/中文句号 + 宿主 COMMAND_START（见 base.py）；
+- 起始符：默认仅英文/中文句号；宿主 COMMAND_START 兼容由配置
+  ``dnddicer_use_host_command_starts`` 显式开启（默认关，见 base.py 与计划文档 8.6）；
 - 协同：matcher 统一以 ``dnddicer_command_priority``（Config，默认 10）为基准
   设置优先级并 ``block=True``，与宿主 bot 其他插件（AIchat 等）协同；
 - 本包**只在 NoneBot 已初始化时被导入**（由插件包根 ``__init__.py`` 在加载
