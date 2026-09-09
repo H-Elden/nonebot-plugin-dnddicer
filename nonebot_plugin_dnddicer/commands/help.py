@@ -39,7 +39,7 @@ async def handle_help(event: MessageEvent) -> None:
     if not rest:
         # 无参数：总览全部命令（保持注册顺序；同帮助文本的别名只显示首条，
         # 如 .帮助 是 .help 的别名，避免列表重复）
-        lines = ["DNDDicer 可用命令："]
+        lines = ["屠龙骰可用命令："]
         seen_docs: set[str] = set()
         for name, description in base.get_registered_commands().items():
             if description in seen_docs:
