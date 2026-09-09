@@ -54,6 +54,8 @@ TXT_DND_RES_NOREASON = "{name} DND人物作成:\n{result}"
 
 # ── 通用 ────────────────────────────────────────────────────────────────
 TXT_GROUP_ONLY = "该指令仅在群聊中可用。"
+# 命令处理出现未预期异常时的统一回复（详见 commands/base.py 全局兜底钩子）
+TXT_UNKNOWN_ERROR = "骰娘内部发生了错误，请联系管理员反馈。"
 
 # ── DND5e 角色卡 .角色卡 / .状态 / 检定（对齐 DicePP character 默认文案）─────
 TXT_CHAR_SET = "角色卡已设置"
@@ -75,6 +77,40 @@ TXT_HP_DEL = "已删除{name}的生命值信息"
 # ── 长休 .长休 ─────────────────────────────────────────────────────────────
 TXT_LONG_REST = "{result}"
 TXT_LONG_REST_MISS = "找不到{name}的角色卡信息"
+
+# ── 先攻列表 .init/.ri/.先攻（对齐 DicePP initiative_command 默认文案）───────
+TXT_INIT_ROLL = "{name}的先攻值是 {init_result}"
+TXT_INIT_INFO = "先攻列表如下: \n{init_info}"
+TXT_INIT_INFO_NOT_EXIST = "没有找到先攻列表"
+TXT_INIT_INFO_CLR = "已清除先攻列表"
+TXT_INIT_ENTITY_NOT_FOUND = "先攻里没有{name}"
+TXT_INIT_ENTITY_VAGUE = "先攻对象名称{name}存在歧义，可能是{name_list}"
+TXT_INIT_ENTITY_REPEAT = "你重复投掷了先攻"
+TXT_INIT_ENTITY_SAME = "出现相同先攻值，请DM来决定由谁先行动，若不决定将保持默认顺序："
+TXT_INIT_ENTITY_SAME_LIST = "回复.init first 名称 将该对象提前（同先攻值: {entity_list}）"
+TXT_INIT_ENTITY_FIRST = "{name}的先攻已在相同先攻值中被提前"
+TXT_INIT_ENTITY_SWAP = "{name1}与{name2}的先攻值已互换"
+TXT_INIT_INFO_DEL = "已从先攻列表中移除 {entity_list}"
+TXT_INIT_UNKNOWN = "子指令{invalid_command}无效，可用的子指令为{sub_command_list}"
+TXT_INIT_ERROR = "处理先攻指令时出现错误：{error_info}"
+
+# ── 战斗轮 .br/.ed/.回合/.轮次/.跳过（对齐 DicePP battleroll_command 默认文案）
+# 注：.br 文案去掉 DicePP 原版残留的「BUFF表」字样（BUFF 计时表本期不做）
+TXT_BR_NEW = "已创建新战斗轮。清除先攻表、当前回合。"
+TXT_BR_ROUND = "现在是第{round}轮第{turn}回合，{turn_name}的回合。"
+TXT_BR_ROUND_MOD = "现在变成第{round}轮了。"
+TXT_BR_TURN_MOD = "现在变成第{round}轮的第{turn}回合了。"
+TXT_BR_ROUND_SHOW = "现在是{turn_name}的回合。"
+TXT_BR_NO_INIT = "目前先攻列表为空，故不存在回合与轮次。"
+TXT_BR_TURN_END = "{turn_name}的回合结束了。"
+TXT_BR_ROUND_NEW = "新的一轮，现在是第{round}轮。"
+TXT_BR_TURN_NEW = "现在是{turn_name}的回合。"
+TXT_BR_TURN_NEW_WITH_AT = "现在是{turn_name}的回合。请玩家{at}开始行动。"
+TXT_BR_ERROR_NOT_NUMBER = "这不是数字。"
+TXT_BR_ERROR_TOO_SMALL = "这个数字太小了。"
+TXT_BR_ERROR_TOO_BIG = "这个数字太大了。"
+TXT_BR_ERROR_NOT_FOUND = "没有找到这个回合。"
+TXT_BR_ERROR_TOO_MUCH_FOUND = "找到复数回合，请换一个关键词。"
 
 
 def get_roll_state_text(res_list: List[RollResult]) -> str:

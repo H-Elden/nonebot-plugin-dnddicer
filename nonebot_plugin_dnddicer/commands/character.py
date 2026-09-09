@@ -107,8 +107,11 @@ def _check_command_rule() -> "Rule":
         if matched_start is None:
             return False
         body = text[len(matched_start):]
-        if base.match_command_name(body)[0] is not None:
-            return False
+        fixed_name, fixed_rest = base.match_command_name(body)
+        if fixed_name is not None:
+            # .先攻检定 属于检定点命令而非 .先攻 列表命令（与 DicePP 语义一致）
+            if not (fixed_name == "先攻" and fixed_rest.lstrip().startswith("检定")):
+                return False
         return parse_check_body(body) is not None
 
     return Rule(_checker)
@@ -230,5 +233,18 @@ async def handle_check(event: GroupMessageEvent) -> None:
         hint=hint,
         result="\n".join(results),
     )
-    # TODO(initiative)：.先攻检定 掷出后把结果加入先攻列表（与 DicePP 联动一致）
+    # .先攻检定：掷出后自动加入先攻列表（对齐 DicePP char_command 联动语义：
+    # 掷骰过程行被替换为入表反馈，便于群内直读先攻结果）
+    if check_name == "先攻" and values:
+        from .initiative import add_initiative_entities
+
+        init_feedback = await add_initiative_entities(
+            {name: (values[0], results[0])},
+            str(event.user_id),
+            event.group_id,
+        )
+        if results[0] in feedback:
+            feedback = feedback.replace(results[0], init_feedback)
+        else:
+            feedback += f"\n{init_feedback}"
     await check_matcher.finish(feedback)

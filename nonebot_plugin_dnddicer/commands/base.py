@@ -20,13 +20,16 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Optional
 
-from nonebot import get_driver
+from nonebot import get_driver, logger
+from nonebot.adapters import Bot, Event
 from nonebot.adapters.onebot.v11 import MessageEvent
 from nonebot.matcher import Matcher
+from nonebot.message import run_postprocessor
 from nonebot.plugin import on_message
 from nonebot.rule import Rule
 
 from ..config import get_config
+from . import text
 
 #: 本插件自带的命令起始符（英文/中文句号）
 _BUILTIN_STARTS: tuple[str, ...] = (".", "。")
@@ -160,3 +163,52 @@ def get_display_name(event: MessageEvent) -> str:
         if nickname:
             return nickname
     return str(getattr(event, "user_id", ""))
+
+
+# =========================================================================
+# 命令层全局异常兜底（见 doc/NoneBot最佳实践调研报告.md 1.3 节）
+# =========================================================================
+
+#: 本插件的模块名前缀（兜底钩子只接管本插件的 matcher，不碰宿主其他插件）
+_PLUGIN_MODULE_PREFIX = "nonebot_plugin_dnddicer"
+
+
+@run_postprocessor
+async def _unknown_error_fallback(
+    matcher: Matcher,
+    exception: Optional[Exception],
+    bot: Bot,
+    event: Event,
+) -> None:
+    """未预期异常统一处理：记录日志（带群/会话、不含用户原文）并回复统一文案。
+
+    背景：命令 handler 只捕获预期错误（RollDiceError/AssertionError 等）；
+    未预期异常（脏数据、引擎边界 bug）默认只进 NoneBot 日志、群里无任何回复
+    ——跑团进行中骰娘沉默比报错更糟。本钩子在 NoneBot 记录异常后执行：
+    本插件命令处理异常 → logger.exception（隐私：不落用户消息原文）+
+    原会话统一回复；非本插件 matcher 直接放行。
+    """
+    if exception is None:
+        return
+    module = getattr(matcher, "module_name", "") or ""
+    if not module.startswith(_PLUGIN_MODULE_PREFIX):
+        return
+
+    try:
+        session_id = event.get_session_id()
+    except Exception:  # noqa: BLE001 - 兜底自身不允许再抛异常
+        session_id = "unknown"
+
+    logger.opt(exception=exception).error(
+        "DNDDicer 命令处理未知异常: matcher_module={} session={}",
+        module,
+        session_id,
+    )
+    try:
+        await bot.send(event, text.TXT_UNKNOWN_ERROR)
+    except Exception:  # noqa: BLE001 - 兜底自身不允许再抛异常
+        logger.warning(
+            "DNDDicer 未知异常兜底回复发送失败: matcher_module={} session={}",
+            module,
+            session_id,
+        )
