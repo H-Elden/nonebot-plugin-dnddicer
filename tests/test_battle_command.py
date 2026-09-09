@@ -1,4 +1,4 @@
-""".br/.回合/.轮次/.跳过/.ed 战斗轮 nonebug 测试。
+""".br/.回合/.轮次/.ed 战斗轮 nonebug 测试。
 
 战斗状态（InitList 含 round/turn 指针）以 data/initiative.py 直接播种，
 命令消息用 nonebug matcher 驱动，避免 .ri 掷骰噪音。
@@ -236,7 +236,7 @@ async def test_ed_announce_with_at_for_player(app: App):
 
 
 # =========================================================================
-# .跳过
+# 回合推进：.ed 之外 DM 用 .回合±n 连续推进
 # =========================================================================
 
 
@@ -268,25 +268,16 @@ async def test_turn_jump_to_player_announces_with_at(app: App):
 
 
 @pytest.mark.asyncio
-async def test_skip_advance(app: App):
-    """.跳过 推进一位；.跳过 2 跨越多位并进位轮次。"""
-    from nonebot_plugin_dnddicer.commands.battle import skip_matcher
+async def test_turn_advance_multiple(app: App):
+    """.回合+1 推进一位；.回合+2 跨越多位并进位轮次。"""
+    from nonebot_plugin_dnddicer.commands.battle import turn_matcher
 
     await _seed(110010, [("兽人", 30), ("地精", 20), ("哥布林", 10)])
     await _expect(
-        app, skip_matcher, _event(110010, ".跳过"),
+        app, turn_matcher, _event(110010, ".回合+1"),
         "现在是地精的回合。",
     )
     await _expect(
-        app, skip_matcher, _event(110010, ".跳过 2"),
+        app, turn_matcher, _event(110010, ".回合+2"),
         "新的一轮，现在是第2轮。\n现在是兽人的回合。",
     )
-
-
-@pytest.mark.asyncio
-async def test_skip_invalid_number(app: App):
-    """.跳过 非数字 → 报错。"""
-    from nonebot_plugin_dnddicer.commands.battle import skip_matcher
-
-    await _seed(110011, [("兽人", 20), ("哥布林", 10)])
-    await _expect(app, skip_matcher, _event(110011, ".跳过 三"), "这不是数字。")

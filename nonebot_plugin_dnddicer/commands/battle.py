@@ -1,4 +1,4 @@
-"""战斗轮命令：``.br`` / ``.回合`` / ``.轮次`` / ``.跳过`` / ``.ed``。
+"""战斗轮命令：``.br`` / ``.回合`` / ``.轮次`` / ``.ed``。
 
 迁移自 nonebot-dicepp ``module/initiative/battleroll_command.py``（commit
 732ff74）：战斗轮不是独立系统，而是**先攻表的"进行中状态机"**——复用
@@ -11,12 +11,10 @@ data/initiative.py 的 InitList（实体列表 + round/turn 指针），本模�
 - ``.回合 名字``：按名字跳转（精确 → 模糊，无/多结果报错）；
 - ``.轮次 n``：对轮次做查看/加减/跳转；
 - ``.ed`` / ``.结束``：结束当前回合——播报 + 自动推进下一位；一轮走完自动
-  进位播报；轮到绑定 QQ 的玩家时输出 @ 提醒；
-- ``.跳过`` / ``.skip [n]``：不播报结束直接推进 n 位（默认 1，退场/跳过回合用）。
+  进位播报；轮到绑定 QQ 的玩家时输出 @ 提醒。
 
 与 DicePP 的差异（一期简化）：不迁移 get_nickname API 实时刷新（显示入表时
-快照的名称）；BUFF 计时表不做（上游本版亦未启用）；`.跳过` 上游未实现，
-按计划文档「跳过当前单位」语义自研（推进 n 位 + 播报下一位）。
+快照的名称）；BUFF 计时表不做（上游本版亦未启用）。
 """
 
 from __future__ import annotations
@@ -38,7 +36,6 @@ _HELP_BR = (
     ".回合 或 .轮次 查看当前轮次与回合\n"
     ".轮次<数值> 设置轮次数值\n"
     ".回合<数值> 设置当前进行到的回合\n"
-    ".跳过<数值> 跳过数回合\n"
     ".ed 或 .结束 在自己回合中宣言回合结束"
 )
 _HELP_TURN = (
@@ -49,13 +46,11 @@ _HELP_ROUND = (
     "查看或修改当前轮次：.轮次 / .轮次+1 / .轮次-1 / .轮次=3\n"
     "回合越界会自动进位/退位轮次。"
 )
-_HELP_SKIP = "跳过当前单位（退场等）：.跳过 [数量]，默认跳过 1 位。"
 _HELP_ED = "结束当前回合，自动推进到下一位并播报；一轮走完自动进入下一轮。"
 
 br_matcher = base.on_dnd_command("br", _HELP_BR, aliases=("battleroll", "战斗轮"))
 turn_matcher = base.on_dnd_command("turn", _HELP_TURN, aliases=("回合",))
 round_matcher = base.on_dnd_command("round", _HELP_ROUND, aliases=("轮次",))
-skip_matcher = base.on_dnd_command("skip", _HELP_SKIP, aliases=("跳过",))
 ed_matcher = base.on_dnd_command("ed", _HELP_ED, aliases=("结束",))
 
 
@@ -222,6 +217,8 @@ async def _handle_turn_round(event: GroupMessageEvent, mode: str) -> None:
     round_changed = target_round != prev_round
     turn_changed = prev_turn != target_turn
 
+    # 实际推进/跳转 = 战斗已开始（与 .ed 一致）：此后增删实体按战斗中修正指针
+    init_data.first_turn = False
     init_data.round = target_round
     init_data.turn = target_turn
     init_data.turns_in_round = turns_in_round
@@ -324,45 +321,3 @@ async def handle_ed(event: MessageEvent) -> None:
     init_data.first_turn = False
     await save_init_list(init_data)
     await _finish_battle_lines(ed_matcher, feedbacks, at_name, at_owner)
-
-
-@skip_matcher.handle()
-async def handle_skip(event: MessageEvent) -> None:
-    """处理 .跳过 [n]：不播报结束，直接推进 n 位并播报下一位。"""
-    if not isinstance(event, GroupMessageEvent):
-        await skip_matcher.finish(text.TXT_GROUP_ONLY)
-    init_data = await _load_battle(event)
-
-    arg_str = (base.get_command_rest(event) or "").strip()
-    if not arg_str:
-        steps = 1
-    elif arg_str.isdigit() and int(arg_str) >= 1:
-        steps = int(arg_str)
-    else:
-        await skip_matcher.finish(text.TXT_BR_ERROR_NOT_NUMBER)
-
-    turns_in_round = len(init_data.entities)
-    round_no, turn = _clamp_round_target(init_data, init_data.round, init_data.turn)
-    round_no = max(1, round_no)
-    prev_round = round_no
-
-    # 推进 steps 位（含越界进位/退位修正）
-    round_no, turn = _clamp_round_target(init_data, round_no, turn + steps)
-    round_no = max(1, round_no)
-    feedbacks: List[str] = []
-    if round_no > prev_round:
-        feedbacks.append(text.TXT_BR_ROUND_NEW.format(round=round_no))
-    next_entity = init_data.entities[turn - 1]
-    at_name = ""
-    at_owner = ""
-    if next_entity.owner:
-        at_name, at_owner = next_entity.name, next_entity.owner
-    else:
-        feedbacks.append(text.TXT_BR_TURN_NEW.format(turn_name=next_entity.name))
-
-    init_data.round = round_no
-    init_data.turn = turn
-    init_data.turns_in_round = turns_in_round
-    init_data.first_turn = False
-    await save_init_list(init_data)
-    await _finish_battle_lines(skip_matcher, feedbacks, at_name, at_owner)

@@ -134,7 +134,7 @@ def remove_redundant_parentheses(input_str: str, readable: bool = True) -> str:
                             right = par_info[1]+1
                             priority_lhs, priority_rhs = priority_rhs, outer_priority_rhs
                     output_list.append(par_str[left:par_info[0]])
-                    if readable:  # 为了可读性, 不需要去掉所有没有数学意义的括号, 所以把记录优先级相关的去掉了而是直接用最高优先级跳过后面的检查
+                    if readable:  # 为了可读性, 不需要去掉所有没有数学意义的括号, 所以把记录优先级相关的去掉了而是直接用最高优先级略过后面的检查
                         output_list.append(remove_par(par_str[par_info[0]:par_info[1]+1], max_priority, max_priority))
                     else:
                         output_list.append(remove_par(par_str[par_info[0]:par_info[1] + 1], priority_lhs, priority_rhs))

@@ -353,7 +353,7 @@ def sample_roll_exp_ast(expression: str) -> int:
     Sample a single integer value from a roll expression using the AST engine.
 
     This is a lightweight hot-path variant for statistical sampling (e.g. .rexp
-    expectation calculation which calls this ~200,000 times).  It skips trace
+    expectation calculation which calls this ~200,000 times).  It omits trace
     rendering and canonical-string building to minimise per-call overhead.
 
     For high-frequency repeated sampling of the *same* expression within a

@@ -124,7 +124,7 @@ TXT_INIT_INFO_DEL = "已从先攻列表中移除 {entity_list}"
 TXT_INIT_UNKNOWN = "子指令{invalid_command}无效，可用的子指令为{sub_command_list}"
 TXT_INIT_ERROR = "处理先攻指令时出现错误：{error_info}"
 
-# ── 战斗轮 .br/.ed/.回合/.轮次/.跳过（对齐 DicePP battleroll_command 默认文案）
+# ── 战斗轮 .br/.ed/.回合/.轮次（对齐 DicePP battleroll_command 默认文案）
 # 注：.br 文案去掉 DicePP 原版残留的「BUFF表」字样（BUFF 计时表本期不做）
 TXT_BR_NEW = "已创建新战斗轮。清除先攻表、当前回合。"
 TXT_BR_ROUND = "现在是第{round}轮第{turn}回合，{turn_name}的回合。"

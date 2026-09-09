@@ -16,7 +16,7 @@ def _nonebot_initialized() -> bool:
     本包可能被两种方式导入：
     - NoneBot 加载流程（NoneBot load / NoneBug 夹具）：已初始化，require 必须执行；
     - 直接导入（例如引擎随迁单测在 pytest 收集阶段 import engine 子模块）：
-      尚未初始化，此时跳过 require 即可（localstore 真正缺失时，在已初始化
+      尚未初始化，此时略过 require 即可（localstore 真正缺失时，在已初始化
       场景下 require 会正常抛错，不会被此判断掩盖）。
     """
     try:
@@ -65,7 +65,7 @@ __plugin_meta__ = PluginMetadata(
 # - engine（掷骰引擎）无初始化副作用，随包导入以尽早暴露导入错误（引擎单测在
 #   pytest 收集阶段直接 import 本包时也需要可用）；
 # - commands（命令注册：顶层创建 on_message matcher 并读取插件配置）与 data
-#   （localstore 存储）必须在 NoneBot 初始化后的加载流程中导入，否则跳过——
+#   （localstore 存储）必须在 NoneBot 初始化后的加载流程中导入，否则略过——
 #   这正是 NoneBot 加载本插件时的场景（NoneFlow/宿主加载），matcher 照常注册。
 if _nonebot_initialized():
     from . import commands  # noqa: E402,F401

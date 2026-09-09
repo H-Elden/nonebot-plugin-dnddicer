@@ -16,7 +16,7 @@
 - dnd.py           属性生成（.dnd 4D6K3 掷点，已落地；标准购点另行规划）
 - hp.py            HP 管理（.hp / .长休，群内共享、多目标伤害/治疗，已落地）
 - initiative.py    先攻列表（.init/.ri/.先攻 + .先攻检定 联动入表，已落地）
-- battle.py        战斗轮（.br/.ed/.回合/.轮次/.跳过，已落地）
+- battle.py        战斗轮（.br/.ed/.回合/.轮次，已落地）
 - bot.py           .bot 插件信息服务与群聊服务开关（2026-09-09 宿主新需求）
 - group_config.py  群配置（默认骰面 .dset，已落地）
 - help.py          帮助（.帮助 / .help，已落地；须在其它命令之后导入以保持列表顺序）
@@ -29,7 +29,7 @@ from . import dnd  # noqa: F401  # .dnd 属性生成
 from . import group_config  # noqa: F401  # .dset 群默认骰面
 from . import hp  # noqa: F401  # .hp / .长休 HP 管理
 from . import initiative  # noqa: F401  # .init/.ri/.先攻 先攻列表
-from . import battle  # noqa: F401  # .br/.ed/.回合/.轮次/.跳过 战斗轮
+from . import battle  # noqa: F401  # .br/.ed/.回合/.轮次 战斗轮
 from . import bot  # noqa: F401  # .bot 插件信息与群聊服务开关
 from . import help  # noqa: F401  # .帮助 / .help（须在其它命令之后导入以保持列表顺序）
 from . import roll_parse_args  # noqa: F401  # .r 参数解析（上游迁移）

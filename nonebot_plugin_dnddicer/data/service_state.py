@@ -68,7 +68,7 @@ async def is_service_enabled(group_id: int | str) -> bool:
 
 
 async def set_service_enabled(group_id: int | str, enabled: bool) -> None:
-    """开启/关闭某群的服务（无变化时跳过落盘）。"""
+    """开启/关闭某群的服务（无变化时不重复落盘）。"""
     key = str(group_id)
     async with _get_lock():
         groups = await _load_if_needed()
