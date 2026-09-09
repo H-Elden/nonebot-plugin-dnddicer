@@ -99,7 +99,7 @@ def test_perform_check_ability_with_sequence():
     )
     token = set_runtime(SequenceRuntime([10]))
     try:
-        hint, result, value = AbilityService.perform_check(char.ability_info, "力量", 0, "")
+        hint, result, value, _ = AbilityService.perform_check(char.ability_info, "力量", 0, "")
     finally:
         reset_runtime(token)
     assert "无熟练加值" in hint
@@ -116,7 +116,7 @@ def test_perform_check_skill_with_proficiency():
     )
     token = set_runtime(SequenceRuntime([4, 18]))  # 优势两次掷骰，取高 18
     try:
-        hint, result, value = AbilityService.perform_check(char.ability_info, "隐匿", 0, "")
+        hint, result, value, _ = AbilityService.perform_check(char.ability_info, "隐匿", 0, "")
     finally:
         reset_runtime(token)
     # 熟练加值 = 2 + (5-1)//4 = 3，双倍熟练（scale=2）提示按 DicePP 风格显示 3*2
@@ -133,7 +133,7 @@ def test_perform_check_synonym():
     )
     token = set_runtime(SequenceRuntime([3]))
     try:
-        hint, result, value = AbilityService.perform_check(char.ability_info, "观察", 0, "")
+        hint, result, value, _ = AbilityService.perform_check(char.ability_info, "观察", 0, "")
     finally:
         reset_runtime(token)
     assert "感知调整值:0" in hint

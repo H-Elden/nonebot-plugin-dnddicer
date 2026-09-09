@@ -8,7 +8,7 @@ DicePP 的本地化扩展机制不在本插件范围（不迁移其 loc 体系�
 
 from __future__ import annotations
 
-from typing import List
+from typing import List, Tuple
 
 from ..engine.roll.result import RollResult
 
@@ -147,31 +147,54 @@ TXT_BR_ERROR_NOT_FOUND = "没有找到这个回合。"
 TXT_BR_ERROR_TOO_MUCH_FOUND = "找到复数回合，请换一个关键词。"
 
 
-def get_roll_state_text(res_list: List[RollResult]) -> str:
-    """计算掷骰结果附带的 d20 状态文案（移植 DicePP get_roll_state_loc_text）。
+def _d20_crit_counts(res_list: List[RollResult]) -> Tuple[int, int]:
+    """统计被保留 d20 骰中的大成功（出目 20）与大失败（出目 1）次数。
 
-    规则（对齐上游）：
-    - 1 轮且存在唯一 d20 大成功/大失败 → 「好耶！大成功!」/「哇哦！大失败!」
-    - 多轮且存在大成功/大失败 → 「N次 大成功 M次 大失败」（只列存在的项）
-    - 1 轮、无大成功/大失败、含唯一 d20 → 按平均出目档位返回（默认空串）
-    - 其余情况 → 空串
+    大成功/大失败只由 d20 产生（DND 规则唯一有该概念的骰面），且只看
+    **被保留** 的骰子（kh/dl 丢弃的骰不计：优势掷出 20 与 1 保留 20 →
+    只算大成功）。d100 等其它骰面不产生大成功/大失败（DNDDicer 不做
+    COC/d100 体系，不再沿用上游按 d100 出目 1/100 计数——
+    RollResult.success/fail 字段混计 d20 与 d100，故这里改以 d20_list 为准）。
     """
-    success_time = sum(res.success for res in res_list)
-    failure_time = sum(res.fail for res in res_list)
+    success_time = 0
+    failure_time = 0
+    for res in res_list:
+        for val in res.d20_list:
+            if val == 20:
+                success_time += 1
+            elif val == 1:
+                failure_time += 1
+    return success_time, failure_time
 
-    if len(res_list) == 1 and (success_time + failure_time) != 0:
-        if success_time:
-            return TXT_D20_SUCCESS
-        if failure_time:
-            return TXT_D20_FAILURE
 
-    if len(res_list) > 1:
+def format_d20_state_text(success_time: int, failure_time: int, round_count: int) -> str:
+    """把大成功/大失败次数格式化为状态文案（.r 与角色检定命令共用）。"""
+    if round_count == 1 and (success_time + failure_time) != 0:
+        return TXT_D20_SUCCESS if success_time else TXT_D20_FAILURE
+
+    if round_count > 1:
         parts: List[str] = []
         if success_time:
             parts.append(TXT_D20_MULTI.format(time=success_time, short=TXT_D20_SUCCESS_SHORT))
         if failure_time:
             parts.append(TXT_D20_MULTI.format(time=failure_time, short=TXT_D20_FAILURE_SHORT))
         return " ".join(parts)
+
+    return ""
+
+
+def get_roll_state_text(res_list: List[RollResult]) -> str:
+    """计算掷骰结果附带的 d20 状态文案（移植 DicePP get_roll_state_loc_text）。
+
+    规则（大成功/大失败判定只认被保留的 d20，见 _d20_crit_counts）：
+    - 1 轮且存在唯一 d20 大成功/大失败 → 「好耶！大成功!」/「哇哦！大失败!」
+    - 多轮且存在大成功/大失败 → 「N次 大成功 M次 大失败」（只列存在的项）
+    - 1 轮、无大成功/大失败、含唯一 d20 → 按平均出目档位返回（默认空串）
+    - 其余情况 → 空串
+    """
+    success_time, failure_time = _d20_crit_counts(res_list)
+    if success_time or failure_time:
+        return format_d20_state_text(success_time, failure_time, len(res_list))
 
     if len(res_list) == 1 and res_list[0].d20_num > 0:
         average = round(sum(res_list[0].average_list) / res_list[0].dice_num)

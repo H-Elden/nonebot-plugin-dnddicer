@@ -175,3 +175,55 @@ async def test_check_miss_without_char(app: App):
 
     event = _event(".力量检定", user_id=10007)
     await _expect(app, check_matcher, event, "找不到角色卡")
+
+
+@pytest.mark.asyncio
+async def test_check_critical_success_and_failure(app: App):
+    """.力量检定 掷 20/1 → 播报大成功/大失败（检定与 .r 播报统一）。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher, check_matcher
+
+    await _expect(app, char_matcher, _event(_RECORD, user_id=10010), "角色卡已设置")
+
+    token = set_runtime(SequenceRuntime([20]))
+    try:
+        event = _event(".力量检定", user_id=10010)
+        expected = (
+            "伊丽莎白进行【力量检定】：\n"
+            "熟练加值:3 力量调整值:2\n"
+            "1D20+2+3=[20]+2+3=25 好耶！大成功!"
+        )
+        await _expect(app, check_matcher, event, expected)
+    finally:
+        reset_runtime(token)
+
+    token = set_runtime(SequenceRuntime([1]))
+    try:
+        event = _event(".力量检定", user_id=10010)
+        expected = (
+            "伊丽莎白进行【力量检定】：\n"
+            "熟练加值:3 力量调整值:2\n"
+            "1D20+2+3=[1]+2+3=6 哇哦！大失败!"
+        )
+        await _expect(app, check_matcher, event, expected)
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_attack_critical_failure(app: App):
+    """.敏捷攻击 掷自然 1 → 播报大失败（攻击自然 1 必失误，与自然 20 对偶）。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher, check_matcher
+
+    await _expect(app, char_matcher, _event(_RECORD, user_id=10011), "角色卡已设置")
+
+    token = set_runtime(SequenceRuntime([1]))
+    try:
+        event = _event(".敏捷攻击", user_id=10011)
+        expected = (
+            "伊丽莎白进行【敏捷攻击】：\n"
+            "无熟练加值 敏捷调整值:2\n"
+            "1D20+2=[1]+2=3 哇哦！大失败!"
+        )
+        await _expect(app, check_matcher, event, expected)
+    finally:
+        reset_runtime(token)

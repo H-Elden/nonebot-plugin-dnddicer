@@ -148,6 +148,17 @@ async def test_roll_crit_success(app: App, roll_matcher):
 
 
 @pytest.mark.asyncio
+async def test_roll_d100_no_critical(app: App, roll_matcher):
+    """.r 1d100 掷 100 → 不播大成功/大失败（DNDDicer 无 COC/d100 体系，仅 d20 有）。"""
+    token = set_runtime(SequenceRuntime([100]))
+    try:
+        event = fake_group_message_event_v11(message=Message(".r 1d100"))
+        await _expect_send(app, roll_matcher, event, "test 的掷骰结果为 1D100=[100]=100")
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
 async def test_roll_hidden_group(app: App, roll_matcher):
     """暗骰 .rh 群消息：群内只播报提示，结果经 send_private_msg 私聊掷骰者。"""
     token = set_runtime(SequenceRuntime([9]))

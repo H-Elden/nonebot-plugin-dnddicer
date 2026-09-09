@@ -155,7 +155,7 @@ class AbilityService:
         check_name: str,
         advantage: int,
         mod_str: str,
-    ) -> Tuple[str, str, int]:
+    ) -> Tuple[str, str, int, RollResult]:
         """执行一次条目检定（属性/技能/豁免/攻击通用）。
 
         Args:
@@ -165,7 +165,9 @@ class AbilityService:
             mod_str: 本次检定的临时加值表达式片段（如 "+d4"；"优势+2" 由调用方拆好）。
 
         Returns:
-            (hint, result, value)：过程说明 / 掷骰过程文本 / 结果数值。
+            (hint, result, value, roll_result)：过程说明 / 掷骰过程文本 / 结果数值 /
+            完整掷骰结果对象（供调用方做 d20 大成功/大失败判定与多轮聚合，
+            见 commands/text.py _d20_crit_counts；先攻检定由调用方忽略播报）。
 
         Raises:
             AssertionError: 条目无效或属性未初始化（消息面向用户）。
@@ -260,7 +262,7 @@ class AbilityService:
             roll_result = exec_roll_exp_unified(roll_exp)
         except RollDiceError as exc:
             raise AssertionError(f"Unexpected Code: {roll_exp}->{exc.info}")
-        return hint, roll_result.get_complete_result(), roll_result.get_val()
+        return hint, roll_result.get_complete_result(), roll_result.get_val(), roll_result
 
 
 class CharacterService:

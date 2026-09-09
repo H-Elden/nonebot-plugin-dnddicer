@@ -461,3 +461,24 @@ async def test_check_initiative_reroll_replaces(app: App):
         app, initiative_matcher, _event(100021, ".init"),
         "先攻列表如下: \n当前是第1轮,伊丽莎白的回合\n1.伊丽莎白 先攻:9",
     )
+
+
+@pytest.mark.asyncio
+async def test_check_initiative_20_no_critical(app: App):
+    """.先攻检定 掷 20 → 正常入表，但不播报大成功（先攻掷骰无大成功一说）。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher, check_matcher
+
+    await _expect(
+        app, char_matcher,
+        _event(100022, f".角色卡记录 {_RECORD_SIMPLE}", user_id=30003),
+        "角色卡已设置",
+    )
+    token = set_runtime(SequenceRuntime([20]))
+    try:
+        await _expect(
+            app, check_matcher, _event(100022, ".先攻检定", user_id=30003),
+            "伊丽莎白进行【先攻检定】：\n无熟练加值 敏捷调整值:0\n"
+            "伊丽莎白的先攻值是 1D20=[20]=20",
+        )
+    finally:
+        reset_runtime(token)

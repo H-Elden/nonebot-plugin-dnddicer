@@ -234,12 +234,14 @@ async def handle_check(event: GroupMessageEvent) -> None:
         hint = ""
         results: list[str] = []
         values: list[int] = []
+        roll_results = []
         for _ in range(times):
-            hint, result_str, result_val = AbilityService.perform_check(
+            hint, result_str, result_val, roll_result = AbilityService.perform_check(
                 character.ability_info, check_name, advantage, mod_str
             )
             results.append(result_str)
             values.append(result_val)
+            roll_results.append(roll_result)
     except AssertionError as exc:
         await check_matcher.finish(str(exc))
 
@@ -250,6 +252,12 @@ async def handle_check(event: GroupMessageEvent) -> None:
     else:
         display_item = f"{check_name}检定"
     display_check = display_item if times == 1 else f"{times}次{display_item}"
+    # d20 大成功/大失败播报：与 .r 同文案同聚合（唯一 d20 出目 20/1 判定见
+    # text._d20_crit_counts）；先攻检定除外——先攻掷骰没有大成功/大失败一说
+    if check_name != "先攻":
+        state = text.get_roll_state_text(roll_results)
+        if state:
+            results[-1] = f"{results[-1]} {state}"
     feedback = text.TXT_CHECK_RESULT.format(
         name=name,
         check=display_check,
