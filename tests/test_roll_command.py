@@ -93,11 +93,22 @@ async def test_roll_host_command_start(app: App, roll_matcher):
 
 @pytest.mark.asyncio
 async def test_roll_multi_times(app: App, roll_matcher):
-    """连掷：# 语法（.r 2#1d6 → 两次独立 d6）。"""
+    """连掷：# 语法（.r 2#1d6 → 两次独立 d6，多行明细、无外层中括号）。"""
     token = set_runtime(SequenceRuntime([5, 2]))
     try:
         event = fake_group_message_event_v11(message=Message(".r 2#1d6"))
-        await _expect_send(app, roll_matcher, event, "test 的掷骰结果为 2次 1D6: [\n[5]=5,\n[2]=2]")
+        await _expect_send(app, roll_matcher, event, "test 的掷骰结果为 2次 1D6:\n[5]=5,\n[2]=2")
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_roll_multi_times_sum_only(app: App, roll_matcher):
+    """s 连掷：# 语法 + s 前缀 → 单行紧凑数值列表 [v1, v2]。"""
+    token = set_runtime(SequenceRuntime([5, 2]))
+    try:
+        event = fake_group_message_event_v11(message=Message(".r s 2#1d6"))
+        await _expect_send(app, roll_matcher, event, "test 的掷骰结果为 2次 1D6: [5, 2]")
     finally:
         reset_runtime(token)
 

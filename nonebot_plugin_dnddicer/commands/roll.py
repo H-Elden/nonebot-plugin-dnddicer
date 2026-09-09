@@ -51,13 +51,13 @@ roll_matcher = on_dnd_command("r", _HELP)
 def _render_roll_result(res_list: List[RollResult], is_show_info: bool) -> str:
     """渲染最终结果块（非特殊模式；对齐 DicePP process_msg 分支）。"""
     if len(res_list) > 1:
-        # 多次掷骰：#连掷，模板为 DicePP 的 LOC_ROLL_RESULT_MULTI
+        # 多次掷骰：#连掷（8.4 #3/#4 修订，见 text.py 模板注释）
         exp = res_list[0].get_exp()
         if is_show_info:
-            body = "\n" + ",\n".join(res.get_result() for res in res_list)
-        else:
-            body = "\n" + ",\n".join(str(res.get_val()) for res in res_list)
-        return text.TXT_MULTI.format(time=len(res_list), exp=exp, result=body)
+            body = ",\n".join(res.get_result() for res in res_list)
+            return text.TXT_MULTI.format(time=len(res_list), exp=exp, result=body)
+        body = ", ".join(str(res.get_val()) for res in res_list)
+        return text.TXT_MULTI_SUM.format(time=len(res_list), exp=exp, result=body)
     if is_show_info:
         return res_list[0].get_complete_result()
     return res_list[0].get_exp_val()

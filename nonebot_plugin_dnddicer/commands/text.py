@@ -19,8 +19,12 @@ TXT_HIDE_RESULT = "{nickname} 的暗骰结果为 {final} {state}"
 TXT_HIDE_RESULT_REASON = "{nickname} 为 {reason} 进行的暗骰结果为 {final} {state}"
 TXT_HIDE_GROUP = "{nickname} 进行了一次暗骰"
 
-#: 多次掷骰（#连掷）的最终结果块格式
-TXT_MULTI = "{time}次 {exp}: [{result}]"
+#: 多次掷骰（#连掷）的结果块模板（分两种模式，8.4 #3/#4 修订）
+#: 非 s（有过程明细）：去掉 DicePP LOC_ROLL_RESULT_MULTI 原文 "{time}次 {exp}: [{result}]"
+#: 的最外层中括号——result 内部多行（每轮次一行），外层 [] 包裹换行内容难看；
+#: s（只显数值）：单行紧凑 [v1, v2, ...]（逗号+空格，不换行）
+TXT_MULTI = "{time}次 {exp}:\n{result}"
+TXT_MULTI_SUM = "{time}次 {exp}: [{result}]"
 
 # ── 唯一 d20 的大成功 / 大失败 / 档位反馈（替换模板中的 {state}）────────────
 TXT_D20_SUCCESS = "好耶！大成功!"
