@@ -112,7 +112,11 @@ TXT_BR_NO_INIT = "目前先攻列表为空，故不存在回合与轮次。"
 TXT_BR_TURN_END = "{turn_name}的回合结束了。"
 TXT_BR_ROUND_NEW = "新的一轮，现在是第{round}轮。"
 TXT_BR_TURN_NEW = "现在是{turn_name}的回合。"
-TXT_BR_TURN_NEW_WITH_AT = "现在是{turn_name}的回合。请玩家{at}开始行动。"
+# @ 播报（8.4 #1）：原 DicePP 单模板 "现在是{turn_name}的回合。请玩家{at}开始行动。"
+# 的 {at} 为 CQ 码文本占位；现拆为 前缀/后缀 两段，at 消息段由命令层用
+# onebot v11 MessageSegment.at 组装（见 commands/battle.py）
+TXT_BR_TURN_NEW_WITH_AT_PREFIX = "现在是{turn_name}的回合。请玩家"
+TXT_BR_TURN_NEW_WITH_AT_SUFFIX = "开始行动。"
 TXT_BR_ERROR_NOT_NUMBER = "这不是数字。"
 TXT_BR_ERROR_TOO_SMALL = "这个数字太小了。"
 TXT_BR_ERROR_TOO_BIG = "这个数字太大了。"

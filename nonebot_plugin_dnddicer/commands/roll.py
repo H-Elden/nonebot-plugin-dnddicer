@@ -27,6 +27,7 @@ from ..engine.roll.ast_engine.errors import RollEngineError
 from ..engine.roll.default_dice import apply_default_expr, format_default_expr_from_storage
 from ..engine.roll.result import RollResult
 from ..engine.roll.roll_utils import RollDiceError
+from ..platform.onebot_v11 import send_private_msg
 from . import text
 from .base import get_command_rest, get_display_name, on_dnd_command
 from .roll_parse_args import RollParseArgs, _parse_roll_args
@@ -146,12 +147,7 @@ async def handle_roll(bot: Bot, event: MessageEvent) -> None:
             text.TXT_HIDE_GROUP.format(nickname=nickname)
         )
         try:
-            # onebot v11 无 send_private_msg 便捷方法，走通用 call_api
-            await bot.call_api(
-                "send_private_msg",
-                user_id=event.user_id,
-                message=reply,
-            )
+            await send_private_msg(bot, event.user_id, reply)
         except Exception as exc:  # noqa: BLE001 - 私聊失败不应影响命令主流程
             logger.warning(f"[DNDDicer] 暗骰私聊发送失败 user_id={event.user_id}: {exc}")
         return

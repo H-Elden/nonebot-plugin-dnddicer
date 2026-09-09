@@ -7,7 +7,7 @@
 import pytest
 from nonebug import App
 from nonebot.adapters.onebot.v11 import Adapter as OnebotV11Adapter
-from nonebot.adapters.onebot.v11 import Bot, Message
+from nonebot.adapters.onebot.v11 import Bot, Message, MessageSegment
 
 from fake_event import fake_group_message_event_v11
 
@@ -229,14 +229,42 @@ async def test_ed_announce_with_at_for_player(app: App):
     )
     await _expect(
         app, ed_matcher, _event(110009, ".ed", user_id=40000),
-        "哥布林的回合结束了。\n新的一轮，现在是第2轮。\n"
-        "现在是test的回合。请玩家[CQ:at,qq=30010]开始行动。",
+        Message("哥布林的回合结束了。\n新的一轮，现在是第2轮。\n现在是test的回合。请玩家")
+        + MessageSegment.at("30010")
+        + "开始行动。",
     )
 
 
 # =========================================================================
 # .跳过
 # =========================================================================
+
+
+@pytest.mark.asyncio
+async def test_turn_jump_to_player_announces_with_at(app: App):
+    """.回合 跳到绑定 QQ 玩家的回合 → @ 消息段播报（8.4 #1 消息段接口）。"""
+    from nonebot_plugin_dnddicer.commands.battle import turn_matcher
+    from nonebot_plugin_dnddicer.data.initiative import get_init_list, save_init_list
+
+    await _seed(110012, [("兽人", 20), ("哥布林", 10)])
+    init = await get_init_list(110012)
+    init.entities.append(type(init.entities[0])(name="test", owner="30010", init=30))
+    init.entities = sorted(init.entities, key=lambda x: -x.init)
+    init.turns_in_round = len(init.entities)
+    await save_init_list(init)
+
+    # 当前第 1 回合是 test（owner 30010）；跳到第 2 回合兽人（无主）无 @
+    await _expect(
+        app, turn_matcher, _event(110012, ".回合+1"),
+        "现在是兽人的回合。",
+    )
+    # 跳回第 1 回合 test → @ 消息段
+    await _expect(
+        app, turn_matcher, _event(110012, ".回合-1"),
+        Message("现在是test的回合。请玩家")
+        + MessageSegment.at("30010")
+        + "开始行动。",
+    )
 
 
 @pytest.mark.asyncio

@@ -23,10 +23,12 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageEvent
+from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message, MessageEvent
+from nonebot.matcher import Matcher
 
 from ..data.initiative import clear_init_list, get_init_list, save_init_list
 from ..initiative.models import InitList
+from ..platform.onebot_v11 import at_segment
 from . import base, text
 
 _HELP_BR = (
@@ -57,11 +59,6 @@ skip_matcher = base.on_dnd_command("skip", _HELP_SKIP, aliases=("跳过",))
 ed_matcher = base.on_dnd_command("ed", _HELP_ED, aliases=("结束",))
 
 
-def _cq_at(user_id: str) -> str:
-    """构造 @ 用户的 CQ 码（OneBot V11，对齐 DicePP get_cq_at 输出）。"""
-    return f"[CQ:at,qq={user_id}]"
-
-
 async def _load_battle(event: GroupMessageEvent) -> InitList:
     """读取本群战斗状态；无先攻表/空表则回复并结束。"""
     init_data = await get_init_list(event.group_id)
@@ -88,14 +85,28 @@ def _clamp_round_target(
     return target_round, target_turn
 
 
-def _announce_next(init_data: InitList, turn: int, round_no: int) -> str:
-    """下一行动者播报（绑定 QQ 的玩家附 @，对齐 DicePP 文案）。"""
-    entity = init_data.entities[turn - 1]
-    if entity.owner:
-        return text.TXT_BR_TURN_NEW_WITH_AT.format(
-            turn_name=entity.name, at=_cq_at(entity.owner)
-        )
-    return text.TXT_BR_TURN_NEW.format(turn_name=entity.name)
+async def _finish_battle_lines(
+    matcher: Matcher,
+    rows: List[str],
+    at_name: str = "",
+    at_owner: str = "",
+) -> None:
+    """播报行收尾发送（行间换行）。
+
+    at_owner 非空（下一行动者绑定 QQ）时，末行拆为「at 前缀文本 +
+    @消息段 + at 后缀文本」组装消息（8.4 #1：@ 用 onebot v11
+    MessageSegment.at，弃用原 CQ 码文本拼接）；前序行 + at 前缀合并为
+    单个文本段。无 at 时按纯文本发送（与既有输出一致）。
+    """
+    if not at_owner:
+        await matcher.finish("\n".join(rows))
+        return
+    head = "\n".join(rows)
+    at_head = text.TXT_BR_TURN_NEW_WITH_AT_PREFIX.format(turn_name=at_name)
+    msg = Message((head + "\n" if head else "") + at_head)
+    msg += at_segment(at_owner)
+    msg += text.TXT_BR_TURN_NEW_WITH_AT_SUFFIX
+    await matcher.finish(msg)
 
 
 def _parse_num_mod(arg_str: str) -> "tuple[Optional[int], str]":
@@ -195,7 +206,6 @@ async def _handle_turn_round(event: GroupMessageEvent, mode: str) -> None:
 
     entity = init_data.entities[target_turn - 1]
     display_name = entity.name
-    at_code = _cq_at(entity.owner) if entity.owner else ""
 
     if query_only:
         if (prev_round, prev_turn, init_data.turns_in_round) != (
@@ -218,6 +228,8 @@ async def _handle_turn_round(event: GroupMessageEvent, mode: str) -> None:
     await save_init_list(init_data)
 
     feedbacks: List[str] = []
+    at_name = ""
+    at_owner = ""
     if mode == "round":
         if round_changed:
             feedbacks.append(text.TXT_BR_ROUND_MOD.format(round=target_round))
@@ -236,10 +248,8 @@ async def _handle_turn_round(event: GroupMessageEvent, mode: str) -> None:
             else:
                 feedbacks.append(text.TXT_BR_ROUND_MOD.format(round=target_round))
         if round_changed or turn_changed:
-            if at_code:
-                feedbacks.append(text.TXT_BR_TURN_NEW_WITH_AT.format(
-                    turn_name=display_name, at=at_code
-                ))
+            if entity.owner:
+                at_name, at_owner = display_name, entity.owner
             else:
                 feedbacks.append(text.TXT_BR_TURN_NEW.format(
                     turn_name=display_name
@@ -248,7 +258,7 @@ async def _handle_turn_round(event: GroupMessageEvent, mode: str) -> None:
             feedbacks.append(text.TXT_BR_ROUND_SHOW.format(
                 turn_name=display_name
             ))
-    await turn_matcher.finish("\n".join(feedbacks))
+    await _finish_battle_lines(turn_matcher, feedbacks, at_name, at_owner)
 
 
 @br_matcher.handle()
@@ -300,14 +310,20 @@ async def handle_ed(event: MessageEvent) -> None:
         turn -= turns_in_round
         round_no += 1
         feedbacks.append(text.TXT_BR_ROUND_NEW.format(round=round_no))
-    feedbacks.append(_announce_next(init_data, turn, round_no))
+    next_entity = init_data.entities[turn - 1]
+    at_name = ""
+    at_owner = ""
+    if next_entity.owner:
+        at_name, at_owner = next_entity.name, next_entity.owner
+    else:
+        feedbacks.append(text.TXT_BR_TURN_NEW.format(turn_name=next_entity.name))
 
     init_data.round = round_no
     init_data.turn = turn
     init_data.turns_in_round = turns_in_round
     init_data.first_turn = False
     await save_init_list(init_data)
-    await ed_matcher.finish("\n".join(feedbacks))
+    await _finish_battle_lines(ed_matcher, feedbacks, at_name, at_owner)
 
 
 @skip_matcher.handle()
@@ -336,11 +352,17 @@ async def handle_skip(event: MessageEvent) -> None:
     feedbacks: List[str] = []
     if round_no > prev_round:
         feedbacks.append(text.TXT_BR_ROUND_NEW.format(round=round_no))
-    feedbacks.append(_announce_next(init_data, turn, round_no))
+    next_entity = init_data.entities[turn - 1]
+    at_name = ""
+    at_owner = ""
+    if next_entity.owner:
+        at_name, at_owner = next_entity.name, next_entity.owner
+    else:
+        feedbacks.append(text.TXT_BR_TURN_NEW.format(turn_name=next_entity.name))
 
     init_data.round = round_no
     init_data.turn = turn
     init_data.turns_in_round = turns_in_round
     init_data.first_turn = False
     await save_init_list(init_data)
-    await skip_matcher.finish("\n".join(feedbacks))
+    await _finish_battle_lines(skip_matcher, feedbacks, at_name, at_owner)

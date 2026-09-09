@@ -29,6 +29,7 @@ from nonebot.plugin import on_message
 from nonebot.rule import Rule
 
 from ..config import get_config
+from ..platform import onebot_v11
 from . import text
 
 #: 本插件自带的命令起始符（英文/中文句号）
@@ -149,19 +150,15 @@ def get_command_rest(event: MessageEvent) -> Optional[str]:
 
 
 def get_display_name(event: MessageEvent) -> str:
-    """获取发送者展示昵称：群名片 → 昵称 → QQ 号。
+    """获取发送者展示昵称：事件自带群名片/昵称 → QQ 号。
 
     说明：DicePP 无自设昵称时回退到 QQ 号；本插件优先使用消息事件自带的
     群名片/昵称字段（离线可用、无需额外 API 调用），最后回退 QQ 号。
+    onebot v11 事件字段读取收敛于 platform/onebot_v11（8.4 实现约定）。
     """
-    sender = getattr(event, "sender", None)
-    if sender is not None:
-        card = getattr(sender, "card", None) or ""
-        if card:
-            return card
-        nickname = getattr(sender, "nickname", None) or ""
-        if nickname:
-            return nickname
+    name = onebot_v11.event_sender_nickname(event)
+    if name:
+        return name
     return str(getattr(event, "user_id", ""))
 
 
