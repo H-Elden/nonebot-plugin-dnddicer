@@ -26,7 +26,7 @@ _HELP = (
     "· .bot on —— 在本群开启服务（未开启的群仅 .bot 命令可用）\n"
     "· .bot off —— 在本群关闭服务（本群不再响应本插件命令，.bot 不受影响）\n"
     "说明：.bot on/off 仅限群聊使用，需群主或管理员权限；群聊中 .bot 系列命令"
-    "需 @ 本机器人（to_me）才响应；私聊可直接使用，不受群聊服务开关限制。"
+    "需 @ 本机器人才响应；私聊可直接使用，不受群聊服务开关限制。"
 )
 
 bot_matcher = base.on_dnd_command("bot", _HELP, require_to_me=True)
