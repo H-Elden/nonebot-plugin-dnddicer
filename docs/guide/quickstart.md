@@ -1,7 +1,6 @@
 # 快速开始
 
-屠龙骰（DNDDicer）是专精 **DND5e / DND5r** 跑团的 [NoneBot2](https://nonebot.dev/) 骰娘插件
-（OneBot V11 适配器），命令手感对齐 [nonebot-dicepp](https://github.com/pear-studio/nonebot-dicepp)（梨子骰子）。
+屠龙骰（DNDDicer）是专精 **DND5e / DND5r** 跑团的 [NoneBot2](https://nonebot.dev/) 骰娘插件（OneBot V11 适配器），命令手感对齐 [nonebot-dicepp](https://github.com/pear-studio/nonebot-dicepp)（梨骰）。
 本页带你完成安装、配置与首次使用。
 
 > 规则范围说明：本插件**只做 DND5e/5r**——不做 COC/d100 体系、不做 `.mode` 多规则切换。
@@ -91,10 +90,10 @@ plugins = ["nonebot_plugin_dnddicer"]
 
 | 配置项 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `dnddicer_command_priority` | int | `10` | 命令事件响应器基础优先级（越小越优先）。与宿主其他插件（如 AIchat）在同一消息上竞争时按需调小 |
-| `dnddicer_default_face` | int | `20` | 全局默认骰面（DND 惯例 d20）。某群设置了默认骰面（`.dset`）时以群配置为准 |
-| `dnddicer_enabled` | bool | `true` | 功能总开关。设为 `false` 时只加载骨架、不注册任何命令（供宿主临时禁用） |
-| `dnddicer_use_host_command_starts` | bool | `false` | 是否兼容宿主 `COMMAND_START` 起始符（NoneBot 默认含 `/`，开启后 `/.help`、`/r` 等亦可触发）。默认只匹配 `.`/`。`，见下节 |
+| `dnddicer_command_priority` | `int` | `10` | 命令事件响应器基础优先级（越小越优先）。与宿主其他插件（如 AIchat）在同一消息上竞争时按需调小 |
+| `dnddicer_default_face` | `int` | `20` | 全局默认骰面（DND 惯例 d20）。某群设置了默认骰面（`.dset`）时以群配置为准 |
+| `dnddicer_enabled` | `bool` | `true` | 功能总开关。设为 `false` 时只加载骨架、不注册任何命令（供宿主临时禁用） |
+| `dnddicer_use_host_command_starts` | `bool` | `false` | 是否兼容宿主 `COMMAND_START` 起始符（NoneBot 默认含 `/`，开启后 `/.help`、`/r` 等亦可触发）。默认只匹配 `.`/`。`，见下节 |
 
 `.env` 示例：
 
@@ -107,15 +106,11 @@ dnddicer_default_face=20
 
 本插件命令以 **`.`（英文句号）或 `。`（中文句号）开头**，如 `.r 2d6+3`、`.帮助`。
 
-默认**不**兼容宿主的斜杠起始符（`/help` 之类）——因为 `/help`、`/bot` 等常见单词命令
-容易与宿主其他插件同时命中、互相冲突。若你的机器人没有这类冲突且希望斜杠也能触发，
-把配置项 `dnddicer_use_host_command_starts` 设为 `true` 即可（此后 `/.help` 同样有效）。
+默认**不**兼容宿主的斜杠起始符（`/help` 之类）——因为 `/help`、`/bot` 等常见单词命令容易与宿主其他插件同时命中、互相冲突。若你的机器人没有这类冲突且希望斜杠也能触发，把配置项 `dnddicer_use_host_command_starts` 设为 `true` 即可（此后 `/.help` 同样有效）。
 
 ## 数据存储
 
-角色卡、HP、先攻、群配置等数据保存在 NoneBot 的 localstore 数据目录
-（默认平台数据目录下，可用 `LOCALSTORE_DATA_DIR` 环境变量调整，如月白机器人设为 `data`），
-位于其中的 `nonebot_plugin_dnddicer/` 子目录，全部为本地 JSON 文件，随机器人账号隔离。
+角色卡、HP、先攻、群配置等数据保存在 NoneBot 的 localstore 数据目录（默认平台数据目录下，可用 `LOCALSTORE_DATA_DIR` 环境变量调整，例如可设为 `data`），位于其中的 `nonebot_plugin_dnddicer/` 子目录，全部为本地 JSON 文件，随机器人账号隔离。
 
 ## 下一步
 
