@@ -496,3 +496,141 @@ def test_hp_info_fresh_set_zero_quirk():
     hp.hp_cur = 0
     hp.hp_max = 30
     assert hp.get_info() == "损失HP:0"
+
+
+# =========================================================================
+# DM 掷伤害（目标 + 伤害表达式 / AOE 多目标 / 抗性·易伤后缀）
+# =========================================================================
+
+
+def _record_with_hp(name: str, user_id: int, hp: str = "20/30"):
+    """返回带 $生命值$ 的角色卡记录命令文本（姓名唯一用于目标匹配）。"""
+    return (
+        f".角色卡记录 $姓名$ {name}\n$等级$ 1\n$生命值$ {hp}\n"
+        "$属性$ 10/10/10/10/10/10"
+    )
+
+
+@pytest.mark.asyncio
+async def test_hp_dm_single_target_damage_expr(app: App):
+    """.hp 爱丽丝 -d8+3+d6 → 空格后 - 识别为伤害，表达式整体求值一次扣减。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    await _expect(
+        app, char_matcher, _event(_record_with_hp("爱丽丝", 22001), user_id=22001),
+        "角色卡已设置",
+    )
+
+    token = set_runtime(SequenceRuntime([5, 2]))  # d8=5, d6=2 → 5+3+2=10
+    try:
+        await _expect(
+            app, hp_matcher, _event(".hp 爱丽丝 -d8+3+d6", user_id=22000),
+            "爱丽丝: 当前HP减少[5]+3+[2]=10\nHP:20/30 -> HP:10/30",
+        )
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_hp_dm_aoe_multi_target(app: App):
+    """.hp 爱丽丝；莎白 -d12-2 → AOE：伤害只掷一次，各目标分别扣减（短反馈单行）。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    await _expect(
+        app, char_matcher, _event(_record_with_hp("爱丽丝", 22002), user_id=22002),
+        "角色卡已设置",
+    )
+    await _expect(
+        app, char_matcher,
+        _event(_record_with_hp("莎白", 22003, hp="18/30"), user_id=22003),
+        "角色卡已设置",
+    )
+
+    token = set_runtime(SequenceRuntime([7]))  # d12=7 → 7-2=5
+    try:
+        await _expect(
+            app, hp_matcher, _event(".hp 爱丽丝；莎白 -d12-2", user_id=22000),
+            "爱丽丝: 当前HP减少[7]-2=5; HP:20/30 -> HP:15/30\n"
+            "莎白: 当前HP减少[7]-2=5; HP:18/30 -> HP:13/30",
+        )
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_hp_dm_aoe_semicolon_halfwidth(app: App):
+    """半角分号 ; 分隔多目标同样生效。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    await _expect(
+        app, char_matcher, _event(_record_with_hp("爱丽丝", 22004), user_id=22004),
+        "角色卡已设置",
+    )
+    await _expect(
+        app, char_matcher,
+        _event(_record_with_hp("莎白", 22005, hp="18/30"), user_id=22005),
+        "角色卡已设置",
+    )
+
+    token = set_runtime(SequenceRuntime([7]))
+    try:
+        await _expect(
+            app, hp_matcher, _event(".hp 爱丽丝;莎白 -d12-2", user_id=22000),
+            "爱丽丝: 当前HP减少[7]-2=5; HP:20/30 -> HP:15/30\n"
+            "莎白: 当前HP减少[7]-2=5; HP:18/30 -> HP:13/30",
+        )
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_hp_dm_resistance_and_vulnerability(app: App):
+    """.hp 爱丽丝抗性；莎白易伤；布莱克 -d12-2 → 每目标按自身承伤因子结算。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    await _expect(
+        app, char_matcher, _event(_record_with_hp("爱丽丝", 22006), user_id=22006),
+        "角色卡已设置",
+    )
+    await _expect(
+        app, char_matcher,
+        _event(_record_with_hp("莎白", 22007, hp="18/30"), user_id=22007),
+        "角色卡已设置",
+    )
+    await _expect(
+        app, char_matcher,
+        _event(_record_with_hp("布莱克", 22008, hp="15/30"), user_id=22008),
+        "角色卡已设置",
+    )
+
+    token = set_runtime(SequenceRuntime([7]))  # 掷出 5 点：抗性→2、易伤→10、全额→5
+    try:
+        await _expect(
+            app, hp_matcher,
+            _event(".hp 爱丽丝抗性；莎白易伤；布莱克 -d12-2", user_id=22000),
+            "爱丽丝: 当前HP减少[7]-2=5（抗性减半→2）; HP:20/30 -> HP:18/30\n"
+            "莎白: 当前HP减少[7]-2=5（易伤加倍→10）; HP:18/30 -> HP:8/30\n"
+            "布莱克: 当前HP减少[7]-2=5; HP:15/30 -> HP:10/30",
+        )
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_hp_factor_suffix_only_for_damage(app: App):
+    """.hp 爱丽丝抗性 20（设置）→ 抗性/易伤后缀仅对伤害生效。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    await _expect(
+        app, char_matcher, _event(_record_with_hp("爱丽丝", 22009), user_id=22009),
+        "角色卡已设置",
+    )
+    await _expect(
+        app, hp_matcher, _event(".hp 爱丽丝抗性 20", user_id=22000),
+        "抗性/易伤后缀仅对伤害生效（用法：.hp 目标[抗性/易伤] -伤害表达式）。",
+    )

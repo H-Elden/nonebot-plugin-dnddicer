@@ -5,6 +5,9 @@
 
 一期简化：不迁移 NPC 生命值与先攻列表联动（数据层尚未实现），
 目标搜索仅覆盖群内 PC 角色卡。
+
+DM 掷伤害扩展：目标名后可带 抗性/易伤 后缀（伤害减半/加倍，仅对 - 生效），
+目标以 ;（半角/全角）分隔可一次对多个 PC 结算 AOE；伤害表达式只掷骰一次。
 """
 
 from __future__ import annotations
@@ -63,6 +66,20 @@ long_rest_matcher = base.on_dnd_command("长休", _HELP_LONG_REST)
 # =========================================================================
 # 目标搜索（简化版：仅 PC 角色卡）
 # =========================================================================
+
+#: 目标名后缀 → 伤害折算因子（DM 掷伤害用）
+_DAMAGE_MOD_SUFFIXES: Tuple[Tuple[str, float], ...] = (("抗性", 0.5), ("易伤", 2.0))
+
+
+def _split_target_suffix(intent: str) -> Tuple[str, float]:
+    """拆目标名后的 抗性/易伤 后缀 → (目标关键字, 伤害折算因子)。
+
+    只对伤害（-）生效的语义由调用方校验（非伤害命令带后缀时报错）。
+    """
+    for suffix, factor in _DAMAGE_MOD_SUFFIXES:
+        if intent.endswith(suffix):
+            return intent[: -len(suffix)], factor
+    return intent, 1.0
 
 
 def _match_substring(substring: str, str_list: list[str]) -> list[str]:
@@ -196,13 +213,19 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
         await hp_matcher.finish(text.TXT_HP_DEL.format(name=name))
 
     # 调整 HP（流程对齐 DicePP hp_command.process_msg：先定位操作符，
-    # 再剥离目标前缀，最后解析调整表达式）
+    # 再剥离目标前缀，最后解析调整表达式）。操作符 = 首个 + / - / = ，
+    # 或首个空格（设置目标 HP）；空格后紧跟 +/-/= 时按该符号识别
+    # （如 ".hp 爱丽丝 -d8+3+d6" 的 - 是伤害操作符，空格不视为设置符）。
     cmd_type: str = "="
     max_len = 2 ** 20
     cmd_index_eq = arg_str.find("=") if "=" in arg_str else max_len
     cmd_index_add = arg_str.find("+") if "+" in arg_str else max_len
     cmd_index_sub = arg_str.find("-") if "-" in arg_str else max_len
     cmd_index_space = arg_str.find(" ") if " " in arg_str else max_len
+    if cmd_index_space != max_len:
+        next_non_space = arg_str[cmd_index_space + 1:].lstrip()
+        if next_non_space and next_non_space[0] in "+-=":
+            cmd_index_space = max_len  # 空格不是设置符，改由符号自身定位
     cmd_index = min(cmd_index_eq, cmd_index_add, cmd_index_sub, cmd_index_space)
     if cmd_index == max_len:
         cmd_index = -1
@@ -213,7 +236,7 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
     elif cmd_index == cmd_index_sub:
         cmd_type = "-"
 
-    target_list: list[Tuple[str, str]] = []
+    target_list: list[Tuple[str, str, float]] = []
     if cmd_index == 0:
         # 直接以操作符开头，无目标指定
         arg_str = arg_str[1:].strip()
@@ -223,21 +246,25 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
         # 目标部分含 "/" 或 "(" 时视为表达式而非目标，不做剥离
         if target_part and "/" not in target_part and "(" not in target_part:
             arg_str = arg_str[cmd_index + 1:].strip()
-            for target_intent in target_part.split(";"):
+            # 目标以 ;（半角/全角均可）分隔，实现 AOE 多目标一次结算
+            for target_intent in re.split(r"[;；]", target_part):
                 target_intent = target_intent.strip()
-                source_key, target_id = await _search_target(target_intent, event.group_id)
+                target_name, damage_factor = _split_target_suffix(target_intent)
+                if cmd_type != "-" and damage_factor != 1.0:
+                    await hp_matcher.finish(text.TXT_HP_FACTOR_DMG_ONLY)
+                source_key, target_id = await _search_target(target_name, event.group_id)
                 if source_key == "pc":
-                    target_list.append((source_key, target_id))
+                    target_list.append((source_key, target_id, damage_factor))
                 elif source_key == "multiple":
                     names = target_id.split("/")
                     feedback = text.TXT_HP_INFO_MULTI.format(name_list=names)
                     await hp_matcher.finish(feedback)
                 else:
-                    feedback = text.TXT_HP_INFO_MISS.format(name=target_intent)
+                    feedback = text.TXT_HP_INFO_MISS.format(name=target_name)
                     await hp_matcher.finish(feedback)
 
     if not target_list:
-        target_list = [("pc", str(event.user_id))]
+        target_list = [("pc", str(event.user_id), 1.0)]
 
     # 解析调整表达式（arg_str 已剥离目标前缀与操作符）
     hp_cur, hp_max, hp_temp, error = _parse_hp_args(arg_str)
@@ -246,7 +273,7 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
 
     # 应用调整
     feedback = ""
-    for source_key, target_id in target_list:
+    for source_key, target_id, damage_factor in target_list:
         character = await get_character(event.group_id, target_id)
         if character is None:
             character = DNDCharacter(group_id=str(event.group_id), user_id=target_id)
@@ -254,6 +281,7 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
         mod_info = HPService.process_roll_result(
             character.hp_info, cmd_type, hp_cur, hp_max, hp_temp,
             short_feedback=(len(target_list) > 1),
+            damage_factor=damage_factor,
         )
         character.is_init = True
         await save_character(character)

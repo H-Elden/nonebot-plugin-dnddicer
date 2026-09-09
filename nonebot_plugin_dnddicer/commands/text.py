@@ -99,6 +99,8 @@ TXT_HP_INFO_MULTI = "存在多个匹配目标：{name_list}"
 TXT_HP_INFO_NONE = "本群没有任何生命值信息"
 TXT_HP_MOD = "{name}: {hp_mod}"
 TXT_HP_MOD_ERR = "修改生命值时出现错误：{error}"
+#: 目标名带 抗性/易伤 后缀但命令不是伤害（-）时的提示（后缀仅对伤害生效）
+TXT_HP_FACTOR_DMG_ONLY = "抗性/易伤后缀仅对伤害生效（用法：.hp 目标[抗性/易伤] -伤害表达式）。"
 TXT_HP_DEL = "已删除{name}的生命值信息"
 #: .hp list 无角色卡名且查不到群名片/昵称时的兜底展示名（8.4 #6，
 #: 不直接显示 QQ 号）

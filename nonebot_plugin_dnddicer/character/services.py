@@ -424,6 +424,7 @@ class HPService:
         hp_max_mod_result: Optional[RollResult] = None,
         hp_temp_mod_result: Optional[RollResult] = None,
         short_feedback: bool = False,
+        damage_factor: float = 1.0,
     ) -> str:
         """根据掷骰结果修改 HP，返回修改结果描述。
 
@@ -434,6 +435,9 @@ class HPService:
             hp_max_mod_result: 最大 HP 的掷骰结果
             hp_temp_mod_result: 临时 HP 的掷骰结果
             short_feedback: 是否使用短格式反馈（多目标时用）
+            damage_factor: 目标承伤因子（DM 掷伤害用）——1.0 全额；0.5 抗性
+                （伤害减半，向下取整、最少 1）；2.0 易伤（伤害加倍）。仅对
+                "-" 生效，其余取值按全额处理。
         """
         mod_info = ""
 
@@ -485,10 +489,19 @@ class HPService:
                 if hp_info.hp_cur > hp_info.hp_max:
                     hp_info.take_damage(hp_info.hp_cur - hp_info.hp_max)
             if hp_cur_mod_result:
-                hp_info.take_damage(hp_cur_mod_result.get_val())
+                # 抗性/易伤折算（抗性=减半向下取整、最少 1；易伤=翻倍），反馈标注折算
+                damage = hp_cur_mod_result.get_val()
+                damage_suffix = ""
+                if damage_factor == 0.5:
+                    damage = max(1, int(damage // 2))
+                    damage_suffix = f"（抗性减半→{damage}）"
+                elif damage_factor == 2.0:
+                    damage = int(damage) * 2
+                    damage_suffix = f"（易伤加倍→{damage}）"
+                hp_info.take_damage(damage)
                 if mod_info:
                     mod_info += ", "
-                mod_info += f"当前HP减少{hp_cur_mod_result.get_result()}"
+                mod_info += f"当前HP减少{hp_cur_mod_result.get_result()}{damage_suffix}"
             mod_info += f"\n{hp_info_str_prev} -> {hp_info.get_info()}"
 
         mod_info = mod_info.strip()
