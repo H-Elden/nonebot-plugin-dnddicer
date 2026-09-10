@@ -46,7 +46,7 @@ pip install nonebot-plugin-dnddicer
 plugins = ["nonebot_plugin_dnddicer"]
 ```
 
-> 依赖：Python ≥ 3.11，NoneBot2 ≥ 2.5.0，OneBot V11 适配器（`nb plugin install` 会自动安装依赖）。
+> 依赖：Python ≥ 3.11，NoneBot2 ≥ 2.4.0，OneBot V11 适配器（`nb plugin install` 会自动安装依赖）。
 
 ## ⚙️ 配置
 

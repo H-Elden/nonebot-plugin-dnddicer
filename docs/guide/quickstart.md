@@ -8,7 +8,7 @@
 
 ## 安装
 
-依赖：**Python ≥ 3.11**，NoneBot2 ≥ 2.5.0，OneBot V11 适配器。
+依赖：**Python ≥ 3.11**，NoneBot2 ≥ 2.4.0，OneBot V11 适配器。
 
 通过 NB-CLI 安装（与 NoneBot 插件商店安装方式一致，推荐）：
 

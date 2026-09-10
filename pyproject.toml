@@ -40,8 +40,9 @@ classifiers = [
 ]
 authors = [{ name = "Elden" }]
 dependencies = [
-    # NoneBot2 框架本体（商店要求：必须包含，禁止 == 锁版本，禁止 nonebot V1）
-    "nonebot2>=2.5.0,<3.0.0",
+    # NoneBot2 框架本体（商店要求：必须包含，禁止 == 锁版本，禁止 nonebot V1；
+    # 下限 2.4.0：已在 NoneBot2 2.4.0 环境实测全量测试通过，兼容仍在 2.4.x 的宿主）
+    "nonebot2>=2.4.0,<3.0.0",
     # 直接使用的适配器（OneBot V11；商店要求直接使用的适配器必须列入依赖）
     "nonebot-adapter-onebot>=2.4.6,<3.0.0",
     # 本地数据存储（商店要求：必须使用 localstore，代码中 require 后再 import）
@@ -61,7 +62,7 @@ dev = [
     "pytest>=8.3.0,<9.0.0",
     "pytest-asyncio>=0.25.0,<1.0.0",
     "nonebug>=0.4.4,<1.0.0",
-    "nonebot2[fastapi]>=2.5.0,<3.0.0",
+    "nonebot2[fastapi]>=2.4.0,<3.0.0",
 ]
 
 [dependency-groups]
@@ -71,7 +72,7 @@ dev = [
     "pytest-asyncio>=0.25.0,<1.0.0",
     # NoneBot 官方测试框架（NoneFlow 商店加载测试同思路）
     "nonebug>=0.4.4,<1.0.0",
-    "nonebot2[fastapi]>=2.5.0,<3.0.0",
+    "nonebot2[fastapi]>=2.4.0,<3.0.0",
 ]
 
 [tool.nonebot]
