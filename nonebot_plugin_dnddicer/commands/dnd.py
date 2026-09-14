@@ -2,8 +2,10 @@
 
 对齐 nonebot-dicepp ``module/misc/dnd_command.py`` 语义：
 - ``.dnd`` = 一次生成 6 项属性，每项为 4D6K3（掷 4 个 d6、去最低、取 3 个和）；
-- ``.dnd [次数] [原因]``：次数默认 1、上限 10（越界/非数字回退 1，与 DicePP 相同）；
-  原因跟在次数之后（如 ``.dnd 1 开卡``），截断 50 字符；
+- ``.dnd [次数] [原因]``：次数默认 1、上限 10（越界回退 1，与 DicePP 相同）；
+  原因截断 50 字符——给次数时跟在次数之后（``.dnd 1 开卡``），不给次数时
+  直接给出（``.dnd 开卡``；2026-09-14 有意 UX 修正：上游仅取第二段，该写法
+  会把原因静默丢弃）；
 - 反馈：``{昵称} DND人物作成:\n{结果}``（无原因）/ ``{昵称} DND人物作成——{原因}:\n{结果}``
   （有原因）；结果每行为 ``{六项合计} : {六项降序列表}``（与 DicePP 相同：只掷值、
   不绑定属性名，由玩家自行分配给 力量/敏捷/体质/智力/感知/魅力）；
@@ -35,9 +37,10 @@ MAX_DND_REASON_LEN = 50
 
 _HELP = (
     "DND5e 属性生成（4D6K3 掷点）\n"
-    "用法：.dnd [次数] [原因]（如 .dnd、.dnd 5 开卡）\n"
+    "用法：.dnd [次数] [原因]（如 .dnd、.dnd 5 开卡、.dnd 开卡）\n"
     "每次生成 6 项属性：每项掷 4D6 去最低（4D6K3），按降序展示并附六项合计；\n"
-    "次数默认 1、最大 10（.dnd5 或 .dnd 5）；原因（可选）跟在次数之后。\n"
+    "次数默认 1、最大 10（.dnd5 或 .dnd 5）；原因（可选）可跟在次数之后，"
+    "省略次数时直接给出。\n"
     "掷出的 6 个数值不绑定属性，自行分配给 力量/敏捷/体质/智力/感知/魅力 后，"
     "可用 .角色卡记录 建卡。"
 )
@@ -74,17 +77,23 @@ def format_dnd_line(scores: List[int]) -> str:
 def parse_dnd_args(rest: str) -> Tuple[int, str]:
     """解析 ``.dnd`` 命令体 → (次数, 原因)。
 
-    对齐 DicePP can_process_msg：首个空白词尝试解析为次数（1..10，越界/非数字回退
-    1），其余文本（如果有）为原因并截断 50 字符；原因必须跟在次数之后。
+    对齐 DicePP can_process_msg：首个空白词尝试解析为次数（1..10，越界回退 1），
+    其余文本（如果有）为原因并截断 50 字符；首个词不是数字时整段视为原因
+    （2026-09-14 有意 UX 修正：上游仅取第二段，``.dnd 开卡`` 的原因会被静默
+    丢弃，而 ``.dnd5 开卡`` 因数字在前反而正常——修正后两种写法行为一致）。
     """
-    parts = rest.strip().split(" ", 1)
-    reason = parts[1].strip()[:MAX_DND_REASON_LEN] if len(parts) > 1 else ""
+    text = rest.strip()
+    if not text:
+        return 1, ""
+    parts = text.split(None, 1)
+    tail = parts[1].strip() if len(parts) > 1 else ""
     try:
         times = int(parts[0])
-        assert 1 <= times <= MAX_DND_TIMES
-    except (ValueError, AssertionError):
+    except ValueError:
+        return 1, text[:MAX_DND_REASON_LEN]
+    if not 1 <= times <= MAX_DND_TIMES:
         times = 1
-    return times, reason
+    return times, tail[:MAX_DND_REASON_LEN]
 
 
 @dnd_matcher.handle()

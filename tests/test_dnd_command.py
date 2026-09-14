@@ -5,7 +5,8 @@
 . 一次 .dnd = 6 项属性 × 每项 4 个 d6 = 24 次掷骰，序列需足量。
 
 用例覆盖：基本生成（格式与合计）、4D6K3 取最低与降序、次数（含无空格 .dnd2）、
-原因后缀（含无空格）、次数越界/非法回退 1、私聊可用、reason 截断。
+原因（跟在次数后 / 无空格粘连 / 不给次数直接给出——2026-09-14 修订）、
+次数越界回退 1、私聊可用、reason 截断。
 """
 
 import pytest
@@ -161,6 +162,39 @@ async def test_dnd_reason_no_space(app: App):
 
 
 @pytest.mark.asyncio
+async def test_dnd_reason_without_times(app: App):
+    """.dnd 原因（不给次数）：原因照常显示（2026-09-14 修订——原实现静默丢弃）。"""
+    token = set_runtime(SequenceRuntime(_ALL_SIX))
+    try:
+        event = _group_event(".dnd 为了勇者")
+        await _expect(
+            app,
+            dnd_matcher,
+            event,
+            "test DND人物作成——为了勇者:\n108 : [18, 18, 18, 18, 18, 18]",
+        )
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_dnd_times_with_reason(app: App):
+    """.dnd5 原因（次数在前）：与「不给次数的原因」写法行为一致。"""
+    line = "108 : [18, 18, 18, 18, 18, 18]"
+    token = set_runtime(SequenceRuntime(_ALL_SIX * 5))
+    try:
+        event = _group_event(".dnd5 为了勇者")
+        await _expect(
+            app,
+            dnd_matcher,
+            event,
+            "test DND人物作成——为了勇者:\n" + "\n".join([line] * 5),
+        )
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
 async def test_dnd_times_out_of_range(app: App):
     """次数越界（>10）回退 1 次。"""
     token = set_runtime(SequenceRuntime(_ALL_SIX))
@@ -218,13 +252,21 @@ def test_parse_dnd_args():
     assert parse_dnd_args("2 为了勇者") == (2, "为了勇者")
     assert parse_dnd_args("11") == (1, "")     # 越界回退
     assert parse_dnd_args("0") == (1, "")      # 越界回退
-    assert parse_dnd_args("abc") == (1, "")    # 非数字回退
+    # 2026-09-14 修订：首词非数字时整段视为原因（原实现丢弃原因、回退 1）
+    assert parse_dnd_args("abc") == (1, "abc")
+    assert parse_dnd_args("为了勇者") == (1, "为了勇者")
+    assert parse_dnd_args("为了勇者 开卡") == (1, "为了勇者 开卡")  # 整段（含空格）
+    assert parse_dnd_args("11 为了勇者") == (1, "为了勇者")  # 越界数字：回退 1、其余为原因
 
 
 def test_parse_dnd_args_reason_truncated():
     """原因超过 50 字符被截断（对齐 DicePP MAX_DND_RESULT_LEN）。"""
     long_reason = "长" * (MAX_DND_REASON_LEN + 20)
     times, reason = parse_dnd_args(f"1 {long_reason}")
+    assert times == 1
+    assert reason == "长" * MAX_DND_REASON_LEN
+    # 不带次数的整段原因同样截断
+    times, reason = parse_dnd_args(long_reason)
     assert times == 1
     assert reason == "长" * MAX_DND_REASON_LEN
 
