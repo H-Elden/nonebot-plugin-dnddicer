@@ -288,18 +288,41 @@ async def test_hp_list_empty(app: App):
 
 
 @pytest.mark.asyncio
-async def test_hp_del(app: App):
-    """.hp del → 删除 HP 信息。"""
+async def test_hp_del_no_target_keeps_card(app: App):
+    """.hp del（无对象）→ 提示用法；不再删除角色卡（2026-09-21 语义修订）。"""
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
 
-    await _expect(app, hp_matcher, _event(".hp 20/30", user_id=20013), "test: HP=20/30\n当前HP:20/30")
     await _expect(
-        app, hp_matcher, _event(".hp del", user_id=20013),
-        "已删除test的生命值信息",
+        app, hp_matcher, _event(".hp 20/30", user_id=20013),
+        "test: HP=20/30\n当前HP:20/30",
     )
     await _expect(
-        app, hp_matcher, _event(".hp", user_id=20013),
-        "找不到test的生命值信息",
+        app, hp_matcher, _event(".hp del", user_id=20013),
+        "请指定要删除的NPC名称（.hp del 名称）；如需删除整张角色卡请用 .角色卡清除",
+    )
+    # 角色卡与 HP 记录保持不变
+    await _expect(app, hp_matcher, _event(".hp", user_id=20013), "test: HP:20/30")
+
+
+@pytest.mark.asyncio
+async def test_hp_del_pc_target_guides_to_char_clear(app: App):
+    """.hp del 玩家名 → 引导去 .角色卡清除（不删卡、不删 HP）。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    await _expect(
+        app, char_matcher, _event(_record_with_hp("爱丽丝", 22012), user_id=22012),
+        "角色卡已设置",
+    )
+    await _expect(
+        app, hp_matcher, _event(".hp del 爱丽丝", user_id=22000),
+        "「爱丽丝」是玩家角色卡，.hp del/clr 仅用于删除NPC血量记录；"
+        "如需删除整张角色卡请用 .角色卡清除",
+    )
+    # 卡与 HP 均保留：仍可继续结算
+    await _expect(
+        app, hp_matcher, _event(".hp 爱丽丝 15/30", user_id=22000),
+        "爱丽丝: HP=15/30\n当前HP:15/30",
     )
 
 

@@ -125,6 +125,20 @@ async def delete_npc_health(group_id: int | str, name: str) -> None:
         await _dump_locked(data)
 
 
+async def clear_npc_health(group_id: int | str) -> int:
+    """清空某群全部 NPC 血量记录（含跨战斗保持的），返回删除条数。"""
+    async with _get_lock():
+        data = await _load_if_needed()
+        prefix = f"{group_id}:"
+        keys = [key for key in data if key.startswith(prefix)]
+        if not keys:
+            return 0
+        for key in keys:
+            data.pop(key, None)
+        await _dump_locked(data)
+        return len(keys)
+
+
 async def list_npc_health(group_id: int | str) -> List[NPCHealth]:
     """列出某群全部 NPC 血量条目（保持存储顺序）。"""
     async with _get_lock():

@@ -108,6 +108,13 @@ TXT_HP_MOD_ERR = "修改生命值时出现错误：{error}"
 #: 目标名带 抗性/易伤 后缀但命令不是伤害（-）时的提示（后缀仅对伤害生效）
 TXT_HP_FACTOR_DMG_ONLY = "抗性/易伤后缀仅对伤害生效（用法：.hp 目标[抗性/易伤] -伤害表达式）。"
 TXT_HP_DEL = "已删除{name}的生命值信息"
+#: .hp del/clr 仅作用于 NPC 血量记录：.hp del 无对象时的用法提示
+TXT_HP_DEL_NO_TARGET = "请指定要删除的NPC名称（.hp del 名称）；如需删除整张角色卡请用 .角色卡清除"
+#: 同上：目标解析为玩家角色卡时的引导（不再连卡删除，2026-09-21 语义修订）
+TXT_HP_DEL_PC_TARGET = "「{name}」是玩家角色卡，.hp del/clr 仅用于删除NPC血量记录；如需删除整张角色卡请用 .角色卡清除"
+#: .hp clr：清空本群全部 NPC 血量记录（含跨战斗保持的）
+TXT_HP_CLR_DONE = "已清空{n}条NPC血量记录"
+TXT_HP_CLR_NONE = "本群没有任何NPC生命值信息"
 #: .hp list 无角色卡名且查不到群名片/昵称时的兜底展示名（不直接显示 QQ 号）
 TXT_HP_UNKNOWN_NAME = "未知玩家"
 

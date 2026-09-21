@@ -284,6 +284,79 @@ async def test_npc_del_missing_target(app: App):
     )
 
 
+@pytest.mark.asyncio
+async def test_npc_del_multi_targets(app: App):
+    """.hp del a/b：与 .init del 一致支持多目标，逐行反馈。"""
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+    from nonebot_plugin_dnddicer.commands.initiative import initiative_matcher
+    from nonebot_plugin_dnddicer.data.npc_health import get_npc_health
+
+    g = 110014
+    await _expect(app, initiative_matcher, _event(g, ".ri20 哥布林a"), "哥布林a的先攻值是 20")
+    await _expect(app, initiative_matcher, _event(g, ".ri19 哥布林b"), "哥布林b的先攻值是 19")
+    await _expect(
+        app, hp_matcher, _event(g, ".hp 哥布林a 7/7"),
+        "哥布林a: HP=7/7\n当前HP:7/7",
+    )
+    await _expect(
+        app, hp_matcher, _event(g, ".hp 哥布林b 5/5"),
+        "哥布林b: HP=5/5\n当前HP:5/5",
+    )
+    await _expect(
+        app, hp_matcher, _event(g, ".hp del 哥布林a/哥布林b"),
+        "已删除哥布林a的生命值信息\n已删除哥布林b的生命值信息",
+    )
+    assert await get_npc_health(g, "哥布林a") is None
+    assert await get_npc_health(g, "哥布林b") is None
+
+
+@pytest.mark.asyncio
+async def test_hp_clr_clears_all_npc(app: App):
+    """.hp clr：清空本群全部 NPC 血量记录（含跨战斗保持的），不触碰 PC。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+    from nonebot_plugin_dnddicer.commands.initiative import initiative_matcher
+    from nonebot_plugin_dnddicer.commands.npc import npc_matcher
+    from nonebot_plugin_dnddicer.data.npc_health import list_npc_health
+
+    g = 110015
+    record = (
+        ".角色卡记录 $姓名$ 爱丽丝\n$等级$ 1\n$生命值$ 20/30\n"
+        "$属性$ 10/10/10/10/10/10"
+    )
+    await _expect(app, char_matcher, _event(g, record, user_id=40001), "角色卡已设置")
+    await _expect(app, initiative_matcher, _event(g, ".ri20 哥布林"), "哥布林的先攻值是 20")
+    await _expect(
+        app, hp_matcher, _event(g, ".hp 哥布林 7/7"),
+        "哥布林: HP=7/7\n当前HP:7/7",
+    )
+    await _expect(app, initiative_matcher, _event(g, ".ri19 向导"), "向导的先攻值是 19")
+    await _expect(
+        app, hp_matcher, _event(g, ".hp 向导 12/12"),
+        "向导: HP=12/12\n当前HP:12/12",
+    )
+    await _expect(
+        app, npc_matcher, _event(g, ".npc 持久 向导"),
+        "已将NPC「向导」设为跨战斗保持血量（.ri 再次入表时不再自动回满）",
+    )
+
+    await _expect(app, hp_matcher, _event(g, ".hp clr"), "已清空2条NPC血量记录")
+    assert await list_npc_health(g) == []
+    # PC 角色卡与其 HP 不受影响
+    await _expect(app, hp_matcher, _event(g, ".hp list"), "爱丽丝 HP:20/30")
+
+
+@pytest.mark.asyncio
+async def test_hp_clr_empty(app: App):
+    """.hp clr 无 NPC 记录 → 提示本群没有任何NPC生命值信息。"""
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    await _expect(
+        app, hp_matcher, _event(110017, ".hp clr"),
+        "本群没有任何NPC生命值信息",
+    )
+
+
 # =========================================================================
 # 先攻联动：清空（.init clr / .br）与删除（.init del）时的清理语义
 # =========================================================================

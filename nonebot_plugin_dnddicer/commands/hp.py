@@ -10,6 +10,11 @@ NPC 血量条目在目标经先攻表解析时按需创建——即 NPC 需先 `
 
 DM 掷伤害扩展：目标名后可带 抗性/易伤 后缀（伤害减半/加倍，仅对 - 生效），
 目标以 ;（半角/全角）分隔可一次对多个目标结算 AOE；伤害表达式只掷骰一次。
+
+与 DicePP 的差异（2026-09-21 语义修订）：``.hp del`` / ``.hp clr`` 仅作用于
+**NPC 血量记录**——``del 名称``（多个用 / 分隔）删单个、``clr`` 清空本群全部
+（含跨战斗保持的），形状与 .init 的 del/clr 一致；上游的 del/clr 无对象时会
+删除整张角色卡，粒度超出 .hp 语义且易误触，删整卡统一由 ``.角色卡清除`` 负责。
 """
 
 from __future__ import annotations
@@ -22,13 +27,13 @@ from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, MessageEvent
 from ..character.models import DNDCharacter, HPInfo
 from ..character.services import HPService
 from ..data.characters import (
-    delete_character,
     get_character,
     list_characters_by_group,
     save_character,
 )
 from ..data.initiative import get_init_list
 from ..data.npc_health import (
+    clear_npc_health,
     delete_npc_health,
     get_npc_health,
     list_npc_health,
@@ -59,7 +64,8 @@ _HELP = (
     "NPC/怪物: 先 .ri 名称 加入先攻表后, 可用 .hp 名称 10/10 记录其血量"
     " (先攻列表中随条目一起展示)\n"
     "NPC 血量默认每次新入先攻表时自动回满, 需要跨战斗保持用 .npc 持久 名称\n"
-    "删除生命值: .hp del [对象]\n"
+    "删除NPC血量: .hp del 名称 (多个用/分隔) / .hp clr (清空本群全部NPC血量)\n"
+    "注: .hp del/clr 仅作用于NPC血量记录, 玩家角色卡请用 .角色卡清除\n"
     "查看生命值: .hp -> 查看自己当前的生命值信息\n"
     "查看列表: .hp list -> 查看本群所有PC与NPC的生命值\n"
     "注意: 指定对象时只需名称中独一无二的一部分即可"
@@ -264,27 +270,37 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
             feedback = text.TXT_HP_INFO_NONE
         await hp_matcher.finish(feedback)
 
-    # 删除（.hp del [对象]：无对象删除自己；对齐 DicePP）
+    # 删除（.hp del 名称[多个用 / 分隔] / .hp clr 清空全部）——仅作用于 NPC 血量记录
+    # （2026-09-21 语义修订：不再删除自己/他人的角色卡——DicePP 原版 del/clr 无对象
+    #  即删除整张角色卡，粒度超出 .hp 语义且易误触；删整卡由 .角色卡清除 负责）
     if arg_str.startswith("del") or arg_str.startswith("clr"):
         del_arg = arg_str[3:].strip()
+        if arg_str.startswith("clr"):
+            count = await clear_npc_health(event.group_id)
+            if count:
+                await hp_matcher.finish(text.TXT_HP_CLR_DONE.format(n=count))
+            await hp_matcher.finish(text.TXT_HP_CLR_NONE)
         if not del_arg:
-            await delete_character(event.group_id, event.user_id)
-            name = base.get_display_name(event)
-            await hp_matcher.finish(text.TXT_HP_DEL.format(name=name))
-        source_key, target_id = await search_target(del_arg, event.group_id)
-        if source_key == "multiple":
-            await hp_matcher.finish(text.TXT_HP_INFO_MULTI.format(
-                name_list=target_id.split("/")
-            ))
-        if not source_key:
-            await hp_matcher.finish(text.TXT_HP_INFO_MISS_HINT.format(name=del_arg))
-        if source_key == "npc":
-            await delete_npc_health(event.group_id, target_id)
-            await hp_matcher.finish(text.TXT_HP_DEL.format(name=target_id))
-        character = await get_character(event.group_id, target_id)
-        await delete_character(event.group_id, target_id)
-        name = character.name if character is not None and character.name else target_id
-        await hp_matcher.finish(text.TXT_HP_DEL.format(name=name))
+            await hp_matcher.finish(text.TXT_HP_DEL_NO_TARGET)
+        feedback_list: List[str] = []
+        for target_name in [n.strip() for n in del_arg.split("/") if n.strip()]:
+            source_key, target_id = await search_target(target_name, event.group_id)
+            if source_key == "multiple":
+                feedback_list.append(text.TXT_HP_INFO_MULTI.format(
+                    name_list=target_id.split("/")
+                ))
+            elif source_key == "pc":
+                feedback_list.append(
+                    text.TXT_HP_DEL_PC_TARGET.format(name=target_name)
+                )
+            elif source_key == "npc":
+                await delete_npc_health(event.group_id, target_id)
+                feedback_list.append(text.TXT_HP_DEL.format(name=target_id))
+            else:
+                feedback_list.append(
+                    text.TXT_HP_INFO_MISS_HINT.format(name=target_name)
+                )
+        await hp_matcher.finish("\n".join(feedback_list))
 
     # 调整 HP（流程对齐 DicePP hp_command.process_msg：先定位操作符，
     # 再剥离目标前缀，最后解析调整表达式）。操作符 = 首个 + / - / = ，
