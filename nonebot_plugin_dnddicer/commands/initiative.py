@@ -12,11 +12,15 @@
 - ``.先攻检定``（角色卡检定点命令）掷出结果自动入表——联动入口在本文件
   ``add_initiative_entities``。
 
-与 DicePP 的差异（一期简化，已注于各函数）：
+与 DicePP 的差异（已注于各函数）：
 - 不迁移 DicePP 的 get_nickname API 刷新：实体名称为入表时快照（角色名 →
   群名片/昵称 → QQ 号），离线可用；绑定 QQ 的实体重掷时会替换旧条目；
-- 不迁移 import 子指令（解析 ".xxx 先攻: N" 文本批量导入，格式晦涩、价值低）；
-- NPC 先攻条目不关联临时 HP（本插件 HP 一期仅覆盖 PC 角色卡）。
+- 不迁移 import 子指令（解析 ".xxx 先攻: N" 文本批量导入，格式晦涩、价值低）。
+
+NPC 血量联动（2026-09-14，对齐 DicePP npc_health 语义）：
+- 先攻列表展示 NPC 血量（`.hp 名称 ...` 记录，见 commands/hp.py）；
+- 清空（.init clr / .br）时清理「未设最大值」的 NPC 临时血量；
+- 删除 NPC 条目（.init del）时一并删除其血量记录。
 """
 
 from __future__ import annotations
@@ -32,6 +36,7 @@ from ..character.models import HPInfo
 from ..config import get_config
 from ..data.characters import list_characters_by_group
 from ..data.initiative import clear_init_list, get_init_list, save_init_list
+from ..data.npc_health import delete_npc_health, get_npc_health, list_npc_health
 from ..engine.roll.ast_engine.adapter import exec_roll_exp_unified, sift_roll_exp_and_reason
 from ..engine.roll.roll_utils import RollDiceError
 from ..initiative.models import InitiativeError, InitList
@@ -42,6 +47,7 @@ _HELP_INIT = (
     "先攻条目 first/fst 提前同值条目 swap 交换两个条目\n"
     "del指令支持部分匹配\n"
     "hp信息也会在先攻列表上显示\n"
+    "NPC血量（.hp 名称 ...）随条目展示；清空/删除条目时自动清理\n"
     "示例:\n"
     ".先攻 //查看先攻列表\n"
     ".先攻清除 //清空先攻列表\n"
@@ -385,6 +391,27 @@ async def _get_existing(event: GroupMessageEvent) -> InitList:
     return init_data  # type: ignore[return-value]  # finish 已抛异常
 
 
+async def cleanup_temp_npc_health(group_id: int | str) -> None:
+    """清空先攻表/新建战斗轮前，删除 NPC 的「临时血量」条目（对齐 DicePP）。
+
+    仅清理先攻表中无主（NPC）且 hp_max==0 的临时血量——多为伤害记录中途
+    留下的条目；已设置最大值的怪物血量保留（跨战斗复用）。.init clr 与 .br
+    共用本函数（.br 与 .init clr 语义等价，仅播报不同）。
+    """
+    init_data = await get_init_list(group_id)
+    if init_data is None:
+        return
+    for entity in init_data.entities:
+        if entity.owner:
+            continue
+        try:
+            hp_info = await get_npc_health(group_id, entity.name)
+            if hp_info is not None and hp_info.hp_max == 0:
+                await delete_npc_health(group_id, entity.name)
+        except Exception:  # noqa: BLE001 - 清理失败不阻塞清空流程（对齐 DicePP）
+            pass
+
+
 @initiative_matcher.handle()
 async def handle_initiative(event: MessageEvent) -> None:
     """处理 .init/.先攻/.ri 命令族。"""
@@ -426,6 +453,11 @@ async def handle_initiative(event: MessageEvent) -> None:
         for char in await list_characters_by_group(event.group_id):
             if char.hp_info.is_init:
                 hp_map[char.user_id] = char.hp_info
+        # NPC 血量（无主条目按名称匹配，对齐 DicePP）
+        npc_hp_map: Dict[str, HPInfo] = {
+            npc.name: npc.hp_info
+            for npc in await list_npc_health(event.group_id)
+        }
 
         turn_index = max(0, min(len(init_data.entities) - 1, init_data.turn - 1))
         current = init_data.entities[turn_index]
@@ -434,25 +466,33 @@ async def handle_initiative(event: MessageEvent) -> None:
             hp_str = ""
             if entity.owner and entity.owner in hp_map:
                 hp_str = hp_map[entity.owner].get_info()
+            elif not entity.owner and entity.name in npc_hp_map:
+                hp_str = npc_hp_map[entity.name].get_info()
             init_info += f"{index + 1}.{entity.get_info()} {hp_str}\n"
         await initiative_matcher.finish(text.TXT_INIT_INFO.format(
             init_info=init_info.strip()
         ))
 
-    # ── 清空
+    # ── 清空（先清理 NPC 临时血量：未设最大值的条目，对齐 DicePP）
     if mode == "clear":
+        await cleanup_temp_npc_health(event.group_id)
         await clear_init_list(event.group_id)
         await initiative_matcher.finish(text.TXT_INIT_INFO_CLR)
 
     init_data = await _get_existing(event)
     entity_names = [entity.name for entity in init_data.entities]
 
-    # ── 删除
+    # ── 删除（NPC 条目一并删除其血量记录，对齐 DicePP）
     if mode == "delete":
         name_list = [n.strip() for n in sub_arg.split("/")]
         valid_list, feedback = find_valid_entities(name_list, entity_names)
         deleted: List[str] = []
         for valid_name in valid_list:
+            entity = next(
+                (e for e in init_data.entities if e.name == valid_name), None
+            )
+            if entity is not None and not entity.owner:
+                await delete_npc_health(event.group_id, valid_name)
             try:
                 init_data.del_entity(valid_name)
                 deleted.append(valid_name)

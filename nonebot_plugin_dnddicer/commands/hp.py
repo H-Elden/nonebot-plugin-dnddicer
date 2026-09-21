@@ -3,11 +3,13 @@
 迁移自 nonebot-dicepp ``module/character/dnd5e/hp_command.py``（commit 732ff74），
 适配本插件 ``on_dnd_command`` 注册模式。
 
-一期简化：不迁移 NPC 生命值与先攻列表联动（数据层尚未实现），
-目标搜索仅覆盖群内 PC 角色卡。
+目标搜索覆盖三类（对齐 DicePP 优先级）：PC 角色卡 → NPC 血量条目 → 先攻表；
+NPC 血量条目在目标经先攻表解析时按需创建——即 NPC 需先 ``.ri`` 入先攻表
+（或已存在血量记录），与 DicePP 一致；先攻表联动（查看显示 / 清空与删除时
+清理）见 commands/initiative.py。
 
 DM 掷伤害扩展：目标名后可带 抗性/易伤 后缀（伤害减半/加倍，仅对 - 生效），
-目标以 ;（半角/全角）分隔可一次对多个 PC 结算 AOE；伤害表达式只掷骰一次。
+目标以 ;（半角/全角）分隔可一次对多个目标结算 AOE；伤害表达式只掷骰一次。
 """
 
 from __future__ import annotations
@@ -17,13 +19,20 @@ from typing import List, Optional, Tuple
 
 from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, MessageEvent
 
-from ..character.models import DNDCharacter
+from ..character.models import DNDCharacter, HPInfo
 from ..character.services import HPService
 from ..data.characters import (
     delete_character,
     get_character,
     list_characters_by_group,
     save_character,
+)
+from ..data.initiative import get_init_list
+from ..data.npc_health import (
+    delete_npc_health,
+    get_npc_health,
+    list_npc_health,
+    save_npc_health,
 )
 from ..engine.roll.ast_engine.adapter import exec_roll_exp_unified
 from ..engine.roll.result import RollResult
@@ -47,9 +56,11 @@ _HELP = (
     ".hp +(10) -> 将自己的临时生命值增加10\n"
     ".hp +20/10 -> 先将最大HP增加10, 再将当前HP增加20\n"
     ".hp 队友A -4d6 -> 对队友A造成4d6点伤害\n"
-    "删除生命值: .hp del\n"
+    "NPC/怪物: 先 .ri 名称 加入先攻表后, 可用 .hp 名称 10/10 记录其血量"
+    " (先攻列表中随条目一起展示)\n"
+    "删除生命值: .hp del [对象]\n"
     "查看生命值: .hp -> 查看自己当前的生命值信息\n"
-    "查看列表: .hp list -> 查看本群所有PC的生命值\n"
+    "查看列表: .hp list -> 查看本群所有PC与NPC的生命值\n"
     "注意: 指定对象时只需名称中独一无二的一部分即可"
 )
 hp_matcher = base.on_dnd_command("hp", _HELP)
@@ -64,7 +75,7 @@ long_rest_matcher = base.on_dnd_command("长休", _HELP_LONG_REST)
 
 
 # =========================================================================
-# 目标搜索（简化版：仅 PC 角色卡）
+# 目标搜索（PC 角色卡 → NPC 血量 → 先攻表，对齐 DicePP 优先级）
 # =========================================================================
 
 #: 目标名后缀 → 伤害折算因子（DM 掷伤害用）
@@ -90,30 +101,65 @@ def _match_substring(substring: str, str_list: list[str]) -> list[str]:
 async def _search_target(
     target_intent: str, group_id: int | str
 ) -> Tuple[str, str]:
-    """在群内 PC 角色卡中模糊搜索目标。
+    """在群内 PC 角色卡 / NPC 血量 / 先攻列表中模糊搜索目标。
 
     返回 (source_key, target_id)：
-    - ("pc", user_id) 找到唯一匹配
+    - ("pc", user_id) PC 角色卡
+    - ("npc", 名称) NPC 血量条目（或无血量、但存在于先攻表的 NPC）
     - ("multiple", "name1/name2") 多个匹配
     - ("", "") 未找到
+
+    优先级（对齐 DicePP）：精确匹配 角色卡 > NPC > 先攻表；部分匹配同序
+    取先到者，但后续来源的**精确**匹配可覆盖前序部分匹配。
     """
+    source, target_id = "", ""
+
+    # 1. PC 角色卡
     chars = await list_characters_by_group(group_id)
-    if not chars:
-        return "", ""
-
-    name_map: dict[str, str] = {}
+    pc_name_map: dict[str, str] = {}
     for char in chars:
-        display = char.name or str(char.user_id)
-        name_map[char.user_id] = display
-
-    matches = _match_substring(target_intent, list(name_map.values()))
-    if len(matches) == 1:
-        for uid, name in name_map.items():
-            if name == matches[0]:
-                return "pc", uid
-    elif len(matches) > 1:
+        pc_name_map[char.user_id] = char.name or str(char.user_id)
+    matches = _match_substring(target_intent, list(pc_name_map.values()))
+    if len(matches) > 1:
         return "multiple", "/".join(matches)
-    return "", ""
+    if len(matches) == 1:
+        for uid, name in pc_name_map.items():
+            if name == matches[0]:
+                source, target_id = "pc", uid
+                if name == target_intent:
+                    return source, target_id
+                break
+
+    # 2. NPC 血量条目
+    npc_names = [npc.name for npc in await list_npc_health(group_id)]
+    matches = _match_substring(target_intent, npc_names)
+    if len(matches) > 1:
+        return "multiple", "/".join(matches)
+    if len(matches) == 1:
+        if not source:
+            source, target_id = "npc", matches[0]
+        if matches[0] == target_intent:
+            return "npc", matches[0]
+
+    # 3. 先攻表（NPC 需先入表才能被 .hp 解析并创建血量，对齐 DicePP）
+    init_data = await get_init_list(group_id)
+    if init_data is not None:
+        entity_map: dict[str, str] = {
+            entity.name: entity.owner for entity in init_data.entities
+        }
+        matches = _match_substring(target_intent, list(entity_map.keys()))
+        if len(matches) > 1:
+            return "multiple", "/".join(matches)
+        if len(matches) == 1:
+            name = matches[0]
+            owner = entity_map[name]
+            resolved = ("pc", owner) if owner else ("npc", name)
+            if not source:
+                source, target_id = resolved
+            if name == target_intent:
+                return resolved
+
+    return source, target_id
 
 
 # =========================================================================
@@ -201,15 +247,34 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
                     )
                     name = name or text.TXT_HP_UNKNOWN_NAME
                 feedback += f"{name} {char.hp_info.get_info()}\n"
+        # NPC/怪物血量（对齐 DicePP：PC 在前、NPC 在后）
+        for npc in await list_npc_health(event.group_id):
+            feedback += f"{npc.name} {npc.hp_info.get_info()}\n"
         feedback = feedback.strip()
         if not feedback:
             feedback = text.TXT_HP_INFO_NONE
         await hp_matcher.finish(feedback)
 
-    # 删除
+    # 删除（.hp del [对象]：无对象删除自己；对齐 DicePP）
     if arg_str.startswith("del") or arg_str.startswith("clr"):
-        await delete_character(event.group_id, event.user_id)
-        name = base.get_display_name(event)
+        del_arg = arg_str[3:].strip()
+        if not del_arg:
+            await delete_character(event.group_id, event.user_id)
+            name = base.get_display_name(event)
+            await hp_matcher.finish(text.TXT_HP_DEL.format(name=name))
+        source_key, target_id = await _search_target(del_arg, event.group_id)
+        if source_key == "multiple":
+            await hp_matcher.finish(text.TXT_HP_INFO_MULTI.format(
+                name_list=target_id.split("/")
+            ))
+        if not source_key:
+            await hp_matcher.finish(text.TXT_HP_INFO_MISS.format(name=del_arg))
+        if source_key == "npc":
+            await delete_npc_health(event.group_id, target_id)
+            await hp_matcher.finish(text.TXT_HP_DEL.format(name=target_id))
+        character = await get_character(event.group_id, target_id)
+        await delete_character(event.group_id, target_id)
+        name = character.name if character is not None and character.name else target_id
         await hp_matcher.finish(text.TXT_HP_DEL.format(name=name))
 
     # 调整 HP（流程对齐 DicePP hp_command.process_msg：先定位操作符，
@@ -253,7 +318,7 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
                 if cmd_type != "-" and damage_factor != 1.0:
                     await hp_matcher.finish(text.TXT_HP_FACTOR_DMG_ONLY)
                 source_key, target_id = await _search_target(target_name, event.group_id)
-                if source_key == "pc":
+                if source_key in ("pc", "npc"):
                     target_list.append((source_key, target_id, damage_factor))
                 elif source_key == "multiple":
                     names = target_id.split("/")
@@ -274,6 +339,20 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
     # 应用调整
     feedback = ""
     for source_key, target_id, damage_factor in target_list:
+        if source_key == "npc":
+            # NPC/怪物：血量条目按需创建（目标经先攻表/已有记录解析而来）
+            hp_info = await get_npc_health(event.group_id, target_id)
+            if hp_info is None:
+                hp_info = HPInfo()
+            mod_info = HPService.process_roll_result(
+                hp_info, cmd_type, hp_cur, hp_max, hp_temp,
+                short_feedback=(len(target_list) > 1),
+                damage_factor=damage_factor,
+            )
+            await save_npc_health(event.group_id, target_id, hp_info)
+            feedback += text.TXT_HP_MOD.format(name=target_id, hp_mod=mod_info) + "\n"
+            continue
+
         character = await get_character(event.group_id, target_id)
         if character is None:
             character = DNDCharacter(group_id=str(event.group_id), user_id=target_id)
@@ -286,13 +365,10 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
         character.is_init = True
         await save_character(character)
 
-        if source_key == "pc":
-            if target_id == str(event.user_id):
-                name = character.name or base.get_display_name(event)
-            else:
-                name = character.name or target_id
+        if target_id == str(event.user_id):
+            name = character.name or base.get_display_name(event)
         else:
-            name = target_id
+            name = character.name or target_id
         feedback += text.TXT_HP_MOD.format(name=name, hp_mod=mod_info) + "\n"
 
     await hp_matcher.finish(feedback.strip())

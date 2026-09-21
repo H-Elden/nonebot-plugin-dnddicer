@@ -28,6 +28,7 @@ from ..data.initiative import clear_init_list, get_init_list, save_init_list
 from ..initiative.models import InitList
 from ..platform.onebot_v11 import at_segment
 from . import base, text
+from .initiative import cleanup_temp_npc_health
 
 _HELP_BR = (
     ".br 或 .战斗轮 开始新的战斗轮\n"
@@ -260,9 +261,13 @@ async def _handle_turn_round(event: GroupMessageEvent, mode: str) -> None:
 
 @br_matcher.handle()
 async def handle_br(event: MessageEvent) -> None:
-    """处理 .br：新建战斗轮（清空先攻表与指针）。"""
+    """处理 .br：新建战斗轮（清空先攻表与指针，并清理 NPC 临时血量）。
+
+    .br 与 .init clr 清空语义等价（仅播报不同），共用 NPC 临时血量清理。
+    """
     if not isinstance(event, GroupMessageEvent):
         await br_matcher.finish(text.TXT_GROUP_ONLY)
+    await cleanup_temp_npc_health(event.group_id)
     await clear_init_list(event.group_id)
     await br_matcher.finish(text.TXT_BR_NEW)
 

@@ -205,6 +205,19 @@ class AbilityInfo(BaseModel):
         return info.strip()
 
 
+class NPCHealth(BaseModel):
+    """NPC/怪物血量条目（群级、按名称索引；对齐 DicePP npc_health 表）。
+
+    名称即主键（同一群内 NPC 名唯一），血量复用 HPInfo（与 PC 同款结构）。
+    条目在 ``.hp 目标 ...`` 且目标经先攻表解析时按需创建——即 NPC 需先
+    ``.ri`` 入先攻表（或已存在血量记录），与 DicePP 语义一致。
+    """
+
+    group_id: str
+    name: str
+    hp_info: HPInfo = Field(default_factory=HPInfo)
+
+
 class DNDCharacter(BaseModel):
     """DND5e 角色卡（每人在每群一张，键 = 群 + QQ）。"""
 
