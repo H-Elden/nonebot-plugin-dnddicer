@@ -1,4 +1,4 @@
-"""DND 属性生成命令：``.dnd``（4D6K3 掷点）。
+"""DND 属性生成命令：``.dnd`` / ``.dndx``（4D6K3 掷点）。
 
 对齐 nonebot-dicepp ``module/misc/dnd_command.py`` 语义：
 - ``.dnd`` = 一次生成 6 项属性，每项为 4D6K3（掷 4 个 d6、去最低、取 3 个和）；
@@ -10,6 +10,12 @@
   （有原因）；结果每行为 ``{六项合计} : {六项降序列表}``（与 DicePP 相同：只掷值、
   不绑定属性名，由玩家自行分配给 力量/敏捷/体质/智力/感知/魅力）；
 - 群聊/私聊均可用（DicePP 群聊与私聊端口同款语义）。
+
+本插件扩展 ``.dndx``（2026-09-21，用户需求；DicePP 无此命令）：
+- 同为 4D6K3，但六项数值**按固定顺序绑定属性名**（力量/敏捷/体质/智力/感知/魅力）
+  且**不降序排列**——掷出即定配对，直接可抄进角色卡，省去自行分配一步；
+- 参数（次数/原因）规则与 ``.dnd`` 完全相同（复用 ``parse_dnd_args``）；
+- 命令名 ``dndx`` 经注册表最长前缀匹配，与 ``.dnd`` 互不干扰（``.dndx2`` 亦可）。
 
 设计说明（自研业务层）：
 - DicePP 的 ``.dnd`` 直接用 ``random.randint`` 掷骰（不经 ast_engine）；本项目
@@ -27,6 +33,7 @@ from typing import List, Tuple
 
 from nonebot.adapters.onebot.v11 import MessageEvent
 
+from ..character.constants import ABILITY_LIST
 from ..engine.roll.karma_runtime import get_runtime
 from . import base, text
 
@@ -42,10 +49,22 @@ _HELP = (
     "次数默认 1、最大 10（.dnd5 或 .dnd 5）；原因（可选）可跟在次数之后，"
     "省略次数时直接给出。\n"
     "掷出的 6 个数值不绑定属性，自行分配给 力量/敏捷/体质/智力/感知/魅力 后，"
-    "可用 .角色卡记录 建卡。"
+    "可用 .角色卡记录 建卡。\n"
+    "另有绑定属性名的版本：.dndx（数值按固定顺序直接对应六属性、不降序）。"
 )
 
 dnd_matcher = base.on_dnd_command("dnd", _HELP)
+
+_HELP_DNDX = (
+    "DND5e 属性生成（4D6K3 掷点，属性名绑定）\n"
+    "用法：.dndx [次数] [原因]（如 .dndx、.dndx 5 开卡）\n"
+    "与 .dnd 同为 4D6K3，但六项数值按固定顺序直接对应 力量/敏捷/体质/智力/感知/"
+    "魅力（不降序排列，掷出即定配对），可直接抄进角色卡的 $属性$ 行。\n"
+    "次数默认 1、最大 10；原因规则与 .dnd 相同。\n"
+    "需要自行分配数值给属性（掷值降序展示）请用 .dnd。"
+)
+
+dndx_matcher = base.on_dnd_command("dndx", _HELP_DNDX)
 
 
 def _roll_d6() -> int:
@@ -72,6 +91,18 @@ def generate_ability_scores() -> List[int]:
 def format_dnd_line(scores: List[int]) -> str:
     """把一组属性渲染为结果行：``{六项合计} : {六项降序列表}``（DicePP 同款）。"""
     return f"{sum(scores)} : {sorted(scores, reverse=True)}"
+
+
+def format_dndx_line(scores: List[int]) -> str:
+    """把一组属性渲染为绑定属性名的结果行：``{合计} : 力量 18、敏捷 17、…``。
+
+    属性名按 ``ABILITY_LIST`` 固定顺序与掷值一一配对（不排序）——与 DicePP 的
+    ``.dnd`` 相反：那边只出降序数值、由玩家自行分配。
+    """
+    pairs = "、".join(
+        f"{name} {value}" for name, value in zip(ABILITY_LIST, scores)
+    )
+    return f"{sum(scores)} : {pairs}"
 
 
 def parse_dnd_args(rest: str) -> Tuple[int, str]:
@@ -113,3 +144,20 @@ async def handle_dnd(event: MessageEvent) -> None:
     else:
         feedback = text.TXT_DND_RES_NOREASON.format(name=name, result=result)
     await dnd_matcher.finish(feedback)
+
+
+@dndx_matcher.handle()
+async def handle_dndx(event: MessageEvent) -> None:
+    """处理 .dndx（4D6K3 掷点并绑定属性名；群聊/私聊均可用）。"""
+    rest = base.get_command_rest(event) or ""
+    times, reason = parse_dnd_args(rest)
+
+    lines = [format_dndx_line(generate_ability_scores()) for _ in range(times)]
+    result = "\n".join(lines)
+
+    name = base.get_display_name(event)
+    if reason:
+        feedback = text.TXT_DNDX_RES.format(name=name, reason=reason, result=result)
+    else:
+        feedback = text.TXT_DNDX_RES_NOREASON.format(name=name, result=result)
+    await dndx_matcher.finish(feedback)

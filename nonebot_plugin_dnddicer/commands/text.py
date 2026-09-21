@@ -56,6 +56,10 @@ TXT_DSET_NO_PERMISSION = "仅群主或管理员可以设置群默认骰面。"
 TXT_DND_RES = "{name} DND人物作成——{reason}:\n{result}"
 TXT_DND_RES_NOREASON = "{name} DND人物作成:\n{result}"
 
+# ── .dndx 属性生成（属性名绑定，2026-09-21 新增；标题加后缀便于区分）──────
+TXT_DNDX_RES = "{name} DND人物作成(属性绑定)——{reason}:\n{result}"
+TXT_DNDX_RES_NOREASON = "{name} DND人物作成(属性绑定):\n{result}"
+
 # ── 通用 ────────────────────────────────────────────────────────────────
 TXT_GROUP_ONLY = "该指令仅在群聊中可用。"
 # 命令处理出现未预期异常时的统一回复（详见 commands/base.py 全局兜底钩子）

@@ -6,7 +6,8 @@
 
 用例覆盖：基本生成（格式与合计）、4D6K3 取最低与降序、次数（含无空格 .dnd2）、
 原因（跟在次数后 / 无空格粘连 / 不给次数直接给出——2026-09-14 修订）、
-次数越界回退 1、私聊可用、reason 截断。
+次数越界回退 1、私聊可用、reason 截断；
+.dndx（2026-09-21 新增）：属性名绑定不排序、标题后缀、次数/原因/私聊与 .dnd 同规则。
 """
 
 import pytest
@@ -19,7 +20,9 @@ from fake_event import fake_group_message_event_v11, fake_private_message_event_
 from nonebot_plugin_dnddicer.commands.dnd import (
     MAX_DND_REASON_LEN,
     dnd_matcher,
+    dndx_matcher,
     format_dnd_line,
+    format_dndx_line,
     generate_ability_scores,
     parse_dnd_args,
 )
@@ -245,6 +248,109 @@ async def test_dnd_private(app: App):
 # ── 纯函数单测（不依赖 nonebug）──────────────────────────────────────────
 
 
+# =========================================================================
+# .dndx（属性名绑定，2026-09-21 新增）
+# =========================================================================
+
+
+@pytest.mark.asyncio
+async def test_dndx_basic(app: App):
+    """无参数 .dndx：一行绑定属性名（每项 18），标题带 (属性绑定) 后缀。"""
+    token = set_runtime(SequenceRuntime(_ALL_SIX))
+    try:
+        event = _group_event(".dndx")
+        await _expect(
+            app,
+            dndx_matcher,
+            event,
+            "test DND人物作成(属性绑定):\n"
+            "108 : 力量 18、敏捷 18、体质 18、智力 18、感知 18、魅力 18",
+        )
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_dndx_binding_not_sorted(app: App):
+    """六项按固定属性顺序与掷值配对（不降序）——与 .dnd 的降序列表相反。"""
+    seq = [
+        6, 6, 6, 1,   # → 18（去 1）
+        6, 6, 5, 1,   # → 17（去 1）
+        5, 5, 4, 2,   # → 14（去 2）
+        5, 4, 3, 3,   # → 12（去 3）
+        4, 3, 2, 1,   # → 9（去 1）
+        6, 6, 1, 1,   # → 13（去一个 1）
+    ]
+    token = set_runtime(SequenceRuntime(seq))
+    try:
+        event = _group_event(".dndx")
+        await _expect(
+            app,
+            dndx_matcher,
+            event,
+            "test DND人物作成(属性绑定):\n"
+            "83 : 力量 18、敏捷 17、体质 14、智力 12、感知 9、魅力 13",
+        )
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_dndx_times_and_reason(app: App):
+    """.dndx 2 为了勇者：掷两组逐行输出，标题含原因（参数规则同 .dnd）。"""
+    token = set_runtime(SequenceRuntime(_ALL_SIX * 2))
+    try:
+        event = _group_event(".dndx 2 为了勇者")
+        await _expect(
+            app,
+            dndx_matcher,
+            event,
+            "test DND人物作成(属性绑定)——为了勇者:\n"
+            "108 : 力量 18、敏捷 18、体质 18、智力 18、感知 18、魅力 18\n"
+            "108 : 力量 18、敏捷 18、体质 18、智力 18、感知 18、魅力 18",
+        )
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_dndx_no_space(app: App):
+    """.dndx2（命令名后无空格）与 .dndx 2 等价（最长前缀匹配）。"""
+    token = set_runtime(SequenceRuntime(_ALL_SIX * 2))
+    try:
+        event = _group_event(".dndx2")
+        await _expect(
+            app,
+            dndx_matcher,
+            event,
+            "test DND人物作成(属性绑定):\n"
+            "108 : 力量 18、敏捷 18、体质 18、智力 18、感知 18、魅力 18\n"
+            "108 : 力量 18、敏捷 18、体质 18、智力 18、感知 18、魅力 18",
+        )
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_dndx_private(app: App):
+    """私聊也可用（与 .dnd 同端口语义）。"""
+    token = set_runtime(SequenceRuntime(_ALL_SIX))
+    try:
+        event = fake_private_message_event_v11(message=Message(".dndx"))
+        await _expect(
+            app,
+            dndx_matcher,
+            event,
+            "test DND人物作成(属性绑定):\n"
+            "108 : 力量 18、敏捷 18、体质 18、智力 18、感知 18、魅力 18",
+        )
+    finally:
+        reset_runtime(token)
+
+
+# ── 纯函数单测（不依赖 nonebug）──────────────────────────────────────────
+
+
 def test_parse_dnd_args():
     """参数解析：次数/原因/回退规则。"""
     assert parse_dnd_args("") == (1, "")
@@ -275,6 +381,16 @@ def test_format_dnd_line():
     """结果行格式：{合计} : {降序列表}。"""
     assert format_dnd_line([18, 17, 14, 13, 12, 9]) == "83 : [18, 17, 14, 13, 12, 9]"
     assert format_dnd_line([18] * 6) == "108 : [18, 18, 18, 18, 18, 18]"
+
+
+def test_format_dndx_line():
+    """结果行格式：{合计} : 力量 18、敏捷 17、…（固定顺序、不排序）。"""
+    assert format_dndx_line([18, 17, 14, 12, 9, 13]) == (
+        "83 : 力量 18、敏捷 17、体质 14、智力 12、感知 9、魅力 13"
+    )
+    assert format_dndx_line([18] * 6) == (
+        "108 : 力量 18、敏捷 18、体质 18、智力 18、感知 18、魅力 18"
+    )
 
 
 def test_generate_ability_scores_deterministic():
