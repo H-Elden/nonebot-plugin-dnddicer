@@ -86,7 +86,7 @@ async def test_npc_requires_init_entry(app: App):
 
     await _expect(
         app, hp_matcher, _event(110002, ".hp 哥布林 7/7"),
-        "找不到哥布林的生命值信息",
+        "找不到哥布林的生命值信息\n新NPC需要先加入先攻表才可设置HP",
     )
 
 
@@ -164,6 +164,29 @@ async def test_npc_damage_only_display(app: App):
 
 
 @pytest.mark.asyncio
+async def test_npc_negative_damage_clamped(app: App):
+    """负伤害按 0 计：表达式算出负值时不再变成回血（2026-09-21 修复）。"""
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+    from nonebot_plugin_dnddicer.commands.initiative import initiative_matcher
+
+    g = 110013
+    await _expect(app, initiative_matcher, _event(g, ".ri20 向导"), "向导的先攻值是 20")
+    await _expect(
+        app, hp_matcher, _event(g, ".hp 向导 12/18"),
+        "向导: HP=12/18\n当前HP:12/18",
+    )
+
+    token = set_runtime(SequenceRuntime([1]))
+    try:
+        await _expect(
+            app, hp_matcher, _event(g, ".hp 向导 -d12-2易伤"),
+            "向导: 当前HP减少([1]-2)*2=-2（伤害最低为0）\nHP:12/18 -> HP:12/18",
+        )
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
 async def test_npc_ambiguous_target(app: App):
     """同名部分匹配多个 NPC → 歧义提示。"""
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
@@ -180,6 +203,33 @@ async def test_npc_ambiguous_target(app: App):
         app, hp_matcher, _event(g, ".hp 哥布林 10/10"),
         "存在多个匹配目标：['哥布林a', '哥布林b']",
     )
+
+
+@pytest.mark.asyncio
+async def test_npc_exact_match_priority(app: App):
+    """完全匹配优先：「地精」与「熊地精」并存时，.hp 地精 命中地精、.hp del 只删地精。"""
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+    from nonebot_plugin_dnddicer.commands.initiative import initiative_matcher
+    from nonebot_plugin_dnddicer.data.npc_health import get_npc_health
+
+    g = 110012
+    await _expect(app, initiative_matcher, _event(g, ".ri20 地精"), "地精的先攻值是 20")
+    await _expect(app, initiative_matcher, _event(g, ".ri19 熊地精"), "熊地精的先攻值是 19")
+    # 精确匹配优先：不再与「熊地精」冲突（2026-09-21 修订）
+    await _expect(app, hp_matcher, _event(g, ".hp 地精 12/12"), "地精: HP=12/12\n当前HP:12/12")
+    await _expect(
+        app, hp_matcher, _event(g, ".hp 熊地精 15/15"),
+        "熊地精: HP=15/15\n当前HP:15/15",
+    )
+    # 部分匹配（模糊）仍可用，且两条记录各自独立
+    await _expect(
+        app, hp_matcher, _event(g, ".hp 熊 -2"),
+        "熊地精: 当前HP减少2\nHP:15/15 -> HP:13/15",
+    )
+    # del 指定对象：精确匹配只删「地精」，不动「熊地精」
+    await _expect(app, hp_matcher, _event(g, ".hp del 地精"), "已删除地精的生命值信息")
+    assert await get_npc_health(g, "地精") is None
+    assert await get_npc_health(g, "熊地精") is not None
 
 
 # =========================================================================
@@ -230,7 +280,7 @@ async def test_npc_del_missing_target(app: App):
 
     await _expect(
         app, hp_matcher, _event(110010, ".hp del 哥布林"),
-        "找不到哥布林的生命值信息",
+        "找不到哥布林的生命值信息\n新NPC需要先加入先攻表才可设置HP",
     )
 
 
@@ -331,7 +381,10 @@ async def test_npc_auto_refill_on_new_init(app: App):
         app, initiative_matcher, _event(g, ".ri15 哥布林"),
         "哥布林的先攻值是 15\n"
         "注：哥布林 已自动回满 20/20（上次 16/20）\n"
-        "如需沿用上次血量: .hp 哥布林 16/20；跨战斗保持血量: .npc 持久 哥布林",
+        "如需沿用上次血量:\n"
+        ".hp 哥布林 16/20\n"
+        "如需跨战斗保持血量:\n"
+        ".npc 持久 哥布林",
     )
     hp_info = await get_npc_health(g, "哥布林")
     assert hp_info is not None and hp_info.hp_cur == 20 and hp_info.hp_max == 20
@@ -434,7 +487,10 @@ async def test_npc_refill_aggregated_multi(app: App):
         app, initiative_matcher, _event(g, ".ri20 哥布林a/哥布林b+3"),
         "哥布林a的先攻值是 20\n哥布林b的先攻值是 20+3=23\n"
         "注：哥布林a 7/7（上次 5/7）、哥布林b 5/5（上次 3/5） 已自动回满\n"
-        "如需沿用上次血量: .hp 名称 当前/最大；跨战斗保持血量: .npc 持久 名称",
+        "如需沿用上次血量:\n"
+        ".hp 名称 当前/最大\n"
+        "如需跨战斗保持血量:\n"
+        ".npc 持久 名称",
     )
 
 
@@ -503,7 +559,10 @@ async def test_npc_temp_restores_auto_refill(app: App):
         app, initiative_matcher, _event(g, ".ri15 向导"),
         "向导的先攻值是 15\n"
         "注：向导 已自动回满 12/12（上次 7/12）\n"
-        "如需沿用上次血量: .hp 向导 7/12；跨战斗保持血量: .npc 持久 向导",
+        "如需沿用上次血量:\n"
+        ".hp 向导 7/12\n"
+        "如需跨战斗保持血量:\n"
+        ".npc 持久 向导",
     )
 
 

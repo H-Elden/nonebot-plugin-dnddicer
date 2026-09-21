@@ -438,6 +438,10 @@ class HPService:
             damage_factor: 目标承伤因子（DM 掷伤害用）——1.0 全额；0.5 抗性
                 （伤害减半，向下取整、最少 1）；2.0 易伤（伤害加倍）。仅对
                 "-" 生效，其余取值按全额处理。
+
+        伤害/治疗值最低为 0：掷骰表达式可能算出负值（如 ``-d12-2`` 掷出 1），
+        按 5e 语义伤害不为负——负值按 0 计并在反馈中标注（2026-09-21 修复：
+        此前负伤害经 take_damage 会变成回血）。
         """
         mod_info = ""
 
@@ -467,8 +471,16 @@ class HPService:
                 hp_info.hp_max += hp_max_mod_result.get_val()
                 mod_info += f"最大HP增加{hp_max_mod_result.get_result()}, "
             if hp_cur_mod_result:
-                hp_info.heal(hp_cur_mod_result.get_val())
-                mod_info += f"当前HP增加{hp_cur_mod_result.get_result()}"
+                # 治疗同样最低为 0（负值按 0 计，避免「加血」变成掉血）；0 不调用 heal，
+                # 以免把昏迷标记（is_alive）意外唤醒
+                heal_value = hp_cur_mod_result.get_val()
+                heal_suffix = ""
+                if heal_value < 0:
+                    heal_suffix = "（治疗最低为0）"
+                    heal_value = 0
+                if heal_value > 0:
+                    hp_info.heal(heal_value)
+                mod_info += f"当前HP增加{hp_cur_mod_result.get_result()}{heal_suffix}"
             if hp_temp_mod_result:
                 hp_info.hp_temp += hp_temp_mod_result.get_val()
                 if mod_info:
@@ -489,10 +501,12 @@ class HPService:
                 if hp_info.hp_cur > hp_info.hp_max:
                     hp_info.take_damage(hp_info.hp_cur - hp_info.hp_max)
             if hp_cur_mod_result:
-                # 抗性/易伤折算（抗性=减半向下取整、最少 1；易伤=翻倍），反馈标注折算
-                damage = hp_cur_mod_result.get_val()
+                # 伤害最低为 0：负值（如 -d12-2 掷出 1）按 0 计，避免负伤害变回血
+                damage = max(0, hp_cur_mod_result.get_val())
                 damage_suffix = ""
-                if damage_factor == 0.5:
+                if damage == 0:
+                    damage_suffix = "（伤害最低为0）"
+                elif damage_factor == 0.5:
                     damage = max(1, int(damage // 2))
                     damage_suffix = f"（抗性减半→{damage}）"
                 elif damage_factor == 2.0:

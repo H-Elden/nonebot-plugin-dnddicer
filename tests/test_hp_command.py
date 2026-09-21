@@ -328,12 +328,12 @@ async def test_hp_target_other(app: App):
 
 @pytest.mark.asyncio
 async def test_hp_target_not_found(app: App):
-    """.hp 不存在 10 → 找不到。"""
+    """.hp 不存在 10 → 找不到（附 NPC 建记录引导，2026-09-21）。"""
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
 
     await _expect(
         app, hp_matcher, _event(".hp 不存在 10", user_id=20016),
-        "找不到不存在的生命值信息",
+        "找不到不存在的生命值信息\n新NPC需要先加入先攻表才可设置HP",
     )
 
 
@@ -634,3 +634,30 @@ async def test_hp_factor_suffix_only_for_damage(app: App):
         app, hp_matcher, _event(".hp 爱丽丝抗性 20", user_id=22000),
         "抗性/易伤后缀仅对伤害生效（用法：.hp 目标[抗性/易伤] -伤害表达式）。",
     )
+
+
+@pytest.mark.asyncio
+async def test_hp_negative_values_clamped(app: App):
+    """伤害/治疗不为负：表达式算出负值时按 0 计并标注（2026-09-21 修复）。"""
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    await _expect(
+        app, hp_matcher, _event(".hp 20/20", user_id=20017),
+        "test: HP=20/20\n当前HP:20/20",
+    )
+    token = set_runtime(SequenceRuntime([1]))
+    try:
+        await _expect(
+            app, hp_matcher, _event(".hp -d12-2", user_id=20017),
+            "test: 当前HP减少[1]-2=-1（伤害最低为0）\nHP:20/20 -> HP:20/20",
+        )
+    finally:
+        reset_runtime(token)
+    token = set_runtime(SequenceRuntime([3]))
+    try:
+        await _expect(
+            app, hp_matcher, _event(".hp +d4-10", user_id=20017),
+            "test: 当前HP增加[3]-10=-7（治疗最低为0）\nHP:20/20 -> HP:20/20",
+        )
+    finally:
+        reset_runtime(token)

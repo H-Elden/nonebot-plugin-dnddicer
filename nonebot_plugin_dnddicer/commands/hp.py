@@ -95,7 +95,15 @@ def _split_target_suffix(intent: str) -> Tuple[str, float]:
 
 
 def _match_substring(substring: str, str_list: list[str]) -> list[str]:
-    """找到所有包含输入字符串的字符串（对齐 DicePP utils/string.py match_substring）。"""
+    """找到所有包含输入字符串的字符串；存在完全匹配时只返回完全匹配。
+
+    完全匹配优先（2026-09-21 修订）：先攻表/血量条目里同时有「地精」与
+    「熊地精」时，``.hp 地精`` 应直接命中地精——与 ``.init`` 子指令的
+    「精确 → 模糊 substring」两级匹配一致（DicePP 原版仅做 substring，
+    会把两者都列为歧义）。
+    """
+    if substring in str_list:
+        return [substring]
     return [s for s in str_list if substring in s]
 
 
@@ -269,7 +277,7 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
                 name_list=target_id.split("/")
             ))
         if not source_key:
-            await hp_matcher.finish(text.TXT_HP_INFO_MISS.format(name=del_arg))
+            await hp_matcher.finish(text.TXT_HP_INFO_MISS_HINT.format(name=del_arg))
         if source_key == "npc":
             await delete_npc_health(event.group_id, target_id)
             await hp_matcher.finish(text.TXT_HP_DEL.format(name=target_id))
@@ -326,7 +334,7 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
                     feedback = text.TXT_HP_INFO_MULTI.format(name_list=names)
                     await hp_matcher.finish(feedback)
                 else:
-                    feedback = text.TXT_HP_INFO_MISS.format(name=target_name)
+                    feedback = text.TXT_HP_INFO_MISS_HINT.format(name=target_name)
                     await hp_matcher.finish(feedback)
 
     if not target_list:

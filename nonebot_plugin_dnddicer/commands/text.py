@@ -99,6 +99,8 @@ TXT_CHECK_RESULT = "{name}进行【{check}】：\n{hint}\n{result}"
 # ── HP 管理 .hp（对齐 DicePP hp_command 默认文案）─────────────────────────
 TXT_HP_INFO = "{name}: {hp_info}"
 TXT_HP_INFO_MISS = "找不到{name}的生命值信息"
+#: .hp 指定目标未命中：附 NPC 记录方式的引导（NPC 需先入先攻表，见 commands/hp.py）
+TXT_HP_INFO_MISS_HINT = "找不到{name}的生命值信息\n新NPC需要先加入先攻表才可设置HP"
 TXT_HP_INFO_MULTI = "存在多个匹配目标：{name_list}"
 TXT_HP_INFO_NONE = "本群没有任何生命值信息"
 TXT_HP_MOD = "{name}: {hp_mod}"
@@ -134,15 +136,21 @@ TXT_INIT_ENTITY_SWAP = "{name1}与{name2}的先攻值已互换"
 TXT_INIT_INFO_DEL = "已从先攻列表中移除 {entity_list}"
 TXT_INIT_UNKNOWN = "子指令{invalid_command}无效，可用的子指令为{sub_command_list}"
 TXT_INIT_ERROR = "处理先攻指令时出现错误：{error_info}"
-#: .ri 入表时 NPC 血量自动回满提示（单个：名称+回满值+上次值，并给出可复制的恢复命令）
+#: .ri 入表时 NPC 血量自动回满提示（单个：名称+回满值+上次值，命令各占一行便于复制）
 TXT_INIT_NPC_REFILL_ONE = (
     "注：{name} 已自动回满 {hp_info}（上次 {last_hp}）\n"
-    "如需沿用上次血量: .hp {name} {last_hp}；跨战斗保持血量: .npc 持久 {name}"
+    "如需沿用上次血量:\n"
+    ".hp {name} {last_hp}\n"
+    "如需跨战斗保持血量:\n"
+    ".npc 持久 {name}"
 )
-#: 同上（多个目标：聚合一行条目，第二行给命令格式）
+#: 同上（多个目标：聚合一行条目，命令格式各占一行）
 TXT_INIT_NPC_REFILL_MULTI = (
     "注：{items} 已自动回满\n"
-    "如需沿用上次血量: .hp 名称 当前/最大；跨战斗保持血量: .npc 持久 名称"
+    "如需沿用上次血量:\n"
+    ".hp 名称 当前/最大\n"
+    "如需跨战斗保持血量:\n"
+    ".npc 持久 名称"
 )
 
 # ── 战斗轮 .br/.ed/.回合/.轮次（对齐 DicePP battleroll_command 默认文案）
