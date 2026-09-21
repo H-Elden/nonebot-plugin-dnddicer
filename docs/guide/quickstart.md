@@ -46,7 +46,7 @@ plugins = ["nonebot_plugin_dnddicer"]
 
 ```text
 你发送：@屠龙骰 .bot
-骰娘回复：屠龙骰（nonebot-plugin-dnddicer）v0.1.0
+骰娘回复：屠龙骰（nonebot-plugin-dnddicer）v0.2.0
 专精 DND5e/5r 跑团的骰娘：掷骰表达式、角色卡与检定/豁免/攻击、属性生成、HP 管理、先攻列表、战斗轮、群配置，命令手感对齐 nonebot-dicepp。
 本群服务已开启，可直接使用本插件的全部命令。
 用法：.bot on / .bot off——仅限群聊，需群主或管理员权限。
