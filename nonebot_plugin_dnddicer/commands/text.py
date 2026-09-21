@@ -105,6 +105,12 @@ TXT_HP_DEL = "已删除{name}的生命值信息"
 #: .hp list 无角色卡名且查不到群名片/昵称时的兜底展示名（不直接显示 QQ 号）
 TXT_HP_UNKNOWN_NAME = "未知玩家"
 
+# ── NPC 血量跨战斗保持 .npc（群级、按名称）────────────────────────────────
+TXT_NPC_PERSIST_ON = "已将NPC「{name}」设为跨战斗保持血量（.ri 再次入表时不再自动回满）"
+TXT_NPC_PERSIST_OFF = "已将NPC「{name}」恢复为默认（每次新入先攻表时自动回满）"
+TXT_NPC_NO_RECORD = "找不到{name}的血量记录，请先用 .hp {name} 当前血量/最大血量 记录"
+TXT_NPC_PC_TARGET = "「{name}」是玩家角色卡，不是NPC"
+
 # ── 长休 .长休 ─────────────────────────────────────────────────────────────
 TXT_LONG_REST = "{result}"
 TXT_LONG_REST_MISS = "找不到{name}的角色卡信息"
@@ -124,6 +130,16 @@ TXT_INIT_ENTITY_SWAP = "{name1}与{name2}的先攻值已互换"
 TXT_INIT_INFO_DEL = "已从先攻列表中移除 {entity_list}"
 TXT_INIT_UNKNOWN = "子指令{invalid_command}无效，可用的子指令为{sub_command_list}"
 TXT_INIT_ERROR = "处理先攻指令时出现错误：{error_info}"
+#: .ri 入表时 NPC 血量自动回满提示（单个：名称+回满值+上次值，并给出可复制的恢复命令）
+TXT_INIT_NPC_REFILL_ONE = (
+    "注：{name} 已自动回满 {hp_info}（上次 {last_hp}）\n"
+    "如需沿用上次血量: .hp {name} {last_hp}；跨战斗保持血量: .npc 持久 {name}"
+)
+#: 同上（多个目标：聚合一行条目，第二行给命令格式）
+TXT_INIT_NPC_REFILL_MULTI = (
+    "注：{items} 已自动回满\n"
+    "如需沿用上次血量: .hp 名称 当前/最大；跨战斗保持血量: .npc 持久 名称"
+)
 
 # ── 战斗轮 .br/.ed/.回合/.轮次（对齐 DicePP battleroll_command 默认文案）
 # 注：.br 文案去掉 DicePP 原版残留的「BUFF表」字样（BUFF 计时表本期不做）

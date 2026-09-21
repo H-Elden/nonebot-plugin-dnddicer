@@ -1,4 +1,4 @@
-"""NPC/怪物血量 nonebug 测试（.hp 目标解析 / 先攻联动 / 清理语义）。
+"""NPC/怪物血量 nonebug 测试（.hp 目标解析 / 先攻联动 / 清理与回满语义）。
 
 存储隔离：每个用例前清空先攻/NPC 血量/角色卡数据（缓存 + JSON），
 每个用例使用独立群号；掷骰用 SequenceRuntime 固定骰值确保确定性。
@@ -7,6 +7,10 @@
 - NPC 血量条目需经先攻表解析创建：先 ``.ri`` 入表，再 ``.hp 名称 ...``；
 - 先攻列表展示 NPC 血量；``.init clr`` / ``.br`` 清理「未设最大值」的临时血量；
 - ``.init del`` 删除 NPC 条目时一并删除其血量记录。
+
+本插件新增语义（2026-09-21，DicePP 所无）：
+- NPC 以新条目入先攻表时，未标记跨战斗保持且已设上限的记录自动回满并提示
+  （同名重掷不触发；``.npc 持久`` 标记的记录跳过）。
 """
 
 import pytest
@@ -294,3 +298,242 @@ async def test_init_del_removes_npc_health(app: App):
         "已从先攻列表中移除 哥布林",
     )
     assert await get_npc_health(g, "哥布林") is None
+
+
+# =========================================================================
+# NPC 血量自动回满（.ri 新入表）与 .npc 跨战斗保持开关（2026-09-21 新增）
+# =========================================================================
+
+
+@pytest.mark.asyncio
+async def test_npc_auto_refill_on_new_init(app: App):
+    """新条目入先攻表且未标记保持、已设上限、未满 → 自动回满并给出提示。"""
+    from nonebot_plugin_dnddicer.commands.battle import br_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+    from nonebot_plugin_dnddicer.commands.initiative import initiative_matcher
+    from nonebot_plugin_dnddicer.data.npc_health import get_npc_health
+
+    g = 110021
+    await _expect(app, initiative_matcher, _event(g, ".ri20 哥布林"), "哥布林的先攻值是 20")
+    await _expect(
+        app, hp_matcher, _event(g, ".hp 哥布林 20/20"),
+        "哥布林: HP=20/20\n当前HP:20/20",
+    )
+    await _expect(
+        app, hp_matcher, _event(g, ".hp 哥布林 -4"),
+        "哥布林: 当前HP减少4\nHP:20/20 -> HP:16/20",
+    )
+    await _expect(
+        app, br_matcher, _event(g, ".br"),
+        "已创建新战斗轮。清除先攻表、当前回合。",
+    )
+    await _expect(
+        app, initiative_matcher, _event(g, ".ri15 哥布林"),
+        "哥布林的先攻值是 15\n"
+        "注：哥布林 已自动回满 20/20（上次 16/20）\n"
+        "如需沿用上次血量: .hp 哥布林 16/20；跨战斗保持血量: .npc 持久 哥布林",
+    )
+    hp_info = await get_npc_health(g, "哥布林")
+    assert hp_info is not None and hp_info.hp_cur == 20 and hp_info.hp_max == 20
+
+
+@pytest.mark.asyncio
+async def test_npc_persistent_skips_refill(app: App):
+    """.npc 持久 后：.ri 新入表不回满；.hp 结算不会丢失保持标记。"""
+    from nonebot_plugin_dnddicer.commands.battle import br_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+    from nonebot_plugin_dnddicer.commands.initiative import initiative_matcher
+    from nonebot_plugin_dnddicer.commands.npc import npc_matcher
+    from nonebot_plugin_dnddicer.data.npc_health import get_npc_record
+
+    g = 110022
+    await _expect(app, initiative_matcher, _event(g, ".ri20 向导"), "向导的先攻值是 20")
+    await _expect(
+        app, hp_matcher, _event(g, ".hp 向导 12/12"),
+        "向导: HP=12/12\n当前HP:12/12",
+    )
+    await _expect(
+        app, npc_matcher, _event(g, ".npc 持久 向导"),
+        "已将NPC「向导」设为跨战斗保持血量（.ri 再次入表时不再自动回满）",
+    )
+    # .hp 结算走 save_npc_health：保持标记需被继承（回归防护）
+    await _expect(
+        app, hp_matcher, _event(g, ".hp 向导 -5"),
+        "向导: 当前HP减少5\nHP:12/12 -> HP:7/12",
+    )
+    record = await get_npc_record(g, "向导")
+    assert record is not None and record.persistent and record.hp_info.hp_cur == 7
+
+    await _expect(
+        app, br_matcher, _event(g, ".br"),
+        "已创建新战斗轮。清除先攻表、当前回合。",
+    )
+    await _expect(app, initiative_matcher, _event(g, ".ri15 向导"), "向导的先攻值是 15")
+    record = await get_npc_record(g, "向导")
+    assert record is not None and record.hp_info.hp_cur == 7
+
+
+@pytest.mark.asyncio
+async def test_npc_refill_skipped_on_reroll(app: App):
+    """同名条目在同一场战斗中重掷：不回满（避免误清已受伤害）。"""
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+    from nonebot_plugin_dnddicer.commands.initiative import initiative_matcher
+    from nonebot_plugin_dnddicer.data.npc_health import get_npc_record
+
+    g = 110023
+    await _expect(app, initiative_matcher, _event(g, ".ri20 哥布林"), "哥布林的先攻值是 20")
+    await _expect(
+        app, hp_matcher, _event(g, ".hp 哥布林 20/20"),
+        "哥布林: HP=20/20\n当前HP:20/20",
+    )
+    await _expect(
+        app, hp_matcher, _event(g, ".hp 哥布林 -4"),
+        "哥布林: 当前HP减少4\nHP:20/20 -> HP:16/20",
+    )
+    await _expect(
+        app, initiative_matcher, _event(g, ".ri15 哥布林"),
+        "你重复投掷了先攻\n哥布林的先攻值是 15",
+    )
+    record = await get_npc_record(g, "哥布林")
+    assert record is not None and record.hp_info.hp_cur == 16
+
+
+@pytest.mark.asyncio
+async def test_npc_refill_aggregated_multi(app: App):
+    """多个 NPC 同时回满：提示聚合为一条（含各自上次血量）。"""
+    from nonebot_plugin_dnddicer.commands.battle import br_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+    from nonebot_plugin_dnddicer.commands.initiative import initiative_matcher
+
+    g = 110024
+    await _expect(
+        app, initiative_matcher, _event(g, ".ri20 哥布林a/哥布林b+3"),
+        "哥布林a的先攻值是 20\n哥布林b的先攻值是 20+3=23",
+    )
+    await _expect(
+        app, hp_matcher, _event(g, ".hp 哥布林a 7/7"),
+        "哥布林a: HP=7/7\n当前HP:7/7",
+    )
+    await _expect(
+        app, hp_matcher, _event(g, ".hp 哥布林b 5/5"),
+        "哥布林b: HP=5/5\n当前HP:5/5",
+    )
+    await _expect(
+        app, hp_matcher, _event(g, ".hp 哥布林a -2"),
+        "哥布林a: 当前HP减少2\nHP:7/7 -> HP:5/7",
+    )
+    await _expect(
+        app, hp_matcher, _event(g, ".hp 哥布林b -2"),
+        "哥布林b: 当前HP减少2\nHP:5/5 -> HP:3/5",
+    )
+    await _expect(
+        app, br_matcher, _event(g, ".br"),
+        "已创建新战斗轮。清除先攻表、当前回合。",
+    )
+    await _expect(
+        app, initiative_matcher, _event(g, ".ri20 哥布林a/哥布林b+3"),
+        "哥布林a的先攻值是 20\n哥布林b的先攻值是 20+3=23\n"
+        "注：哥布林a 7/7（上次 5/7）、哥布林b 5/5（上次 3/5） 已自动回满\n"
+        "如需沿用上次血量: .hp 名称 当前/最大；跨战斗保持血量: .npc 持久 名称",
+    )
+
+
+@pytest.mark.asyncio
+async def test_npc_persistent_temp_record_kept_and_not_refilled(app: App):
+    """跨战斗保持 + 未设上限的纯损失记录：.br 不清理、.ri 不回满。"""
+    from nonebot_plugin_dnddicer.commands.battle import br_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+    from nonebot_plugin_dnddicer.commands.initiative import initiative_matcher
+    from nonebot_plugin_dnddicer.commands.npc import npc_matcher
+    from nonebot_plugin_dnddicer.data.npc_health import get_npc_health
+
+    g = 110025
+    await _expect(app, initiative_matcher, _event(g, ".ri20 哥布林"), "哥布林的先攻值是 20")
+    await _expect(
+        app, hp_matcher, _event(g, ".hp 哥布林 -4"),
+        "哥布林: 当前HP减少4\n损失HP:0 -> 损失HP:4",
+    )
+    await _expect(
+        app, npc_matcher, _event(g, ".npc 持久 哥布林"),
+        "已将NPC「哥布林」设为跨战斗保持血量（.ri 再次入表时不再自动回满）",
+    )
+    await _expect(
+        app, br_matcher, _event(g, ".br"),
+        "已创建新战斗轮。清除先攻表、当前回合。",
+    )
+    hp_info = await get_npc_health(g, "哥布林")
+    assert hp_info is not None and hp_info.hp_max == 0  # 保持标记豁免临时清理
+
+    await _expect(app, initiative_matcher, _event(g, ".ri15 哥布林"), "哥布林的先攻值是 15")
+    hp_info = await get_npc_health(g, "哥布林")
+    assert hp_info is not None and hp_info.hp_cur == -4
+
+
+@pytest.mark.asyncio
+async def test_npc_temp_restores_auto_refill(app: App):
+    """.npc 临时：恢复默认后新入先攻表再次自动回满。"""
+    from nonebot_plugin_dnddicer.commands.battle import br_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+    from nonebot_plugin_dnddicer.commands.initiative import initiative_matcher
+    from nonebot_plugin_dnddicer.commands.npc import npc_matcher
+
+    g = 110027
+    await _expect(app, initiative_matcher, _event(g, ".ri20 向导"), "向导的先攻值是 20")
+    await _expect(
+        app, hp_matcher, _event(g, ".hp 向导 12/12"),
+        "向导: HP=12/12\n当前HP:12/12",
+    )
+    await _expect(
+        app, npc_matcher, _event(g, ".npc 持久 向导"),
+        "已将NPC「向导」设为跨战斗保持血量（.ri 再次入表时不再自动回满）",
+    )
+    await _expect(
+        app, hp_matcher, _event(g, ".hp 向导 -5"),
+        "向导: 当前HP减少5\nHP:12/12 -> HP:7/12",
+    )
+    await _expect(
+        app, npc_matcher, _event(g, ".npc 临时 向导"),
+        "已将NPC「向导」恢复为默认（每次新入先攻表时自动回满）",
+    )
+    await _expect(
+        app, br_matcher, _event(g, ".br"),
+        "已创建新战斗轮。清除先攻表、当前回合。",
+    )
+    await _expect(
+        app, initiative_matcher, _event(g, ".ri15 向导"),
+        "向导的先攻值是 15\n"
+        "注：向导 已自动回满 12/12（上次 7/12）\n"
+        "如需沿用上次血量: .hp 向导 7/12；跨战斗保持血量: .npc 持久 向导",
+    )
+
+
+@pytest.mark.asyncio
+async def test_npc_command_errors(app: App):
+    """.npc：无参数回帮助；无记录 / 找不到 / 目标是玩家角色卡各自提示。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.initiative import initiative_matcher
+    from nonebot_plugin_dnddicer.commands.npc import _HELP as NPC_HELP
+    from nonebot_plugin_dnddicer.commands.npc import npc_matcher
+
+    g = 110026
+    await _expect(app, npc_matcher, _event(g, ".npc"), NPC_HELP)
+    await _expect(
+        app, npc_matcher, _event(g, ".npc 持久 不存在"),
+        "找不到不存在的生命值信息",
+    )
+    # 已在先攻表但尚无血量记录：提示先建立记录
+    await _expect(app, initiative_matcher, _event(g, ".ri20 哥布林"), "哥布林的先攻值是 20")
+    await _expect(
+        app, npc_matcher, _event(g, ".npc 持久 哥布林"),
+        "找不到哥布林的血量记录，请先用 .hp 哥布林 当前血量/最大血量 记录",
+    )
+    # PC 角色卡：不适用本命令
+    record = (
+        ".角色卡记录 $姓名$ 爱丽丝\n$等级$ 1\n$生命值$ 20/30\n"
+        "$属性$ 10/10/10/10/10/10"
+    )
+    await _expect(app, char_matcher, _event(g, record, user_id=40001), "角色卡已设置")
+    await _expect(
+        app, npc_matcher, _event(g, ".npc 持久 爱丽丝"),
+        "「爱丽丝」是玩家角色卡，不是NPC",
+    )

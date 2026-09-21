@@ -58,6 +58,7 @@ _HELP = (
     ".hp 队友A -4d6 -> 对队友A造成4d6点伤害\n"
     "NPC/怪物: 先 .ri 名称 加入先攻表后, 可用 .hp 名称 10/10 记录其血量"
     " (先攻列表中随条目一起展示)\n"
+    "NPC 血量默认每次新入先攻表时自动回满, 需要跨战斗保持用 .npc 持久 名称\n"
     "删除生命值: .hp del [对象]\n"
     "查看生命值: .hp -> 查看自己当前的生命值信息\n"
     "查看列表: .hp list -> 查看本群所有PC与NPC的生命值\n"
@@ -98,7 +99,7 @@ def _match_substring(substring: str, str_list: list[str]) -> list[str]:
     return [s for s in str_list if substring in s]
 
 
-async def _search_target(
+async def search_target(
     target_intent: str, group_id: int | str
 ) -> Tuple[str, str]:
     """在群内 PC 角色卡 / NPC 血量 / 先攻列表中模糊搜索目标。
@@ -262,7 +263,7 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
             await delete_character(event.group_id, event.user_id)
             name = base.get_display_name(event)
             await hp_matcher.finish(text.TXT_HP_DEL.format(name=name))
-        source_key, target_id = await _search_target(del_arg, event.group_id)
+        source_key, target_id = await search_target(del_arg, event.group_id)
         if source_key == "multiple":
             await hp_matcher.finish(text.TXT_HP_INFO_MULTI.format(
                 name_list=target_id.split("/")
@@ -317,7 +318,7 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
                 target_name, damage_factor = _split_target_suffix(target_intent)
                 if cmd_type != "-" and damage_factor != 1.0:
                     await hp_matcher.finish(text.TXT_HP_FACTOR_DMG_ONLY)
-                source_key, target_id = await _search_target(target_name, event.group_id)
+                source_key, target_id = await search_target(target_name, event.group_id)
                 if source_key in ("pc", "npc"):
                     target_list.append((source_key, target_id, damage_factor))
                 elif source_key == "multiple":

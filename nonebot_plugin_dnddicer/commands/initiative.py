@@ -21,11 +21,18 @@ NPC 血量联动（2026-09-14，对齐 DicePP npc_health 语义）：
 - 先攻列表展示 NPC 血量（`.hp 名称 ...` 记录，见 commands/hp.py）；
 - 清空（.init clr / .br）时清理「未设最大值」的 NPC 临时血量；
 - 删除 NPC 条目（.init del）时一并删除其血量记录。
+
+NPC 血量自动回满（2026-09-21，DicePP 所无的有意新增）：
+- NPC 以**新条目**加入先攻表时，若其血量记录未标记跨战斗保持且已设上限，
+  自动回满并在回复中给出「沿用上次血量 / 跨战斗保持血量」的写法——同名
+  NPC 在新一场战斗中通常视为新个体（如多只「地精」）；
+- 跨战斗保持（``.npc 持久``，见 commands/npc.py）的条目跳过回满；
+- 同名条目在同一场战斗中重掷不触发（避免误清已受伤害）。
 """
 
 from __future__ import annotations
 
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageEvent
 from nonebot.matcher import Matcher
@@ -36,7 +43,12 @@ from ..character.models import HPInfo
 from ..config import get_config
 from ..data.characters import list_characters_by_group
 from ..data.initiative import clear_init_list, get_init_list, save_init_list
-from ..data.npc_health import delete_npc_health, get_npc_health, list_npc_health
+from ..data.npc_health import (
+    delete_npc_health,
+    get_npc_record,
+    list_npc_health,
+    save_npc_health,
+)
 from ..engine.roll.ast_engine.adapter import exec_roll_exp_unified, sift_roll_exp_and_reason
 from ..engine.roll.roll_utils import RollDiceError
 from ..initiative.models import InitiativeError, InitList
@@ -196,6 +208,8 @@ async def add_initiative_entities(
     - 同名条目重掷：旧条目被替换，并提示"你重复投掷了先攻"；
     - 绑定 QQ 的玩家重掷：替换该玩家旧条目（DicePP 依赖 get_nickname 改名
       判重，本插件直接用 owner 判重，效果一致且离线可用）。
+    - 本插件新增：NPC 以新条目入表时按需自动回满血量并给出提示
+      （DicePP 所无，见模块头「NPC 血量自动回满」）。
     """
     init_data = await get_init_list(group_id)
     if init_data is None:
@@ -211,11 +225,14 @@ async def add_initiative_entities(
     repeatted = False
     same_warn = ""
     feedback_list: List[str] = []
+    #: NPC 自动回满条目：(名称, 回满值, 上次值)
+    refill_list: List[Tuple[str, str, str]] = []
     for roll_str, (name_list, roll_val) in final_result_dict.items():
         for name in name_list:
             # 按现状（含将被替换的旧条目）扫描重复/同值提示
             has_same = False
             same: List[str] = []
+            already_present = any(e.name == name for e in init_data.entities)
             for entity in init_data.entities:
                 if (owner_id and entity.owner == owner_id) or entity.name == name:
                     repeatted = True
@@ -244,6 +261,11 @@ async def add_initiative_entities(
                 same_warn += "\n" + text.TXT_INIT_ENTITY_SAME_LIST.format(
                     entity_list=name + sames
                 )
+            # NPC 新条目入表：按需自动回满（同名重掷不触发）
+            if not owner_id and not already_present:
+                refilled = await _auto_refill_npc_health(name, group_id)
+                if refilled is not None:
+                    refill_list.append(refilled)
         feedback_list.append(text.TXT_INIT_ROLL.format(
             name=", ".join(name_list), init_result=roll_str
         ))
@@ -256,9 +278,44 @@ async def add_initiative_entities(
     feedback += roll_feedback
     if same_warn:
         feedback += "\n" + text.TXT_INIT_ENTITY_SAME + same_warn
+    if refill_list:
+        if len(refill_list) == 1:
+            refill_name, now_hp, last_hp = refill_list[0]
+            feedback += "\n" + text.TXT_INIT_NPC_REFILL_ONE.format(
+                name=refill_name, hp_info=now_hp, last_hp=last_hp
+            )
+        else:
+            items = "、".join(
+                f"{name} {now_hp}（上次 {last_hp}）"
+                for name, now_hp, last_hp in refill_list
+            )
+            feedback += "\n" + text.TXT_INIT_NPC_REFILL_MULTI.format(items=items)
 
     await save_init_list(init_data)
     return feedback
+
+
+async def _auto_refill_npc_health(
+    name: str, group_id: int | str
+) -> Optional[Tuple[str, str, str]]:
+    """NPC 以新条目入先攻表时按需回满血量，返回 (名称, 回满值, 上次值)。
+
+    仅处理「未标记跨战斗保持、已设最大值、当前值低于最大值」的记录——默认
+    语义为同名 NPC 在新一场战斗中视为新个体；``.npc 持久`` 标记的记录跳过。
+    未回满（无记录 / 已保持 / 已满 / 纯损失记录）返回 None。
+    """
+    record = await get_npc_record(group_id, name)
+    if record is None or record.persistent:
+        return None
+    hp_info = record.hp_info
+    if hp_info.hp_max <= 0 or hp_info.hp_cur >= hp_info.hp_max:
+        return None
+    last_hp = f"{hp_info.hp_cur}/{hp_info.hp_max}"
+    hp_info.hp_cur = hp_info.hp_max
+    hp_info.hp_temp = 0
+    hp_info.is_alive = True
+    await save_npc_health(group_id, name, hp_info)
+    return name, f"{hp_info.hp_cur}/{hp_info.hp_max}", last_hp
 
 
 # =========================================================================
@@ -394,9 +451,10 @@ async def _get_existing(event: GroupMessageEvent) -> InitList:
 async def cleanup_temp_npc_health(group_id: int | str) -> None:
     """清空先攻表/新建战斗轮前，删除 NPC 的「临时血量」条目（对齐 DicePP）。
 
-    仅清理先攻表中无主（NPC）且 hp_max==0 的临时血量——多为伤害记录中途
-    留下的条目；已设置最大值的怪物血量保留（跨战斗复用）。.init clr 与 .br
-    共用本函数（.br 与 .init clr 语义等价，仅播报不同）。
+    仅清理先攻表中无主（NPC）、未设置最大值（hp_max==0）且**未标记跨战斗
+    保持**的临时血量——多为伤害记录中途留下的条目；已设置最大值的怪物血量
+    与 ``.npc 持久`` 标记的条目均保留（跨战斗复用）。.init clr 与 .br 共用
+    本函数（.br 与 .init clr 语义等价，仅播报不同）。
     """
     init_data = await get_init_list(group_id)
     if init_data is None:
@@ -405,8 +463,12 @@ async def cleanup_temp_npc_health(group_id: int | str) -> None:
         if entity.owner:
             continue
         try:
-            hp_info = await get_npc_health(group_id, entity.name)
-            if hp_info is not None and hp_info.hp_max == 0:
+            record = await get_npc_record(group_id, entity.name)
+            if (
+                record is not None
+                and record.hp_info.hp_max == 0
+                and not record.persistent
+            ):
                 await delete_npc_health(group_id, entity.name)
         except Exception:  # noqa: BLE001 - 清理失败不阻塞清空流程（对齐 DicePP）
             pass

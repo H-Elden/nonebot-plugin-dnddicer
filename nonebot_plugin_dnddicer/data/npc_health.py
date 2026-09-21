@@ -52,26 +52,69 @@ async def _dump_locked(data: Dict[str, Dict[str, Any]]) -> None:
     await asyncio.to_thread(dump_versioned_dict, path, data)
 
 
-async def get_npc_health(group_id: int | str, name: str) -> Optional[HPInfo]:
-    """读取某群某名称 NPC 的血量（无记录或数据损坏返回 None）。"""
+async def get_npc_record(group_id: int | str, name: str) -> Optional[NPCHealth]:
+    """读取某群某名称的完整 NPC 血量条目（无记录或数据损坏返回 None）。"""
     async with _get_lock():
         data = await _load_if_needed()
         raw = data.get(_key(group_id, name))
     if raw is None:
         return None
     try:
-        return NPCHealth.model_validate(raw).hp_info
+        return NPCHealth.model_validate(raw)
     except Exception:  # noqa: BLE001 - 脏数据按无记录处理
         return None
 
 
-async def save_npc_health(group_id: int | str, name: str, hp_info: HPInfo) -> None:
-    """保存/覆盖某群某名称 NPC 的血量。"""
-    record = NPCHealth(group_id=str(group_id), name=name, hp_info=hp_info)
+async def get_npc_health(group_id: int | str, name: str) -> Optional[HPInfo]:
+    """读取某群某名称 NPC 的血量（无记录或数据损坏返回 None）。"""
+    record = await get_npc_record(group_id, name)
+    return record.hp_info if record is not None else None
+
+
+async def save_npc_health(
+    group_id: int | str,
+    name: str,
+    hp_info: HPInfo,
+    persistent: Optional[bool] = None,
+) -> None:
+    """保存/覆盖某群某名称 NPC 的血量。
+
+    ``persistent`` 为 None 时**继承已有条目的跨战斗保持标记**——常规血量
+    保存路径（.hp 结算）不会抹掉 ``.npc 持久`` 状态；条目不存在时视为 False。
+    """
     async with _get_lock():
         data = await _load_if_needed()
-        data[_key(group_id, name)] = record.model_dump(mode="json")
+        key = _key(group_id, name)
+        if persistent is None:
+            existing = data.get(key)
+            persistent = (
+                bool(existing.get("persistent")) if isinstance(existing, dict) else False
+            )
+        record = NPCHealth(
+            group_id=str(group_id), name=name, hp_info=hp_info, persistent=persistent
+        )
+        data[key] = record.model_dump(mode="json")
         await _dump_locked(data)
+
+
+async def set_npc_persistent(
+    group_id: int | str, name: str, persistent: bool
+) -> bool:
+    """设置某群某名称 NPC 的跨战斗保持标记；条目不存在返回 False。"""
+    async with _get_lock():
+        data = await _load_if_needed()
+        key = _key(group_id, name)
+        raw = data.get(key)
+        if raw is None:
+            return False
+        try:
+            record = NPCHealth.model_validate(raw)
+        except Exception:  # noqa: BLE001 - 脏数据视为无记录
+            return False
+        record.persistent = persistent
+        data[key] = record.model_dump(mode="json")
+        await _dump_locked(data)
+        return True
 
 
 async def delete_npc_health(group_id: int | str, name: str) -> None:

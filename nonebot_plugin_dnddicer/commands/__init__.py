@@ -15,6 +15,7 @@
 - character.py     角色卡与检定（.角色卡/.状态 + 检定/豁免/攻击 点命令，已落地）
 - dnd.py           属性生成（.dnd 4D6K3 掷点，已落地；标准购点另行规划）
 - hp.py            HP 管理（.hp / .长休，群内共享、多目标伤害/治疗，已落地）
+- npc.py           NPC 血量跨战斗保持开关（.npc 持久 / .npc 临时，已落地）
 - initiative.py    先攻列表（.init/.ri/.先攻 + .先攻检定 联动入表，已落地）
 - battle.py        战斗轮（.br/.ed/.回合/.轮次，已落地）
 - bot.py           .bot 插件信息服务与群聊服务开关（2026-09-09 宿主新需求）
@@ -28,6 +29,7 @@ from . import character  # noqa: F401  # .角色卡/.状态 + 检定/豁免/攻�
 from . import dnd  # noqa: F401  # .dnd 属性生成
 from . import group_config  # noqa: F401  # .dset 群默认骰面
 from . import hp  # noqa: F401  # .hp / .长休 HP 管理
+from . import npc  # noqa: F401  # .npc 持久/.npc 临时 NPC 血量跨战斗保持开关
 from . import initiative  # noqa: F401  # .init/.ri/.先攻 先攻列表
 from . import battle  # noqa: F401  # .br/.ed/.回合/.轮次 战斗轮
 from . import bot  # noqa: F401  # .bot 插件信息与群聊服务开关
