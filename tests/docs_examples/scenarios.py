@@ -20,6 +20,14 @@ quickstart_bot_on = Scene(
     ],
 )
 
+quickstart_bot_info = Scene(
+    id="quickstart_bot_info",
+    title="查看插件信息与本群服务状态",
+    steps=[
+        Step("白鸦", "@屠龙骰 .bot", gate="real"),
+    ],
+)
+
 cast_setup = Scene(
     id="cast_setup",
     title="建卡：四名玩家登记角色卡",
@@ -43,9 +51,21 @@ quickstart_first_roll = Scene(
     ],
 )
 
+#: 时间线末尾：群主关闭本群服务（演示收尾）。
+#: 该场景必须压轴——服务关闭后本群不再响应其他命令；补新场景时请插在它之前。
+quickstart_bot_off = Scene(
+    id="quickstart_bot_off",
+    title="群主关闭本群服务",
+    steps=[
+        Step("白鸦", "@屠龙骰 .bot off", gate="real"),
+    ],
+)
+
 #: 时间线（顺序执行；后续按页补场景，注意保持剧情顺序）
 TIMELINE = [
     quickstart_bot_on,
+    quickstart_bot_info,
     cast_setup,
     quickstart_first_roll,
+    quickstart_bot_off,  # 压轴：服务关闭后本群不再响应其他命令
 ]

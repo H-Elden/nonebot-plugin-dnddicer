@@ -29,6 +29,7 @@ BASELINE_DIR = Path(__file__).resolve().parent / "baseline"
 #: 已按示例团重写、纳入比对的页面（随逐页重写扩充）
 SYNCED_PAGES = [
     "guide/cast.md",
+    "guide/quickstart.md",
 ]
 
 _OPEN_PATTERN = re.compile(r"^:::\s*chat\s*$")
