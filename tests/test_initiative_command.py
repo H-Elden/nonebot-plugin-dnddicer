@@ -655,3 +655,112 @@ async def test_ri_stray_mention_not_executed(app: App):
         hint,
     )
     assert await get_init_list(g) is None
+
+
+# =========================================================================
+# .init 子指令的 @ 目标（2026-09-22：按归属定位条目）
+# =========================================================================
+
+
+@pytest.mark.asyncio
+async def test_init_delete_mention_survives_rename(app: App):
+    """.init del @玩家：按归属定位条目——角色卡改名后仍能删除。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.initiative import initiative_matcher
+
+    g = 100040
+    await _expect(
+        app, char_matcher,
+        _event(g, f".角色卡记录 {_RECORD_SIMPLE}", user_id=30020),
+        "角色卡已设置",
+    )
+    await _expect(
+        app, initiative_matcher,
+        _mention_event(g, ".ri20 ", MessageSegment.at(30020), user_id=30000),
+        "伊丽莎白的先攻值是 20",
+    )
+    # 改名后条目名仍是入表时的快照：@ 按 owner 定位照常删除
+    await _expect(
+        app, char_matcher,
+        _event(
+            g,
+            ".角色卡记录 $姓名$ 白伊丽莎\n$等级$ 1\n$属性$ 10/10/10/10/10/10",
+            user_id=30020,
+        ),
+        "角色卡已设置",
+    )
+    await _expect(
+        app, initiative_matcher,
+        _mention_event(g, ".init del ", MessageSegment.at(30020), user_id=30000),
+        "已从先攻列表中移除 伊丽莎白",
+    )
+    await _expect(app, initiative_matcher, _event(g, ".init"), "没有找到先攻列表")
+
+
+@pytest.mark.asyncio
+async def test_init_first_mention(app: App):
+    """.init first @玩家：同先攻值内提前该玩家条目。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.initiative import initiative_matcher
+
+    g = 100041
+    await _expect(
+        app, char_matcher,
+        _event(g, f".角色卡记录 {_RECORD_SIMPLE}", user_id=30021),
+        "角色卡已设置",
+    )
+    await _expect(app, initiative_matcher, _event(g, ".ri10 地精"), "地精的先攻值是 10")
+    await _expect(
+        app, initiative_matcher,
+        _mention_event(g, ".ri10 ", MessageSegment.at(30021), user_id=30000),
+        "伊丽莎白的先攻值是 10\n"
+        "出现相同先攻值，请DM来决定由谁先行动，若不决定将保持默认顺序：\n"
+        "回复.init first 名称 将该对象提前（同先攻值: 伊丽莎白 / 地精）",
+    )
+    await _expect(
+        app, initiative_matcher,
+        _mention_event(g, ".init first ", MessageSegment.at(30021), user_id=30000),
+        "伊丽莎白的先攻已在相同先攻值中被提前",
+    )
+    await _expect(
+        app, initiative_matcher, _event(g, ".init"),
+        "先攻列表如下: \n当前是第1轮,伊丽莎白的回合\n"
+        "1.伊丽莎白 先攻:10 \n2.地精 先攻:10",
+    )
+
+
+@pytest.mark.asyncio
+async def test_init_swap_mention_and_not_in_list(app: App):
+    """.init swap @玩家/兽人 互换；@ 目标不在先攻表 → 真 @ 段提示。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.initiative import initiative_matcher
+
+    g = 100042
+    await _expect(
+        app, char_matcher,
+        _event(g, f".角色卡记录 {_RECORD_SIMPLE}", user_id=30022),
+        "角色卡已设置",
+    )
+    await _expect(app, initiative_matcher, _event(g, ".ri20 兽人"), "兽人的先攻值是 20")
+    await _expect(
+        app, initiative_matcher,
+        _mention_event(g, ".ri5 ", MessageSegment.at(30022), user_id=30000),
+        "伊丽莎白的先攻值是 5",
+    )
+    await _expect(
+        app, initiative_matcher,
+        _mention_event(
+            g, ".init swap ", MessageSegment.at(30022), "/兽人", user_id=30000
+        ),
+        "伊丽莎白与兽人的先攻值已互换",
+    )
+    await _expect(
+        app, initiative_matcher, _event(g, ".init"),
+        "先攻列表如下: \n当前是第1轮,伊丽莎白的回合\n"
+        "1.伊丽莎白 先攻:20 \n2.兽人 先攻:5",
+    )
+    await _expect(
+        app, initiative_matcher,
+        _mention_event(g, ".init del ", MessageSegment.at(39997), user_id=30000),
+        Message(MessageSegment.at("39997")) + " 不在先攻列表中",
+    )

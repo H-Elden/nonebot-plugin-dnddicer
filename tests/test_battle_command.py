@@ -50,6 +50,17 @@ async def _seed(group_id: int, pairs: list[tuple[str, int]], owner: str = ""):
     await save_init_list(init)
 
 
+async def _seed_mixed(group_id: int, entities: list[tuple[str, str, int]]):
+    """按 (名称, 归属QQ, 先攻值) 播种先攻表（PC 与 NPC 混排）。"""
+    from nonebot_plugin_dnddicer.data.initiative import save_init_list
+    from nonebot_plugin_dnddicer.initiative.models import InitList
+
+    init = InitList(group_id=str(group_id))
+    for name, owner, val in entities:
+        init.add_entity(name, owner, val)
+    await save_init_list(init)
+
+
 # =========================================================================
 # .br 与空表提示
 # =========================================================================
@@ -280,4 +291,34 @@ async def test_turn_advance_multiple(app: App):
     await _expect(
         app, turn_matcher, _event(110010, ".回合+2"),
         "新的一轮，现在是第2轮。\n现在是兽人的回合。",
+    )
+
+
+@pytest.mark.asyncio
+async def test_turn_jump_mention(app: App):
+    """.回合 @玩家 → 按归属定位条目并 @ 提醒；不在先攻表 → 真 @ 段提示。"""
+    from nonebot_plugin_dnddicer.commands.battle import turn_matcher
+
+    g = 110020
+    await _seed_mixed(g, [("地精", "", 20), ("伊丽莎白", "30023", 10)])
+    event = fake_group_message_event_v11(
+        message=Message(".回合 ") + MessageSegment.at(30023),
+        group_id=g,
+        user_id=10001,
+    )
+    await _expect(
+        app, turn_matcher, event,
+        Message("现在是伊丽莎白的回合。请玩家")
+        + MessageSegment.at("30023")
+        + "开始行动。",
+    )
+    # 未入表的 @ 目标：提示且不改变回合指针
+    event = fake_group_message_event_v11(
+        message=Message(".回合 ") + MessageSegment.at(39996),
+        group_id=g,
+        user_id=10001,
+    )
+    await _expect(
+        app, turn_matcher, event,
+        Message(MessageSegment.at("39996")) + " 不在先攻列表中",
     )

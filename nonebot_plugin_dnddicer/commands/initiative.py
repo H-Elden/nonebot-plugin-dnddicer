@@ -40,9 +40,9 @@ NPC 血量自动回满（2026-09-21，DicePP 所无的有意新增）：
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
-from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, MessageEvent
+from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, Message, MessageEvent
 from nonebot.matcher import Matcher
 from nonebot.plugin import on_message
 from nonebot.rule import Rule
@@ -67,6 +67,7 @@ _HELP_INIT = (
     "显示先攻列表：.init ([可选指令]) [可选指令]:clr 清空先攻列表 del 删除指定"
     "先攻条目 first/fst 提前同值条目 swap 交换两个条目\n"
     "del指令支持部分匹配\n"
+    "del/first/swap 的目标也支持 @玩家（按归属定位条目，改名后仍有效）\n"
     "hp信息也会在先攻列表上显示\n"
     "NPC血量（.hp 名称 ...）随条目展示；清空/删除条目时自动清理\n"
     "示例:\n"
@@ -74,6 +75,7 @@ _HELP_INIT = (
     ".先攻清除 //清空先攻列表\n"
     ".先攻删除地精 //在先攻列表中删除地精\n"
     ".init del 地精a/地精b/地精c //在先攻列表中删除地精abc\n"
+    ".init del @玩家 //按归属移除该玩家的条目（改名后仍可删除）\n"
     ".init first 地精 //将地精在相同先攻值中提前\n"
     ".init swap 地精/兽人 //互换地精与兽人的先攻值与位置\n"
     "如需查看投掷先攻相关的指令请输入.help ri\n"
@@ -193,6 +195,30 @@ def find_valid_entities(name_list: List[str], global_list: List[str]) -> Tuple[L
             else:
                 result_list.append(possible_res[0])
     return result_list, feedback
+
+
+async def _resolve_mention_entities(
+    parts: List[str], init_data: InitList
+) -> Tuple[List[str], List[Union[str, Message]]]:
+    """把目标列表中的 ``@<qq>`` 标记解析为条目名（按 owner 定位）。
+
+    返回 (解析后的目标列表, 失败提示行)：@ 指向的玩家不在先攻表时给出
+    「不在先攻列表中」提示（真 @ 段），该目标不再参与名称匹配；按 owner
+    定位比名称更稳——角色卡改名后仍能删除/提前/交换。
+    """
+    resolved: List[str] = []
+    errors: List[Union[str, Message]] = []
+    for part in parts:
+        qq = onebot_v11.parse_mention_token(part)
+        if qq is None:
+            resolved.append(part)
+            continue
+        entity = next((e for e in init_data.entities if e.owner == qq), None)
+        if entity is None:
+            errors.append(onebot_v11.at_reply(qq, text.TXT_MENTION_NOT_IN_INIT))
+        else:
+            resolved.append(entity.name)
+    return resolved, errors
 
 
 # =========================================================================
@@ -594,7 +620,11 @@ async def handle_initiative(bot: Bot, event: MessageEvent) -> None:
 
     # ── 删除（NPC 条目一并删除其血量记录，对齐 DicePP）
     if mode == "delete":
-        name_list = [n.strip() for n in sub_arg.split("/")]
+        raw_list = [n.strip() for n in sub_arg.split("/") if n.strip()]
+        # @ 目标按 owner 定位条目（玩家条目仅移除条目，不涉及 NPC 血量）
+        name_list, mention_errors = await _resolve_mention_entities(
+            raw_list, init_data
+        )
         valid_list, feedback = find_valid_entities(name_list, entity_names)
         deleted: List[str] = []
         for valid_name in valid_list:
@@ -612,11 +642,19 @@ async def handle_initiative(bot: Bot, event: MessageEvent) -> None:
             for name_del in deleted:
                 feedback += text.TXT_INIT_INFO_DEL.format(entity_list=name_del) + "\n"
             await save_init_list(init_data)
-        await initiative_matcher.finish(feedback.strip())
+        lines: List[Union[str, Message]] = [*mention_errors]
+        if feedback.strip():
+            lines.append(feedback.strip())
+        await initiative_matcher.finish(base.join_lines(lines))
 
     # ── first：同先攻值内提前
     if mode == "first":
-        valid_list, feedback = find_valid_entities([sub_arg.strip()], entity_names)
+        first_targets, mention_errors = await _resolve_mention_entities(
+            [sub_arg.strip()], init_data
+        )
+        if mention_errors:
+            await initiative_matcher.finish(base.join_lines(mention_errors))
+        valid_list, feedback = find_valid_entities(first_targets, entity_names)
         if feedback:
             await initiative_matcher.finish(feedback.strip())
         name_first = valid_list[0]
@@ -646,6 +684,13 @@ async def handle_initiative(bot: Bot, event: MessageEvent) -> None:
         else:
             target_l = await resolve_self_name(bot, event, event.user_id)
             target_r = swap_arg
+        # @ 目标按 owner 定位条目（单参数形式中自己一侧恒为发送者）
+        swap_targets, mention_errors = await _resolve_mention_entities(
+            [target_l, target_r], init_data
+        )
+        if mention_errors:
+            await initiative_matcher.finish(base.join_lines(mention_errors))
+        target_l, target_r = swap_targets
         name_l, feedback_l = find_valid_entities([target_l], entity_names)
         name_r, feedback_r = find_valid_entities([target_r], entity_names)
         if feedback_l or feedback_r:

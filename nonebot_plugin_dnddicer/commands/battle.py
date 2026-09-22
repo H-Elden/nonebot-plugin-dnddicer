@@ -8,7 +8,8 @@ data/initiative.py 的 InitList（实体列表 + round/turn 指针），本模�
 - ``.br`` / ``.战斗轮``：新建战斗轮（清空本群先攻表与指针，重新开局）；
 - ``.回合`` / ``.轮次``（无参数）：查看当前轮/回合；
 - ``.回合 +n / -n / =n / n``：回合前移/后移/直接跳转（溢出自动进位/退位）；
-- ``.回合 名字``：按名字跳转（精确 → 模糊，无/多结果报错）；
+- ``.回合 名字``：按名字跳转（精确 → 模糊，无/多结果报错）；``.回合 @玩家``
+  按归属定位该玩家的条目（改名/同名歧义不受影响，见 2026-09-22 的 @ 目标支持）；
 - ``.轮次 n``：对轮次做查看/加减/跳转；
 - ``.ed`` / ``.结束``：结束当前回合——播报 + 自动推进下一位；一轮走完自动
   进位播报；轮到绑定 QQ 的玩家时输出 @ 提醒。
@@ -26,7 +27,7 @@ from nonebot.matcher import Matcher
 
 from ..data.initiative import clear_init_list, get_init_list, save_init_list
 from ..initiative.models import InitList
-from ..platform.onebot_v11 import at_segment
+from ..platform.onebot_v11 import at_reply, at_segment, parse_mention_token
 from . import base, text
 from .initiative import cleanup_temp_npc_health
 
@@ -40,8 +41,10 @@ _HELP_BR = (
     ".ed 或 .结束 在自己回合中宣言回合结束"
 )
 _HELP_TURN = (
-    "查看或修改当前回合：.回合 / .回合+1 / .回合-1 / .回合=2 / .回合 名字\n"
-    "名字支持模糊搜索；回合越界会自动进位/退位轮次。"
+    "查看或修改当前回合：.回合 / .回合+1 / .回合-1 / .回合=2 / .回合 名字"
+    " / .回合 @玩家\n"
+    "名字精确优先再模糊；@玩家 按归属定位条目（改名不受影响）。"
+    "回合越界会自动进位/退位轮次。"
 )
 _HELP_ROUND = (
     "查看或修改当前轮次：.轮次 / .轮次+1 / .轮次-1 / .轮次=3\n"
@@ -147,7 +150,7 @@ def _find_turn_target(intent: str, names: List[str]) -> "tuple[Optional[str], st
 
 async def _handle_turn_round(event: GroupMessageEvent, mode: str) -> None:
     """处理 .回合/.轮次（mode: "turn" / "round"，语义对齐 DicePP）。"""
-    arg_str = (base.get_command_rest(event) or "").strip()
+    arg_str = (base.get_command_rest_with_mentions(event) or "").strip()
     init_data = await _load_battle(event)
     if not init_data.entities:
         await turn_matcher.finish(text.TXT_BR_NO_INIT)
@@ -186,9 +189,20 @@ async def _handle_turn_round(event: GroupMessageEvent, mode: str) -> None:
                 else:
                     target_round += mod_value
         else:
-            # 名字跳转（精确 → 模糊）
+            # 名字跳转（精确 → 模糊）；@玩家 按归属定位条目（改名不受影响）
             name_list = [entity.name for entity in init_data.entities]
-            target, error = _find_turn_target(arg_str, name_list)
+            target_qq = parse_mention_token(arg_str)
+            if target_qq is not None:
+                mention_entity = next(
+                    (e for e in init_data.entities if e.owner == target_qq), None
+                )
+                if mention_entity is None:
+                    await turn_matcher.finish(
+                        at_reply(target_qq, text.TXT_MENTION_NOT_IN_INIT)
+                    )
+                target, error = mention_entity.name, ""
+            else:
+                target, error = _find_turn_target(arg_str, name_list)
             if error:
                 await turn_matcher.finish(error)
             target_turn = name_list.index(target) + 1  # type: ignore[arg-type]

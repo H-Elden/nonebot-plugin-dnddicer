@@ -940,8 +940,8 @@ async def test_hp_mention_no_char_guides(app: App):
         app, hp_matcher,
         _mention_event(".hp del ", MessageSegment.at(23015), user_id=23000),
         Message(MessageSegment.at("23015"))
-        + " 是玩家角色卡，.hp del/clr 仅用于删除NPC血量记录；"
-        "如需删除整张角色卡请用 .角色卡清除",
+        + " 是玩家角色卡，.hp del/clr 仅用于删除NPC血量记录"
+        "（移除玩家先攻条目请用 .init del 该玩家）",
     )
 
 

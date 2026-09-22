@@ -138,10 +138,10 @@ TXT_MENTION_RI_POS_HINT = "未执行：目标请写在表达式右侧，例如 .
 TXT_MENTION_RI_BATCH = "@ 目标不支持 N# 批量写法，请直接写条目名称"
 #: 提及者不在先攻列表中（真 @ 消息段 + 本句回复）
 TXT_MENTION_NOT_IN_INIT = "不在先攻列表中"
-#: .hp del 的 @ 目标命中玩家角色卡（@ 版本：不再连卡删除）
+#: .hp del 的 @ 目标命中玩家角色卡（@ 版本：不再连卡删除，引导移除先攻条目）
 TXT_HP_DEL_PC_TARGET_AT = (
-    "是玩家角色卡，.hp del/clr 仅用于删除NPC血量记录；"
-    "如需删除整张角色卡请用 .角色卡清除"
+    "是玩家角色卡，.hp del/clr 仅用于删除NPC血量记录"
+    "（移除玩家先攻条目请用 .init del 该玩家）"
 )
 #: .npc 的 @ 目标命中玩家角色卡（@ 版本）
 TXT_NPC_PC_TARGET_AT = "是玩家角色卡，不是NPC"
