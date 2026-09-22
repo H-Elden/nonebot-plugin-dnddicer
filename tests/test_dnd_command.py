@@ -401,3 +401,40 @@ def test_generate_ability_scores_deterministic():
         assert scores == [18, 18, 18, 18, 18, 18]
     finally:
         reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_dnd_uses_char_name(app: App):
+    """有角色卡时落款用角色名（统一名称回退链：角色名 → 群名片 → QQ 昵称）。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.data import characters as _chars
+    from nonebot_plugin_dnddicer.data import get_data_file
+
+    _chars._cache = None
+    path = get_data_file("characters.json")
+    if path.exists():
+        path.write_text("{}", encoding="utf-8")
+
+    group_id, user_id = 88002, 88102
+    await _expect(
+        app, char_matcher,
+        fake_group_message_event_v11(
+            message=Message(
+                ".角色卡记录 $姓名$ 伊丽莎白\n$等级$ 1\n$属性$ 10/10/10/10/10/10"
+            ),
+            group_id=group_id,
+            user_id=user_id,
+        ),
+        "角色卡已设置",
+    )
+    token = set_runtime(SequenceRuntime(_ALL_SIX))
+    try:
+        event = fake_group_message_event_v11(
+            message=Message(".dnd"), group_id=group_id, user_id=user_id
+        )
+        await _expect(
+            app, dnd_matcher, event,
+            "伊丽莎白 DND人物作成:\n108 : [18, 18, 18, 18, 18, 18]",
+        )
+    finally:
+        reset_runtime(token)

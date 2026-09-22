@@ -20,6 +20,7 @@ _LIST_GROUP = 99001
 _LIST_EMPTY_GROUP = 99002
 _INIT_GROUP = 99003
 _INIT_API_FAIL_GROUP = 99004
+_NO_NAME_GROUP = 99005
 
 
 @pytest.fixture(autouse=True)
@@ -203,7 +204,7 @@ async def test_hp_dice_heal(app: App):
 
 @pytest.mark.asyncio
 async def test_hp_list(app: App):
-    """.hp list → 列出群内所有 PC HP；无卡名成员名称回退链走群成员信息 API。"""
+    """.hp list → 列出群内所有 PC HP；无卡名成员走统一名称回退链。"""
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
 
     await _expect(app, hp_matcher, _event_in_group(_LIST_GROUP, ".hp 20/30", user_id=20010), "test: HP=20/30\n当前HP:20/30")
@@ -213,19 +214,14 @@ async def test_hp_list(app: App):
     async with app.test_matcher(hp_matcher) as ctx:
         adapter = ctx.create_adapter(base=OnebotV11Adapter)
         bot = ctx.create_bot(base=Bot, adapter=adapter)
-        # 无卡名成员逐个查询：20010 无群名片 → QQ 昵称「阿强」；
-        # 20011 群名片「铁匠铺」优先于昵称「阿花」
-        ctx.should_call_api(
-            "get_group_member_info",
-            data={"group_id": _LIST_GROUP, "user_id": 20010},
-            result={"user_id": 20010, "card": "", "nickname": "阿强"},
-        )
+        # 本人（20010）取事件自带昵称「test」（零查询）；无卡名的他人（20011）
+        # 走群成员查询：群名片「铁匠铺」优先于昵称「阿花」
         ctx.should_call_api(
             "get_group_member_info",
             data={"group_id": _LIST_GROUP, "user_id": 20011},
             result={"user_id": 20011, "card": "铁匠铺", "nickname": "阿花"},
         )
-        ctx.should_call_send(event, "阿强 HP:20/30\n铁匠铺 HP:15/25")
+        ctx.should_call_send(event, "test HP:20/30\n铁匠铺 HP:15/25")
         ctx.receive_event(bot, event)
 
 
@@ -268,7 +264,8 @@ async def test_hp_list_api_failure_falls_back(app: App):
 
     await _expect(app, hp_matcher, _event_in_group(_LIST_GROUP, ".hp 20/30", user_id=20016), "test: HP=20/30\n当前HP:20/30")
 
-    event = _event_in_group(_LIST_GROUP, ".hp list", user_id=20016)
+    # 由他人（20099）发起列表查询，触发对 20016 的群成员查询并失败
+    event = _event_in_group(_LIST_GROUP, ".hp list", user_id=20099)
     async with app.test_matcher(hp_matcher) as ctx:
         adapter = ctx.create_adapter(base=OnebotV11Adapter)
         bot = ctx.create_bot(base=Bot, adapter=adapter)
@@ -440,6 +437,33 @@ async def test_hp_target_without_char_api_failure_falls_back(app: App):
         ctx.should_call_send(
             event, "未知玩家（1270859721）: 当前HP减少9\n损失HP:0 -> 损失HP:9"
         )
+        ctx.receive_event(bot, event)
+
+
+@pytest.mark.asyncio
+async def test_hp_view_no_name_falls_back_unknown(app: App):
+    """本人无名片/昵称且群成员查询失败 → 兜底「未知玩家（QQ号）」（统一回退链末端）。"""
+    from nonebot.adapters.onebot.v11.event import Sender
+
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    g = _NO_NAME_GROUP
+    event = fake_group_message_event_v11(
+        message=Message(".hp"),
+        group_id=g,
+        user_id=20018,
+        sender=Sender(card="", nickname="", role="member"),
+    )
+    async with app.test_matcher(hp_matcher) as ctx:
+        adapter = ctx.create_adapter(base=OnebotV11Adapter)
+        bot = ctx.create_bot(base=Bot, adapter=adapter)
+        # 事件无名称字段 → 逐级回退到群成员查询，失败 → 兜底文案
+        ctx.should_call_api(
+            "get_group_member_info",
+            data={"group_id": g, "user_id": 20018},
+            exception=Exception("群成员查询失败"),
+        )
+        ctx.should_call_send(event, "找不到未知玩家（20018）的生命值信息")
         ctx.receive_event(bot, event)
 
 

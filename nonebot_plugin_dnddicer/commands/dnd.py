@@ -31,7 +31,7 @@ from __future__ import annotations
 from random import randint
 from typing import List, Tuple
 
-from nonebot.adapters.onebot.v11 import MessageEvent
+from nonebot.adapters.onebot.v11 import Bot, MessageEvent
 
 from ..character.constants import ABILITY_LIST
 from ..engine.roll.karma_runtime import get_runtime
@@ -128,7 +128,7 @@ def parse_dnd_args(rest: str) -> Tuple[int, str]:
 
 
 @dnd_matcher.handle()
-async def handle_dnd(event: MessageEvent) -> None:
+async def handle_dnd(bot: Bot, event: MessageEvent) -> None:
     """处理 .dnd（群聊/私聊均可用，对齐 DicePP 端口语义）。"""
     rest = base.get_command_rest(event) or ""
     times, reason = parse_dnd_args(rest)
@@ -138,7 +138,7 @@ async def handle_dnd(event: MessageEvent) -> None:
         lines.append(format_dnd_line(generate_ability_scores()))
     result = "\n".join(lines)
 
-    name = base.get_display_name(event)
+    name = await base.resolve_display_name(bot, event)
     if reason:
         feedback = text.TXT_DND_RES.format(name=name, reason=reason, result=result)
     else:
@@ -147,7 +147,7 @@ async def handle_dnd(event: MessageEvent) -> None:
 
 
 @dndx_matcher.handle()
-async def handle_dndx(event: MessageEvent) -> None:
+async def handle_dndx(bot: Bot, event: MessageEvent) -> None:
     """处理 .dndx（4D6K3 掷点并绑定属性名；群聊/私聊均可用）。"""
     rest = base.get_command_rest(event) or ""
     times, reason = parse_dnd_args(rest)
@@ -155,7 +155,7 @@ async def handle_dndx(event: MessageEvent) -> None:
     lines = [format_dndx_line(generate_ability_scores()) for _ in range(times)]
     result = "\n".join(lines)
 
-    name = base.get_display_name(event)
+    name = await base.resolve_display_name(bot, event)
     if reason:
         feedback = text.TXT_DNDX_RES.format(name=name, reason=reason, result=result)
     else:

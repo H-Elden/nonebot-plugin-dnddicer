@@ -30,7 +30,7 @@ from ..engine.roll.result import RollResult
 from ..engine.roll.roll_utils import RollDiceError
 from ..platform.onebot_v11 import send_private_msg
 from . import text
-from .base import get_command_rest, get_display_name, on_dnd_command
+from .base import get_command_rest, on_dnd_command, resolve_display_name
 from .roll_parse_args import RollParseArgs, _parse_roll_args
 
 #: 命令说明（供 .帮助 使用；文案对齐 DicePP .r 帮助）
@@ -139,7 +139,7 @@ async def handle_roll(bot: Bot, event: MessageEvent) -> None:
         # 语法/引擎错误：直接回显用户可见错误信息（DicePP 同款行为）
         await roll_matcher.finish(e.info if isinstance(e, RollDiceError) else e.message)
 
-    nickname = get_display_name(event)
+    nickname = await resolve_display_name(bot, event)
     reply = await _compose_reply(args, nickname, final_with_state)
 
     # 暗骰：群内只播报提示，结果私聊掷骰者（与 DicePP 端口语义一致）

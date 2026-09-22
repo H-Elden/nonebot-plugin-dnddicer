@@ -18,7 +18,7 @@ import re
 from typing import Optional, Tuple
 
 from nonebot import logger
-from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageEvent
+from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, MessageEvent
 from nonebot.matcher import Matcher
 from nonebot.plugin import on_message
 
@@ -201,7 +201,7 @@ async def handle_state(event: MessageEvent) -> None:
 
 
 @check_matcher.handle()
-async def handle_check(event: GroupMessageEvent) -> None:
+async def handle_check(bot: Bot, event: GroupMessageEvent) -> None:
     """处理检定/豁免/攻击点命令（rule 已确保命中且参数可解析）。"""
     if not isinstance(event, GroupMessageEvent):
         await check_matcher.finish(text.TXT_GROUP_ONLY)
@@ -245,7 +245,7 @@ async def handle_check(event: GroupMessageEvent) -> None:
     except AssertionError as exc:
         await check_matcher.finish(str(exc))
 
-    name = character.name or base.get_display_name(event)
+    name = await base.resolve_display_name(bot, event, char_name=character.name)
     # 展示名：攻击/豁免用原名（敏捷攻击/敏捷豁免），属性/技能/先攻追加「检定」
     if check_name in ATTACK_LIST or check_name in SAVING_LIST:
         display_item = check_name

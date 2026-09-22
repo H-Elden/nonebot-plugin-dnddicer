@@ -287,3 +287,39 @@ async def test_roll_keep_count_exceeding_dice_hint(app: App, roll_matcher):
     """手输超量取点（.r2d20kl120）：报可读错误而非静默两骰求和。"""
     event = fake_group_message_event_v11(message=Message(".r2d20kl120"))
     await _expect_send(app, roll_matcher, event, "取点数不能超过骰子数量：120 > 2")
+
+
+@pytest.mark.asyncio
+async def test_roll_uses_char_name(app: App, roll_matcher):
+    """有角色卡时落款用角色名（统一名称回退链：角色名 → 群名片 → QQ 昵称）。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.data import characters as _chars
+    from nonebot_plugin_dnddicer.data import get_data_file
+
+    _chars._cache = None
+    path = get_data_file("characters.json")
+    if path.exists():
+        path.write_text("{}", encoding="utf-8")
+
+    group_id, user_id = 88001, 88101
+    await _expect_send(
+        app, char_matcher,
+        fake_group_message_event_v11(
+            message=Message(
+                ".角色卡记录 $姓名$ 伊丽莎白\n$等级$ 1\n$属性$ 10/10/10/10/10/10"
+            ),
+            group_id=group_id,
+            user_id=user_id,
+        ),
+        "角色卡已设置",
+    )
+    token = set_runtime(SequenceRuntime([5, 2]))
+    try:
+        event = fake_group_message_event_v11(
+            message=Message(".r 2d6+3"), group_id=group_id, user_id=user_id
+        )
+        await _expect_send(
+            app, roll_matcher, event, "伊丽莎白 的掷骰结果为 2D6+3=[5+2]+3=10"
+        )
+    finally:
+        reset_runtime(token)

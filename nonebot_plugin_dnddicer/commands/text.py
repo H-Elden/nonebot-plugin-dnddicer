@@ -62,6 +62,10 @@ TXT_DNDX_RES_NOREASON = "{name} DND人物作成(属性绑定):\n{result}"
 
 # ── 通用 ────────────────────────────────────────────────────────────────
 TXT_GROUP_ONLY = "该指令仅在群聊中可用。"
+#: 玩家名称回退链（角色名 → 群名片 → QQ 昵称）的兜底展示名：附 QQ 号便于对不上名
+#: 时定位到具体成员（2026-09-22 修订：此前仅「未知玩家」，DM 无从判断是谁；
+#: 全项目玩家名称显示共用，见 commands/base.py resolve_display_name，NPC 除外）
+TXT_UNKNOWN_NAME = "未知玩家（{qq}）"
 # 命令处理出现未预期异常时的统一回复（详见 commands/base.py 全局兜底钩子）
 TXT_UNKNOWN_ERROR = "骰娘内部发生了错误，请联系管理员反馈。"
 
@@ -115,9 +119,6 @@ TXT_HP_DEL_PC_TARGET = "「{name}」是玩家角色卡，.hp del/clr 仅用于�
 #: .hp clr：清空本群全部 NPC 血量记录（含跨战斗保持的）
 TXT_HP_CLR_DONE = "已清空{n}条NPC血量记录"
 TXT_HP_CLR_NONE = "本群没有任何NPC生命值信息"
-#: .hp 名称回退链的兜底展示名：附 QQ 号便于对不上名时定位到具体成员
-#: （2026-09-22 修订：此前仅「未知玩家」，DM 无从判断是谁）
-TXT_HP_UNKNOWN_NAME = "未知玩家（{qq}）"
 
 # ── NPC 血量跨战斗保持 .npc（群级、按名称）────────────────────────────────
 TXT_NPC_PERSIST_ON = "已将NPC「{name}」设为跨战斗保持血量（.ri 再次入表时不再自动回满）"

@@ -34,7 +34,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Tuple
 
-from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageEvent
+from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, MessageEvent
 from nonebot.matcher import Matcher
 from nonebot.plugin import on_message
 from nonebot.rule import Rule
@@ -134,19 +134,16 @@ initiative_matcher: Matcher = on_message(
 
 
 async def resolve_self_name(
-    event: MessageEvent, group_id: int | str, user_id: int | str
+    bot: Bot, event: MessageEvent, user_id: int | str
 ) -> str:
-    """返回绑定玩家自身的先攻展示名：角色卡姓名 → 事件群名片/昵称 → QQ 号。
+    """返回绑定玩家自身的先攻展示名（入表名快照）。
 
-    先攻检定与 .ri（无显式名称）共用本解析，保证同一玩家的条目名一致；
-    与 DicePP 的差异：不调用 get_nickname API 实时刷新，取入表时快照。
+    统一走 base.resolve_display_name 回退链：角色名 → 群名片 → QQ 昵称 →
+    「未知玩家（QQ号）」；先攻检定与 .ri（无显式名称）共用本解析，保证同一
+    玩家的条目名一致；与 DicePP 的差异：不调用 get_nickname API 实时刷新，
+    取入表时快照。
     """
-    from ..data.characters import get_character
-
-    character = await get_character(group_id, user_id)
-    if character is not None and character.is_init and character.name:
-        return character.name
-    return base.get_display_name(event)
+    return await base.resolve_display_name(bot, event, user_id)
 
 
 def find_valid_entities(name_list: List[str], global_list: List[str]) -> Tuple[List[str], str]:
@@ -362,7 +359,9 @@ def _roll_once(exp_str: str) -> Tuple[int, str]:
     return res.get_val(), res.get_complete_result()
 
 
-async def _roll_initiative(event: GroupMessageEvent, arg_str: str) -> None:
+async def _roll_initiative(
+    bot: Bot, event: GroupMessageEvent, arg_str: str
+) -> None:
     """执行 .ri：掷骰并把结果加入先攻表；失败以用户可见文案直接回复。"""
     exp_str, name = _parse_ri_arg(arg_str)
     owner_id = ""
@@ -425,7 +424,7 @@ async def _roll_initiative(event: GroupMessageEvent, arg_str: str) -> None:
     result_dict: Dict[str, Tuple[int, str]] = {}
     for n, (val, display) in name_dict.items():
         if n == "self" or n == "我":
-            n = await resolve_self_name(event, event.group_id, event.user_id)
+            n = await resolve_self_name(bot, event, event.user_id)
         result_dict[n] = (val, display)
 
     feedback = await add_initiative_entities(
@@ -475,7 +474,7 @@ async def cleanup_temp_npc_health(group_id: int | str) -> None:
 
 
 @initiative_matcher.handle()
-async def handle_initiative(event: MessageEvent) -> None:
+async def handle_initiative(bot: Bot, event: MessageEvent) -> None:
     """处理 .init/.先攻/.ri 命令族。"""
     if not isinstance(event, GroupMessageEvent):
         await initiative_matcher.finish(text.TXT_GROUP_ONLY)
@@ -488,7 +487,7 @@ async def handle_initiative(event: MessageEvent) -> None:
     # .ri：投掷先攻入表
     if name == "ri":
         arg_str = rest.strip()
-        await _roll_initiative(event, arg_str)
+        await _roll_initiative(bot, event, arg_str)
         return
 
     # .init/.先攻 子指令
@@ -596,7 +595,7 @@ async def handle_initiative(event: MessageEvent) -> None:
         elif " " in swap_arg:
             target_l, target_r = (p.strip() for p in swap_arg.split(" ", 1))
         else:
-            target_l = await resolve_self_name(event, event.group_id, event.user_id)
+            target_l = await resolve_self_name(bot, event, event.user_id)
             target_r = swap_arg
         name_l, feedback_l = find_valid_entities([target_l], entity_names)
         name_r, feedback_r = find_valid_entities([target_r], entity_names)

@@ -31,6 +31,7 @@ from nonebot.rule import Rule, to_me
 
 from ..config import get_config
 from ..data import service_state
+from ..data.characters import get_character
 from ..platform import onebot_v11
 from . import text
 
@@ -191,17 +192,44 @@ def get_command_rest(event: MessageEvent) -> Optional[str]:
     return parsed[2] if parsed else None
 
 
-def get_display_name(event: MessageEvent) -> str:
-    """获取发送者展示昵称：事件自带群名片/昵称 → QQ 号。
+async def resolve_display_name(
+    bot: Bot,
+    event: MessageEvent,
+    user_id: int | str | None = None,
+    char_name: str = "",
+) -> str:
+    """统一的玩家展示名回退链：角色名 → 群名片 → QQ 昵称 → 「未知玩家（QQ号）」。
 
-    说明：DicePP 无自设昵称时回退到 QQ 号；本插件优先使用消息事件自带的
-    群名片/昵称字段（离线可用、无需额外 API 调用），最后回退 QQ 号。
-    onebot v11 事件字段读取收敛于 platform/onebot_v11。
+    本插件所有「查询名称用于显示」的场景共用本函数（NPC 除外——其名称由
+    用户指定，不入此链，见 commands/npc.py 与 commands/hp.py 的 NPC 分支）。
+    默认解析事件发送者本人；传 ``user_id`` 可解析他人（此时群名片/昵称需
+    经 ``get_group_member_info`` 查询，失败则回退兜底文案）。``char_name``
+    可由调用方传入已取到的角色名，避免重复查卡。
+
+    离线可用性：本人名称取事件自带字段（零查询）；仅「查角色卡」与「查他人
+    群名片」才发起 IO（角色卡走内存缓存，API 失败由适配层吞掉）。私聊无群：
+    跳过角色卡与群成员查询，回退 QQ 昵称/兜底文案。
     """
-    name = onebot_v11.event_sender_nickname(event)
-    if name:
-        return name
-    return str(getattr(event, "user_id", ""))
+    uid = str(user_id if user_id is not None else getattr(event, "user_id", ""))
+    group_id = getattr(event, "group_id", None)
+    if not char_name and group_id is not None and uid:
+        character = await get_character(group_id, uid)
+        if character is not None and character.name:
+            char_name = character.name
+    if char_name:
+        return char_name
+    # 本人：事件自带群名片/昵称（离线可用）；他人只能走群成员查询
+    if uid and uid == str(getattr(event, "user_id", "")):
+        name = onebot_v11.event_sender_nickname(event)
+        if name:
+            return name
+    if group_id is not None and uid.isdigit():
+        name = await onebot_v11.get_group_member_nickname(
+            bot, int(group_id), int(uid)
+        )
+        if name:
+            return name
+    return text.TXT_UNKNOWN_NAME.format(qq=uid)
 
 
 # =========================================================================
