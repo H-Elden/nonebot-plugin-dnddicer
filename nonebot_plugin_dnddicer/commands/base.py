@@ -192,6 +192,27 @@ def get_command_rest(event: MessageEvent) -> Optional[str]:
     return parsed[2] if parsed else None
 
 
+def parse_command_with_mentions(event: MessageEvent) -> Optional[tuple[str, str, str]]:
+    """命令解析的 @ 标记化版本（命令名匹配仍基于纯文本语义）。
+
+    与 ``parse_command_text(event.get_plaintext())`` 的唯一差异：@ 段以
+    ``@<qq>`` 标记保留在文本中、命令**之前**的 @ 标记先剥离（``@小明 .hp -d4``
+    的命令名照常命中）；无 @ 时结果与纯文本解析完全一致。
+    """
+    text = onebot_v11.rebuild_text_with_mentions(event).strip()
+    return parse_command_text(onebot_v11.strip_leading_mentions(text))
+
+
+def get_command_rest_with_mentions(event: MessageEvent) -> Optional[str]:
+    """提取命令名之后的剩余参数，@ 段以 ``@<qq>`` 标记保留在参数中。
+
+    供支持 @ 目标的命令（.hp/.ri/.init/.回合/角色卡族）取参；无 @ 时与
+    ``get_command_rest`` 结果完全一致。命令规则仍基于纯文本（规则层零改动）。
+    """
+    parsed = parse_command_with_mentions(event)
+    return parsed[2] if parsed else None
+
+
 async def resolve_display_name(
     bot: Bot,
     event: MessageEvent,
