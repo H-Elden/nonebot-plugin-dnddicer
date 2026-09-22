@@ -11,6 +11,12 @@ NPC 血量条目在目标经先攻表解析时按需创建——即 NPC 需先 `
 DM 掷伤害扩展：目标名后可带 抗性/易伤 后缀（伤害减半/加倍，仅对 - 生效），
 目标以 ;（半角/全角）分隔可一次对多个目标结算 AOE；伤害表达式只掷骰一次。
 
+@ 提及目标（2026-09-22 新增）：``.hp @玩家 -4d6`` 直连该玩家在本群的角色卡
+（不走名称模糊搜索），可查看（``.hp @玩家``）、设置/治疗、抗性/易伤后缀与
+AOE 混写（``.hp @玩家;地精 -d4``）；提及者无卡时以真 @ 消息段引导建卡。
+游离 @（@ 未落在目标位置，如 ``.hp -d4 @小明``）不再静默按发送者自身结算，
+改为提示目标位置写法（见 handle_hp）。
+
 与 DicePP 的差异（2026-09-21 语义修订）：``.hp del`` / ``.hp clr`` 仅作用于
 **NPC 血量记录**——``del 名称``（多个用 / 分隔）删单个、``clr`` 清空本群全部
 （含跨战斗保持的），形状与 .init 的 del/clr 一致；上游的 del/clr 无对象时会
@@ -20,9 +26,9 @@ DM 掷伤害扩展：目标名后可带 抗性/易伤 后缀（伤害减半/加�
 from __future__ import annotations
 
 import re
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
-from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, MessageEvent
+from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, Message, MessageEvent
 
 from ..character.models import DNDCharacter, HPInfo
 from ..character.services import HPService
@@ -42,6 +48,7 @@ from ..data.npc_health import (
 from ..engine.roll.ast_engine.adapter import exec_roll_exp_unified
 from ..engine.roll.result import RollResult
 from ..engine.roll.roll_utils import RollDiceError
+from ..platform import onebot_v11
 from . import base, text
 
 # =========================================================================
@@ -60,6 +67,8 @@ _HELP = (
     ".hp +(10) -> 将自己的临时生命值增加10\n"
     ".hp +20/10 -> 先将最大HP增加10, 再将当前HP增加20\n"
     ".hp 队友A -4d6 -> 对队友A造成4d6点伤害\n"
+    "指定@玩家: .hp @玩家 -4d6 -> 对 @ 的玩家角色卡结算 (需该玩家已在本群建卡)\n"
+    "  @ 也可与名称混写: .hp @玩家;地精 -d4 (AOE); 查看: .hp @玩家 / .hp @玩家 @玩家2\n"
     "NPC/怪物: 先 .ri 名称 加入先攻表后, 可用 .hp 名称 10/10 记录其血量"
     " (先攻列表中随条目一起展示)\n"
     "NPC 血量默认每次新入先攻表时自动回满, 需要跨战斗保持用 .npc 持久 名称\n"
@@ -118,14 +127,26 @@ async def search_target(
     """在群内 PC 角色卡 / NPC 血量 / 先攻列表中模糊搜索目标。
 
     返回 (source_key, target_id)：
-    - ("pc", user_id) PC 角色卡
+    - ("pc", user_id) PC 角色卡（含 @ 标记直连——@<qq> 命中该玩家角色卡）
     - ("npc", 名称) NPC 血量条目（或无血量、但存在于先攻表的 NPC）
+    - ("at_miss", qq) @ 标记指向的玩家本群无角色卡（由调用方真 @ 段引导建卡）
     - ("multiple", "name1/name2") 多个匹配
     - ("", "") 未找到
 
     优先级（对齐 DicePP）：精确匹配 角色卡 > NPC > 先攻表；部分匹配同序
     取先到者，但后续来源的**精确**匹配可覆盖前序部分匹配。
+
+    @ 标记（2026-09-22 新增）为**直连**语义：只查该 QQ 的角色卡、不进入名称
+    模糊搜索——@ 本应无歧义，回填名称会重新落入「@ 指名的角色被同名 NPC 抢
+    匹配」的歧义。
     """
+    mention_qq = onebot_v11.parse_mention_token(target_intent)
+    if mention_qq is not None:
+        character = await get_character(group_id, mention_qq)
+        if character is not None and character.is_init:
+            return "pc", mention_qq
+        return "at_miss", mention_qq
+
     source, target_id = "", ""
 
     # 1. PC 角色卡
@@ -181,6 +202,36 @@ async def search_target(
 # =========================================================================
 
 
+def _split_target_intents(target_part: str) -> List[str]:
+    """拆分 .hp 目标段为多个目标意图。
+
+    含 @ 标记时按空白与分号（半角/全角）拆分，支持 ``.hp @玩家 地精 -d8``
+    这类 @ 与名称混写；不含 @ 时沿用既有分号语义（名称中的空白不受影响）。
+    """
+    if onebot_v11.iter_mentions(target_part):
+        return [part for part in re.split(r"[\s;；]+", target_part) if part]
+    return [part.strip() for part in re.split(r"[;；]", target_part) if part.strip()]
+
+
+def _parse_mention_targets(arg_str: str) -> Optional[List[str]]:
+    """目标段整体由 @ 标记与分隔符（空白/分号）组成时返回 QQ 列表，否则 None。
+
+    对应无操作符的查看：``.hp @小明`` / ``.hp @小明 @小红``（与
+    ``.hp @小明;@小红`` 等价）；含其他文本（名称/数值/表达式）时返回 None，
+    继续走常规的目标与表达式解析（裸名称按值表达式处理，见模块常量约定）。
+    """
+    parts = [part for part in re.split(r"[\s;；]+", arg_str.strip()) if part]
+    if not parts:
+        return None
+    qqs: List[str] = []
+    for part in parts:
+        qq = onebot_v11.parse_mention_token(part)
+        if qq is None:
+            return None
+        qqs.append(qq)
+    return qqs
+
+
 def _parse_hp_args(arg_str: str) -> Tuple[
     Optional[RollResult],  # hp_cur
     Optional[RollResult],  # hp_max
@@ -232,10 +283,15 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
     if not isinstance(event, GroupMessageEvent):
         await hp_matcher.finish(text.TXT_GROUP_ONLY)
 
-    arg_str = (base.get_command_rest(event) or "").strip()
+    rest = base.get_command_rest_with_mentions(event)
+    arg_str = (rest or "").strip()
+    mentioned_qqs = onebot_v11.list_mentions(event)
 
     # 查看自己
     if not arg_str:
+        # 游离 @（如 @小明 .hp）：不按发送者自身执行，回纠正示例
+        if mentioned_qqs:
+            await hp_matcher.finish(text.TXT_MENTION_HP_POS_HINT)
         character = await get_character(event.group_id, event.user_id)
         name = await base.resolve_display_name(
             bot, event, char_name=character.name if character else ""
@@ -279,7 +335,7 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
             await hp_matcher.finish(text.TXT_HP_CLR_NONE)
         if not del_arg:
             await hp_matcher.finish(text.TXT_HP_DEL_NO_TARGET)
-        feedback_list: List[str] = []
+        feedback_list: List[Union[str, Message]] = []
         for target_name in [n.strip() for n in del_arg.split("/") if n.strip()]:
             source_key, target_id = await search_target(target_name, event.group_id)
             if source_key == "multiple":
@@ -287,17 +343,50 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
                     name_list=target_id.split("/")
                 ))
             elif source_key == "pc":
-                feedback_list.append(
-                    text.TXT_HP_DEL_PC_TARGET.format(name=target_name)
-                )
+                # @ 目标命中玩家角色卡：以真 @ 段提示（.init del 引导见 .init 的 @ 支持）
+                target_qq = onebot_v11.parse_mention_token(target_name)
+                if target_qq is not None:
+                    feedback_list.append(
+                        onebot_v11.at_reply(target_qq, text.TXT_HP_DEL_PC_TARGET_AT)
+                    )
+                else:
+                    feedback_list.append(
+                        text.TXT_HP_DEL_PC_TARGET.format(name=target_name)
+                    )
             elif source_key == "npc":
                 await delete_npc_health(event.group_id, target_id)
                 feedback_list.append(text.TXT_HP_DEL.format(name=target_id))
+            elif source_key == "at_miss":
+                feedback_list.append(
+                    onebot_v11.at_reply(target_id, text.TXT_MENTION_NO_CHAR)
+                )
             else:
                 feedback_list.append(
                     text.TXT_HP_INFO_MISS_HINT.format(name=target_name)
                 )
-        await hp_matcher.finish("\n".join(feedback_list))
+        await hp_matcher.finish(base.join_lines(feedback_list))
+
+    # 查看 @ 目标（无操作符：.hp @小明 / .hp @小明 @小红）
+    view_qqs = _parse_mention_targets(arg_str)
+    if view_qqs is not None:
+        view_lines: List[Union[str, Message]] = []
+        for qq in view_qqs:
+            character = await get_character(event.group_id, qq)
+            if character is None or not character.is_init:
+                view_lines.append(
+                    onebot_v11.at_reply(qq, text.TXT_MENTION_NO_CHAR)
+                )
+                continue
+            name = await base.resolve_display_name(
+                bot, event, qq, char_name=character.name
+            )
+            if character.hp_info.is_init:
+                view_lines.append(text.TXT_HP_INFO.format(
+                    name=name, hp_info=character.hp_info.get_info()
+                ))
+            else:
+                view_lines.append(text.TXT_HP_INFO_MISS.format(name=name))
+        await hp_matcher.finish(base.join_lines(view_lines))
 
     # 调整 HP（流程对齐 DicePP hp_command.process_msg：先定位操作符，
     # 再剥离目标前缀，最后解析调整表达式）。操作符 = 首个 + / - / = ，
@@ -333,15 +422,19 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
         # 目标部分含 "/" 或 "(" 时视为表达式而非目标，不做剥离
         if target_part and "/" not in target_part and "(" not in target_part:
             arg_str = arg_str[cmd_index + 1:].strip()
-            # 目标以 ;（半角/全角均可）分隔，实现 AOE 多目标一次结算
-            for target_intent in re.split(r"[;；]", target_part):
-                target_intent = target_intent.strip()
+            # 目标以 ;（半角/全角）分隔实现 AOE 多目标一次结算；含 @ 标记时
+            # 空白也作为分隔符，支持 .hp @玩家 地精 -d4 这类 @ 与名称混写
+            for target_intent in _split_target_intents(target_part):
                 target_name, damage_factor = _split_target_suffix(target_intent)
                 if cmd_type != "-" and damage_factor != 1.0:
                     await hp_matcher.finish(text.TXT_HP_FACTOR_DMG_ONLY)
                 source_key, target_id = await search_target(target_name, event.group_id)
                 if source_key in ("pc", "npc"):
                     target_list.append((source_key, target_id, damage_factor))
+                elif source_key == "at_miss":
+                    await hp_matcher.finish(
+                        onebot_v11.at_reply(target_id, text.TXT_MENTION_NO_CHAR)
+                    )
                 elif source_key == "multiple":
                     names = target_id.split("/")
                     feedback = text.TXT_HP_INFO_MULTI.format(name_list=names)
@@ -351,6 +444,10 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
                     await hp_matcher.finish(feedback)
 
     if not target_list:
+        # 游离 @（.hp -d4 @小明 / .hp 20/30 @小明 / @小明 .hp -d4）：@ 未落在
+        # 目标位置时不再静默按发送者自身结算，改为提示目标位置写法、不执行
+        if mentioned_qqs:
+            await hp_matcher.finish(text.TXT_MENTION_HP_POS_HINT)
         target_list = [("pc", str(event.user_id), 1.0)]
 
     # 解析调整表达式（arg_str 已剥离目标前缀与操作符）

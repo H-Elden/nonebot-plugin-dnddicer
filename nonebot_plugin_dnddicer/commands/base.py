@@ -19,11 +19,11 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Optional
+from typing import Optional, Sequence, Union
 
 from nonebot import get_driver, logger
 from nonebot.adapters import Bot, Event
-from nonebot.adapters.onebot.v11 import MessageEvent
+from nonebot.adapters.onebot.v11 import Message, MessageEvent
 from nonebot.matcher import Matcher
 from nonebot.message import run_postprocessor
 from nonebot.plugin import on_message
@@ -211,6 +211,22 @@ def get_command_rest_with_mentions(event: MessageEvent) -> Optional[str]:
     """
     parsed = parse_command_with_mentions(event)
     return parsed[2] if parsed else None
+
+
+def join_lines(parts: Sequence[Union[str, Message]]) -> Union[str, Message]:
+    """把多行回复组装为一条消息（行间换行）。
+
+    全为纯文本时返回字符串（与既有输出完全一致，便于文案断言）；含 @ 消息段
+    （如无卡引导的真 @ 行）时返回 Message。供 @ 相关回复按行拼接的场合使用。
+    """
+    if all(isinstance(part, str) for part in parts):
+        return "\n".join(parts)  # type: ignore[arg-type]  # 上面已判定全为 str
+    message = Message()
+    for index, part in enumerate(parts):
+        if index:
+            message += "\n"
+        message += part
+    return message
 
 
 async def resolve_display_name(

@@ -669,3 +669,40 @@ async def test_npc_command_errors(app: App):
         app, npc_matcher, _event(g, ".npc 持久 爱丽丝"),
         "「爱丽丝」是玩家角色卡，不是NPC",
     )
+
+
+@pytest.mark.asyncio
+async def test_npc_mention_target(app: App):
+    """.npc 的 @ 目标：命中玩家角色卡提示不是NPC；无卡玩家给建卡引导（真 @ 段）。"""
+    from nonebot.adapters.onebot.v11 import MessageSegment
+
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.npc import npc_matcher
+
+    g = 110027
+    record = (
+        ".角色卡记录 $姓名$ 爱丽丝\n$等级$ 1\n$生命值$ 20/30\n"
+        "$属性$ 10/10/10/10/10/10"
+    )
+    await _expect(app, char_matcher, _event(g, record, user_id=40002), "角色卡已设置")
+
+    event = fake_group_message_event_v11(
+        message=Message(".npc 持久 ") + MessageSegment.at(40002),
+        group_id=g,
+        user_id=40000,
+    )
+    await _expect(
+        app, npc_matcher, event,
+        Message(MessageSegment.at("40002")) + " 是玩家角色卡，不是NPC",
+    )
+
+    event = fake_group_message_event_v11(
+        message=Message(".npc 持久 ") + MessageSegment.at(49999),
+        group_id=g,
+        user_id=40000,
+    )
+    await _expect(
+        app, npc_matcher, event,
+        Message(MessageSegment.at("49999"))
+        + " 还没有在本群建立角色卡（可用 .角色卡记录 建卡后再试）",
+    )

@@ -8,7 +8,7 @@ import nonebot
 import pytest
 from nonebug import App
 from nonebot.adapters.onebot.v11 import Adapter as OnebotV11Adapter
-from nonebot.adapters.onebot.v11 import Bot, Message
+from nonebot.adapters.onebot.v11 import Bot, Message, MessageSegment
 
 from fake_event import fake_group_message_event_v11
 
@@ -25,14 +25,16 @@ _NO_NAME_GROUP = 99005
 
 @pytest.fixture(autouse=True)
 def _clear_character_data():
-    """每个用例前清空角色卡与先攻表数据（缓存 + JSON），避免跨运行残留。"""
+    """每个用例前清空角色卡/先攻表/NPC 血量数据（缓存 + JSON），避免残留干扰。"""
     from nonebot_plugin_dnddicer.data import characters as _chars
     from nonebot_plugin_dnddicer.data import get_data_file
     from nonebot_plugin_dnddicer.data import initiative as _init
+    from nonebot_plugin_dnddicer.data import npc_health as _npc
 
     _chars._cache = None
     _init._cache = None
-    for name in ("characters.json", "initiative.json"):
+    _npc._cache = None
+    for name in ("characters.json", "initiative.json", "npc_health.json"):
         path = get_data_file(name)
         if path.exists():
             path.write_text("{}", encoding="utf-8")
@@ -791,3 +793,193 @@ async def test_hp_negative_values_clamped(app: App):
         )
     finally:
         reset_runtime(token)
+
+
+# =========================================================================
+# @ 提及目标（2026-09-22：DM 代操作玩家角色卡）
+# =========================================================================
+
+
+def _mention_event(*parts, user_id: int = 10001, group_id: int = _GROUP):
+    """构造带 @ 段的群消息事件（parts 依次拼接，可为文本或消息段）。"""
+    message = Message()
+    for part in parts:
+        message += part
+    return fake_group_message_event_v11(
+        message=message, group_id=group_id, user_id=user_id
+    )
+
+
+@pytest.mark.asyncio
+async def test_hp_mention_damage_targets_player_card(app: App):
+    """.hp @玩家 -10 → 结算到目标的角色卡；发送者不被静默扣血（@ 段不再丢失）。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+    from nonebot_plugin_dnddicer.data.characters import get_character
+
+    await _expect(
+        app, char_matcher,
+        _event(_record_with_hp("布兰克", 23010), user_id=23010),
+        "角色卡已设置",
+    )
+    await _expect(
+        app, hp_matcher,
+        _mention_event(".hp ", MessageSegment.at(23010), " -10", user_id=23000),
+        "布兰克: 当前HP减少10\nHP:20/30 -> HP:10/30",
+    )
+    # 此前 @ 段被纯文本丢弃（参数退化为 -10）会扣 DM 自己的血：这里断言未发生
+    assert await get_character(_GROUP, 23000) is None
+
+
+@pytest.mark.asyncio
+async def test_hp_mention_set_heal_and_view(app: App):
+    """.hp @玩家 15/30 设置、.hp @玩家 +5 治疗、.hp @玩家 查看。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    await _expect(
+        app, char_matcher,
+        _event(_record_with_hp("布兰克", 23011), user_id=23011),
+        "角色卡已设置",
+    )
+    await _expect(
+        app, hp_matcher,
+        _mention_event(".hp ", MessageSegment.at(23011), " 15/30", user_id=23000),
+        "布兰克: HP=15/30\n当前HP:15/30",
+    )
+    await _expect(
+        app, hp_matcher,
+        _mention_event(".hp ", MessageSegment.at(23011), " +5", user_id=23000),
+        "布兰克: 当前HP增加5\nHP:15/30 -> HP:20/30",
+    )
+    await _expect(
+        app, hp_matcher,
+        _mention_event(".hp ", MessageSegment.at(23011), user_id=23000),
+        "布兰克: HP:20/30",
+    )
+
+
+@pytest.mark.asyncio
+async def test_hp_mention_multi_view(app: App):
+    """.hp @玩家 @玩家2 → 逐个查看（与 .hp @玩家;@玩家2 等价）。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    await _expect(
+        app, char_matcher,
+        _event(_record_with_hp("布兰克", 23012), user_id=23012),
+        "角色卡已设置",
+    )
+    await _expect(
+        app, char_matcher,
+        _event(_record_with_hp("莎白", 23013, hp="18/30"), user_id=23013),
+        "角色卡已设置",
+    )
+    await _expect(
+        app, hp_matcher,
+        _mention_event(
+            ".hp ", MessageSegment.at(23012), " ", MessageSegment.at(23013),
+            user_id=23000,
+        ),
+        "布兰克: HP:20/30\n莎白: HP:18/30",
+    )
+
+
+@pytest.mark.asyncio
+async def test_hp_mention_suffix_and_aoe_mixed(app: App):
+    """.hp @玩家易伤 -10 后缀生效；.hp @玩家;地精 -5 与 NPC 条目 AOE 混写。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+    from nonebot_plugin_dnddicer.commands.initiative import initiative_matcher
+
+    await _expect(
+        app, char_matcher,
+        _event(_record_with_hp("布兰克", 23014, hp="30/30"), user_id=23014),
+        "角色卡已设置",
+    )
+    await _expect(
+        app, initiative_matcher, _event(".ri20 地精", user_id=23000),
+        "地精的先攻值是 20",
+    )
+    await _expect(
+        app, hp_matcher, _event(".hp 地精 12/12", user_id=23000),
+        "地精: HP=12/12\n当前HP:12/12",
+    )
+    await _expect(
+        app, hp_matcher,
+        _mention_event(".hp ", MessageSegment.at(23014), "易伤 -10", user_id=23000),
+        "布兰克: 当前HP减少10（易伤加倍→20）\nHP:30/30 -> HP:10/30",
+    )
+    await _expect(
+        app, hp_matcher,
+        _mention_event(".hp ", MessageSegment.at(23014), ";地精 -5", user_id=23000),
+        "布兰克: 当前HP减少5; HP:10/30 -> HP:5/30\n"
+        "地精: 当前HP减少5; HP:12/12 -> HP:7/12",
+    )
+
+
+@pytest.mark.asyncio
+async def test_hp_mention_no_char_guides(app: App):
+    """@ 的玩家本群无卡 → 真 @ 消息段 + 建卡引导；.hp del @玩家 提示非 NPC 记录。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    await _expect(
+        app, hp_matcher,
+        _mention_event(".hp ", MessageSegment.at(29999), " -5", user_id=23000),
+        Message(MessageSegment.at("29999"))
+        + " 还没有在本群建立角色卡（可用 .角色卡记录 建卡后再试）",
+    )
+
+    await _expect(
+        app, char_matcher,
+        _event(_record_with_hp("布兰克", 23015), user_id=23015),
+        "角色卡已设置",
+    )
+    await _expect(
+        app, hp_matcher,
+        _mention_event(".hp del ", MessageSegment.at(23015), user_id=23000),
+        Message(MessageSegment.at("23015"))
+        + " 是玩家角色卡，.hp del/clr 仅用于删除NPC血量记录；"
+        "如需删除整张角色卡请用 .角色卡清除",
+    )
+
+
+@pytest.mark.asyncio
+async def test_hp_stray_mention_not_executed(app: App):
+    """游离 @（@ 不在目标位置）→ 提示不执行，双方血量均不变（防静默误伤）。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    await _expect(
+        app, char_matcher,
+        _event(_record_with_hp("布兰克", 23016), user_id=23016),
+        "角色卡已设置",
+    )
+    hint = "未执行：目标请写在目标位置，例如 .hp @小明 -d4"
+    # @ 在表达式右侧 / 值表达式右侧 / 命令之前：三类写法均不执行
+    for event in (
+        _mention_event(".hp -10 ", MessageSegment.at(23016), user_id=23000),
+        _mention_event(".hp 20/20 ", MessageSegment.at(23016), user_id=23000),
+        _mention_event(MessageSegment.at(23016), " .hp -10", user_id=23000),
+    ):
+        await _expect(app, hp_matcher, event, hint)
+
+    # 目标与发送者均未被结算
+    await _expect(
+        app, hp_matcher,
+        _mention_event(".hp ", MessageSegment.at(23016), user_id=23000),
+        "布兰克: HP:20/30",
+    )
+
+
+@pytest.mark.asyncio
+async def test_hp_bot_mention_keeps_self_semantics(app: App):
+    """@机器人自身（to_me 习惯）不视为目标：.hp 仍按发送者自身结算。"""
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    await _expect(
+        app, hp_matcher,
+        _mention_event(MessageSegment.at(1), " .hp 20/30", user_id=23017),
+        "test: HP=20/30\n当前HP:20/30",
+    )
