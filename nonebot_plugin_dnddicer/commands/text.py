@@ -145,6 +145,14 @@ TXT_HP_DEL_PC_TARGET_AT = (
 )
 #: .npc 的 @ 目标命中玩家角色卡（@ 版本）
 TXT_NPC_PC_TARGET_AT = "是玩家角色卡，不是NPC"
+#: 他人角色卡查看（.角色卡 @玩家 / .角色卡 名称）的标题行
+TXT_CHAR_TARGET_TITLE = "{name} 的角色卡："
+#: 同上：名称形式未命中任何角色卡/条目
+TXT_CHAR_TARGET_MISS = "找不到{name}的角色卡"
+#: 同上：名称命中的是先攻表/NPC 血量条目（NPC 没有角色卡）
+TXT_CHAR_NPC_NO_CARD = "「{name}」是NPC条目，没有角色卡"
+#: .状态 @玩家：他人状态加角色名前缀（自身查看保持无前缀）
+TXT_STATE_TARGET = "{name}: {info}"
 
 # ── NPC 血量跨战斗保持 .npc（群级、按名称）────────────────────────────────
 TXT_NPC_PERSIST_ON = "已将NPC「{name}」设为跨战斗保持血量（.ri 再次入表时不再自动回满）"

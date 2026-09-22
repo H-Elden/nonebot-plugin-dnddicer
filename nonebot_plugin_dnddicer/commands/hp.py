@@ -85,7 +85,10 @@ hp_matcher = base.on_dnd_command("hp", _HELP)
 # .长休 命令
 # =========================================================================
 
-_HELP_LONG_REST = "进行一次长休：恢复生命值至上限、清除临时生命值、回复一半生命骰。"
+_HELP_LONG_REST = (
+    "进行一次长休：恢复生命值至上限、清除临时生命值、回复一半生命骰。\n"
+    ".长休 @玩家 -> DM 代不在场的玩家收尾（需该玩家已在本群建卡）"
+)
 long_rest_matcher = base.on_dnd_command("长休", _HELP_LONG_REST)
 
 
@@ -494,16 +497,27 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
 
 @long_rest_matcher.handle()
 async def handle_long_rest(bot: Bot, event: MessageEvent) -> None:
-    """处理 .长休 命令。"""
+    """处理 .长休（.长休 @玩家 代不在场的玩家收尾）。"""
     if not isinstance(event, GroupMessageEvent):
         await long_rest_matcher.finish(text.TXT_GROUP_ONLY)
 
-    character = await get_character(event.group_id, event.user_id)
-    if character is None or not character.is_init:
-        name = await base.resolve_display_name(bot, event)
-        await long_rest_matcher.finish(text.TXT_LONG_REST_MISS.format(name=name))
-
-    name = await base.resolve_display_name(bot, event, char_name=character.name)
+    rest = (base.get_command_rest_with_mentions(event) or "").strip()
+    target_qq = onebot_v11.parse_mention_token(rest) if rest else None
+    if target_qq is not None:
+        character = await get_character(event.group_id, target_qq)
+        if character is None or not character.is_init:
+            await long_rest_matcher.finish(
+                onebot_v11.at_reply(target_qq, text.TXT_MENTION_NO_CHAR)
+            )
+        name = await base.resolve_display_name(
+            bot, event, target_qq, char_name=character.name
+        )
+    else:
+        character = await get_character(event.group_id, event.user_id)
+        if character is None or not character.is_init:
+            name = await base.resolve_display_name(bot, event)
+            await long_rest_matcher.finish(text.TXT_LONG_REST_MISS.format(name=name))
+        name = await base.resolve_display_name(bot, event, char_name=character.name)
     rest_info = character.hp_info.long_rest()
     if not rest_info:
         rest_info = "没有需要恢复的内容"

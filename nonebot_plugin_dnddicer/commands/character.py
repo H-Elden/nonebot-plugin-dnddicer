@@ -10,6 +10,13 @@
   ``.[次数#][属性]攻击[优势/劣势][±加值]``
   例：``.力量检定`` ``.2#运动检定+1`` ``.智力豁免+d4`` ``.3#敏捷攻击优势+d8`` ``.先攻检定``
   检定只掷出裸数值（d20+加值），不对 DC 判定——由玩家/DM 自行比较（同 DicePP）。
+
+@ 提及目标（2026-09-22 新增）：
+- ``.角色卡 @玩家`` / ``.角色卡 角色名``：查看**他人**整卡（输出加标题行）；
+  查看对任何人开放（群内信息共享），而记录/清除仍仅限本人（写入目标恒为发送者）；
+- ``.状态 @玩家``：查看他人 HP 与生命骰摘要（加角色名前缀）；
+- 检定类点命令表达式**右侧**的 @ 为目标：``.力量豁免 @玩家`` ``.3#敏捷攻击优势+d8 @玩家``
+  ——用目标角色的属性/熟练/加值代掷，``.先攻检定 @玩家`` 以该玩家为 owner 入先攻表。
 """
 
 from __future__ import annotations
@@ -34,16 +41,21 @@ from ..character.models import DNDCharacter
 from ..character.services import AbilityService, CharacterService, gen_template_char
 from ..config import get_config
 from ..data.characters import delete_character, get_character, save_character
+from ..platform import onebot_v11
 from . import base, text
 
 _HELP = (
     "DND5e 角色卡\n"
     "用法：.角色卡模板 / .角色卡记录 <模板内容> / .角色卡 / .角色卡清除\n"
+    "查看他人：.角色卡 @玩家 或 .角色卡 角色名（任何人可查看；记录/清除仅限本人）\n"
     "每人在每个群中拥有一张角色卡；.角色卡 查看当前卡（$…$ 文本可直接复制再次记录以保存多张）。"
 )
 char_matcher = base.on_dnd_command("角色卡", _HELP)
 
-_HELP_STATE = "查看本角色当前 HP 与生命骰状态。"
+_HELP_STATE = (
+    "查看本角色当前 HP 与生命骰状态。\n"
+    ".状态 @玩家 -> 查看该玩家的状态（需该玩家已在本群建卡）"
+)
 state_matcher = base.on_dnd_command("状态", _HELP_STATE)
 
 
@@ -149,12 +161,12 @@ check_matcher = _make_check_matcher()
 
 
 @char_matcher.handle()
-async def handle_character(event: GroupMessageEvent) -> None:
+async def handle_character(bot: Bot, event: GroupMessageEvent) -> None:
     """处理 .角色卡 系列子命令。"""
     if not isinstance(event, GroupMessageEvent):
         await char_matcher.finish(text.TXT_GROUP_ONLY)
 
-    rest = (base.get_command_rest(event) or "").strip()
+    rest = (base.get_command_rest_with_mentions(event) or "").strip()
     character: Optional[DNDCharacter] = await get_character(event.group_id, event.user_id)
 
     if not rest:
@@ -180,24 +192,83 @@ async def handle_character(event: GroupMessageEvent) -> None:
     if rest.startswith("模板"):
         await char_matcher.finish(_gen_template_feedback())
 
-    await char_matcher.finish("可用的角色卡指令: [记录, 清除, 模板]")
+    # 查看他人角色卡：.角色卡 @玩家 / .角色卡 角色名（@ 直连；名称复用 .hp 的
+    # 三层搜索，见 hp.search_target）。查看对任何人开放（群内信息共享），
+    # 记录/清除/模板 仍在上面按发送者处理（写入目标恒为本人）。
+    # 注：函数内导入——避免 commands 包的模块导入顺序被改变（.帮助 列表顺序
+    # 由 commands/__init__.py 的导入次序决定）。
+    from .hp import search_target
+
+    source_key, target_id = await search_target(rest, event.group_id)
+    if source_key == "at_miss":
+        await char_matcher.finish(
+            onebot_v11.at_reply(target_id, text.TXT_MENTION_NO_CHAR)
+        )
+    if source_key == "multiple":
+        await char_matcher.finish(
+            text.TXT_HP_INFO_MULTI.format(name_list=target_id.split("/"))
+        )
+    if source_key == "npc":
+        await char_matcher.finish(text.TXT_CHAR_NPC_NO_CARD.format(name=target_id))
+    if source_key == "pc":
+        target_char = await get_character(event.group_id, target_id)
+        name = await base.resolve_display_name(
+            bot, event, target_id,
+            char_name=target_char.name if target_char else "",
+        )
+        await char_matcher.finish(
+            text.TXT_CHAR_TARGET_TITLE.format(name=name)
+            + "\n"
+            + (target_char.get_char_info() if target_char else "")
+        )
+
+    await char_matcher.finish(text.TXT_CHAR_TARGET_MISS.format(name=rest))
 
 
 @state_matcher.handle()
-async def handle_state(event: MessageEvent) -> None:
-    """处理 .状态。"""
+async def handle_state(bot: Bot, event: MessageEvent) -> None:
+    """处理 .状态（.状态 @玩家 查看他人）。"""
     if not isinstance(event, GroupMessageEvent):
         await state_matcher.finish(text.TXT_GROUP_ONLY)
-    character = await get_character(event.group_id, event.user_id)
-    if character is None or not character.is_init:
-        await state_matcher.finish(text.TXT_CHAR_MISS)
+
+    rest = (base.get_command_rest_with_mentions(event) or "").strip()
+    target_qq = onebot_v11.parse_mention_token(rest) if rest else None
+    if target_qq is not None:
+        character = await get_character(event.group_id, target_qq)
+        if character is None or not character.is_init:
+            await state_matcher.finish(
+                onebot_v11.at_reply(target_qq, text.TXT_MENTION_NO_CHAR)
+            )
+        name = await base.resolve_display_name(
+            bot, event, target_qq, char_name=character.name
+        )
+    else:
+        character = await get_character(event.group_id, event.user_id)
+        if character is None or not character.is_init:
+            await state_matcher.finish(text.TXT_CHAR_MISS)
+        name = ""
     feedback = character.hp_info.get_info()
     if character.hp_info.hp_dice_type != 0:
         feedback += (
             f"\n生命骰:{character.hp_info.hp_dice_num}"
             f"/{character.hp_info.hp_dice_max} D{character.hp_info.hp_dice_type}"
         )
+    if name:
+        feedback = text.TXT_STATE_TARGET.format(name=name, info=feedback)
     await state_matcher.finish(feedback)
+
+
+def _split_target_mention(mod_str: str) -> Tuple[Optional[str], str]:
+    """拆出检定修正串中的 @ 目标：返回 (目标QQ, 剩余修正串)。
+
+    @ 可写在表达式右侧任意位置（``@玩家`` / ``优势 @玩家`` / ``+2 @玩家``）：
+    取首个标记作为目标、移除全部标记，其余修饰（优劣势/±加值）照常解析。
+    无标记返回 (None, 原串)——既有行为完全不变。
+    """
+    mentions = onebot_v11.iter_mentions(mod_str)
+    if not mentions:
+        return None, mod_str
+    return mentions[0], onebot_v11.strip_mentions(mod_str).strip()
 
 
 @check_matcher.handle()
@@ -206,16 +277,32 @@ async def handle_check(bot: Bot, event: GroupMessageEvent) -> None:
     if not isinstance(event, GroupMessageEvent):
         await check_matcher.finish(text.TXT_GROUP_ONLY)
 
-    text_body = event.get_plaintext().strip()
-    start = next(s for s in base.get_command_starts() if text_body.startswith(s))
+    # 用带标记文本解析：@ 目标保留在修正串中（规则层仍基于纯文本，见 _check_command_rule）
+    text_body = onebot_v11.strip_leading_mentions(
+        onebot_v11.rebuild_text_with_mentions(event)
+    ).strip()
+    start = next(
+        (s for s in base.get_command_starts() if text_body.startswith(s)), None
+    )
+    if start is None:  # 理论不可达（rule 已过滤），防御性兜底
+        return
     parsed = parse_check_body(text_body[len(start):])
     if parsed is None:  # 理论不可达（rule 已过滤），防御性兜底
         return
     times, check_name, mod_str = parsed
 
-    character = await get_character(event.group_id, event.user_id)
-    if character is None or not character.is_init:
-        await check_matcher.finish(text.TXT_CHAR_MISS)
+    # 表达式右侧的 @ 目标（.力量豁免 @玩家 / .2#敏捷攻击优势 @玩家）
+    target_qq, mod_str = _split_target_mention(mod_str)
+    if target_qq is not None:
+        character = await get_character(event.group_id, target_qq)
+        if character is None or not character.is_init:
+            await check_matcher.finish(
+                onebot_v11.at_reply(target_qq, text.TXT_MENTION_NO_CHAR)
+            )
+    else:
+        character = await get_character(event.group_id, event.user_id)
+        if character is None or not character.is_init:
+            await check_matcher.finish(text.TXT_CHAR_MISS)
 
     # 解析临时优劣势（与 DicePP 一致：修正串开头的 优势/劣势）
     advantage = 0
@@ -245,7 +332,12 @@ async def handle_check(bot: Bot, event: GroupMessageEvent) -> None:
     except AssertionError as exc:
         await check_matcher.finish(str(exc))
 
-    name = await base.resolve_display_name(bot, event, char_name=character.name)
+    if target_qq is not None:
+        name = await base.resolve_display_name(
+            bot, event, target_qq, char_name=character.name
+        )
+    else:
+        name = await base.resolve_display_name(bot, event, char_name=character.name)
     # 展示名：攻击/豁免用原名（敏捷攻击/敏捷豁免），属性/技能/先攻追加「检定」
     if check_name in ATTACK_LIST or check_name in SAVING_LIST:
         display_item = check_name
@@ -265,13 +357,15 @@ async def handle_check(bot: Bot, event: GroupMessageEvent) -> None:
         result="\n".join(results),
     )
     # .先攻检定：掷出后自动加入先攻列表（对齐 DicePP char_command 联动语义：
-    # 掷骰过程行被替换为入表反馈，便于群内直读先攻结果）
+    # 掷骰过程行被替换为入表反馈，便于群内直读先攻结果）；@ 目标以该玩家为
+    # owner 入表（与 .ri @玩家 同源逻辑）
     if check_name == "先攻" and values:
         from .initiative import add_initiative_entities
 
+        owner_id = target_qq if target_qq is not None else str(event.user_id)
         init_feedback = await add_initiative_entities(
             {name: (values[0], results[0])},
-            str(event.user_id),
+            owner_id,
             event.group_id,
         )
         if results[0] in feedback:

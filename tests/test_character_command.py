@@ -7,7 +7,7 @@ import nonebot
 import pytest
 from nonebug import App
 from nonebot.adapters.onebot.v11 import Adapter as OnebotV11Adapter
-from nonebot.adapters.onebot.v11 import Bot, Message
+from nonebot.adapters.onebot.v11 import Bot, Message, MessageSegment
 
 from fake_event import fake_group_message_event_v11
 
@@ -15,6 +15,27 @@ from nonebot_plugin_dnddicer.engine.roll.karma_runtime import reset_runtime, set
 from nonebot_plugin_dnddicer.engine.roll.sequence_runtime import SequenceRuntime
 
 _GROUP = 87654321
+
+
+@pytest.fixture(autouse=True)
+def _clear_store():
+    """每个用例前清空角色卡/先攻表数据（缓存 + JSON）。
+
+    查看他人整卡与名称搜索是群级查询，清空可避免历史残留带来的多匹配。
+    """
+    from nonebot_plugin_dnddicer.data import characters as _chars
+    from nonebot_plugin_dnddicer.data import get_data_file
+    from nonebot_plugin_dnddicer.data import initiative as _init
+    from nonebot_plugin_dnddicer.data import npc_health as _npc
+
+    _chars._cache = None
+    _init._cache = None
+    _npc._cache = None
+    for name in ("characters.json", "initiative.json", "npc_health.json"):
+        path = get_data_file(name)
+        if path.exists():
+            path.write_text("{}", encoding="utf-8")
+    yield
 
 
 def _event(text: str, user_id: int = 10001):
@@ -227,3 +248,213 @@ async def test_attack_critical_failure(app: App):
         await _expect(app, check_matcher, event, expected)
     finally:
         reset_runtime(token)
+
+
+# =========================================================================
+# @ 提及目标（2026-09-22：查看他人整卡 / .状态 / 代掷）
+# =========================================================================
+
+
+def _mention_event(*parts, user_id: int = 31000):
+    """构造带 @ 段的群消息事件（parts 依次拼接，可为文本或消息段）。"""
+    message = Message()
+    for part in parts:
+        message += part
+    return fake_group_message_event_v11(
+        message=message, group_id=_GROUP, user_id=user_id
+    )
+
+
+@pytest.mark.asyncio
+async def test_char_view_other_by_mention_and_name(app: App):
+    """.角色卡 @玩家 与 .角色卡 名称 → 查看他人整卡（含标题行，两种写法等价）。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.data.characters import get_character
+
+    await _expect(app, char_matcher, _event(_RECORD, user_id=31010), "角色卡已设置")
+    target = await get_character(_GROUP, 31010)
+    assert target is not None
+    expected = "伊丽莎白 的角色卡：\n" + target.get_char_info()
+
+    await _expect(
+        app, char_matcher,
+        _mention_event(".角色卡 ", MessageSegment.at(31010)),
+        expected,
+    )
+    await _expect(app, char_matcher, _event(".角色卡 伊丽莎白"), expected)
+
+
+@pytest.mark.asyncio
+async def test_char_view_other_misses(app: App):
+    """查看他人未命中：@ 无卡引导 / 名称命中NPC条目 / 名称查无此卡。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.initiative import initiative_matcher
+
+    await _expect(
+        app, initiative_matcher, _event(".ri20 独目守卫"),
+        "独目守卫的先攻值是 20",
+    )
+    await _expect(
+        app, char_matcher, _event(".角色卡 独目守卫"),
+        "「独目守卫」是NPC条目，没有角色卡",
+    )
+    await _expect(
+        app, char_matcher, _event(".角色卡 查无此人"),
+        "找不到查无此人的角色卡",
+    )
+    await _expect(
+        app, char_matcher,
+        _mention_event(".角色卡 ", MessageSegment.at(39990)),
+        Message(MessageSegment.at("39990"))
+        + " 还没有在本群建立角色卡（可用 .角色卡记录 建卡后再试）",
+    )
+
+
+@pytest.mark.asyncio
+async def test_char_record_and_clear_write_self_only(app: App):
+    """记录/清除恒为发送者本人：带 @他人 不改变他人卡（查看开放、修改仅本人）。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.data.characters import get_character
+
+    await _expect(app, char_matcher, _event(_RECORD, user_id=31011), "角色卡已设置")
+    # 发送者 31000 带 @31011 记录 → 只写自己的卡
+    await _expect(
+        app, char_matcher,
+        _mention_event(
+            ".角色卡记录 ",
+            MessageSegment.at(31011),
+            " $姓名$ 自己的卡\n$等级$ 1\n$属性$ 10/10/10/10/10/10",
+        ),
+        "角色卡已设置",
+    )
+    sender = await get_character(_GROUP, 31000)
+    target = await get_character(_GROUP, 31011)
+    assert sender is not None and sender.name == "自己的卡"
+    assert target is not None and target.name == "伊丽莎白"
+
+    # 发送者带 @31011 清除 → 只删自己的卡
+    await _expect(
+        app, char_matcher,
+        _mention_event(".角色卡清除 ", MessageSegment.at(31011)),
+        "角色卡已删除",
+    )
+    assert await get_character(_GROUP, 31000) is None
+    assert await get_character(_GROUP, 31011) is not None
+
+
+@pytest.mark.asyncio
+async def test_state_mention_target(app: App):
+    """.状态 @玩家 → 带角色名前缀的他人状态；无卡 → 真 @ 段引导。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher, state_matcher
+
+    await _expect(app, char_matcher, _event(_RECORD, user_id=31012), "角色卡已设置")
+    await _expect(
+        app, state_matcher,
+        _mention_event(".状态 ", MessageSegment.at(31012)),
+        "伊丽莎白: HP:20/30 (5)\n生命骰:3/4 D8",
+    )
+    await _expect(
+        app, state_matcher,
+        _mention_event(".状态 ", MessageSegment.at(39992)),
+        Message(MessageSegment.at("39992"))
+        + " 还没有在本群建立角色卡（可用 .角色卡记录 建卡后再试）",
+    )
+
+
+@pytest.mark.asyncio
+async def test_check_mention_target(app: App):
+    """.力量豁免 @玩家 / .2#敏捷攻击优势 @玩家 → 用目标角色卡代掷。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher, check_matcher
+
+    await _expect(app, char_matcher, _event(_RECORD, user_id=31013), "角色卡已设置")
+
+    token = set_runtime(SequenceRuntime([9]))
+    try:
+        await _expect(
+            app, check_matcher,
+            _mention_event(".力量豁免 ", MessageSegment.at(31013)),
+            "伊丽莎白进行【力量豁免】：\n无熟练加值 力量调整值:2\n"
+            "1D20+2=[9]+2=11",
+        )
+    finally:
+        reset_runtime(token)
+
+    token = set_runtime(SequenceRuntime([9, 7]))
+    try:
+        await _expect(
+            app, check_matcher,
+            _mention_event(".敏捷攻击优势 ", MessageSegment.at(31013)),
+            "伊丽莎白进行【敏捷攻击】：\n无熟练加值 敏捷调整值:2\n"
+            "2D20K1+2=MAX{[9], [7]}+2=11",
+        )
+    finally:
+        reset_runtime(token)
+
+    # 连掷：.2#敏捷攻击 @玩家 → 两次代掷
+    token = set_runtime(SequenceRuntime([3, 4]))
+    try:
+        await _expect(
+            app, check_matcher,
+            _mention_event(".2#敏捷攻击 ", MessageSegment.at(31013)),
+            "伊丽莎白进行【2次敏捷攻击】：\n无熟练加值 敏捷调整值:2\n"
+            "1D20+2=[3]+2=5\n1D20+2=[4]+2=6",
+        )
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_check_mention_no_char(app: App):
+    """检定点命令的 @ 目标无卡 → 真 @ 段引导建卡。"""
+    from nonebot_plugin_dnddicer.commands.character import check_matcher
+
+    await _expect(
+        app, check_matcher,
+        _mention_event(".力量豁免 ", MessageSegment.at(39993)),
+        Message(MessageSegment.at("39993"))
+        + " 还没有在本群建立角色卡（可用 .角色卡记录 建卡后再试）",
+    )
+
+
+@pytest.mark.asyncio
+async def test_check_initiative_mention_binds_owner(app: App):
+    """.先攻检定 @玩家 → 以该玩家为 owner 入先攻表（与 .ri @玩家 同源）。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher, check_matcher
+    from nonebot_plugin_dnddicer.commands.initiative import initiative_matcher
+    from nonebot_plugin_dnddicer.data.initiative import get_init_list
+
+    g = 100050
+    await _expect(
+        app, char_matcher,
+        fake_group_message_event_v11(
+            message=Message(f".角色卡记录 {_RECORD}"), group_id=g, user_id=31015
+        ),
+        "角色卡已设置",
+    )
+    token = set_runtime(SequenceRuntime([5]))
+    try:
+        event = fake_group_message_event_v11(
+            message=Message(".先攻检定 ") + MessageSegment.at(31015),
+            group_id=g,
+            user_id=31000,
+        )
+        await _expect(
+            app, check_matcher, event,
+            "伊丽莎白进行【先攻检定】：\n无熟练加值 敏捷调整值:2\n"
+            "伊丽莎白的先攻值是 1D20+2=[5]+2=7",
+        )
+    finally:
+        reset_runtime(token)
+
+    init_data = await get_init_list(g)
+    assert init_data is not None
+    assert [(e.name, e.owner, e.init) for e in init_data.entities] == [
+        ("伊丽莎白", "31015", 7)
+    ]
+    await _expect(
+        app, initiative_matcher,
+        fake_group_message_event_v11(
+            message=Message(".init"), group_id=g, user_id=31000
+        ),
+        "先攻列表如下: \n当前是第1轮,伊丽莎白的回合\n1.伊丽莎白 先攻:7 HP:20/30 (5)",
+    )

@@ -514,6 +514,40 @@ async def test_long_rest_no_char(app: App):
     )
 
 
+@pytest.mark.asyncio
+async def test_long_rest_mention_target(app: App):
+    """.长休 @玩家 → DM 代不在场的玩家收尾；无卡 → 真 @ 段引导。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher, long_rest_matcher
+
+    record = (
+        "$姓名$ 布兰克\n$等级$ 4\n$生命值$ 20/30(5)\n"
+        "$生命骰$ 2/4 D8\n$属性$ 10/10/10/10/10/10"
+    )
+    await _expect(
+        app, char_matcher,
+        _event(f".角色卡记录 {record}", user_id=23019),
+        "角色卡已设置",
+    )
+    await _expect(
+        app, hp_matcher, _event(".hp 10/30 (5)", user_id=23019),
+        "布兰克: HP=10/30 (5)\n当前HP:10/30 (5)",
+    )
+    await _expect(
+        app, long_rest_matcher,
+        _mention_event(".长休 ", MessageSegment.at(23019), user_id=23000),
+        "布兰克进行了一次长休\n"
+        "生命值回复至上限(30) 5点临时生命值失效\n"
+        "回复2个生命骰, 当前拥有4/4个D8生命骰",
+    )
+    await _expect(
+        app, long_rest_matcher,
+        _mention_event(".长休 ", MessageSegment.at(39994), user_id=23000),
+        Message(MessageSegment.at("39994"))
+        + " 还没有在本群建立角色卡（可用 .角色卡记录 建卡后再试）",
+    )
+
+
 # =========================================================================
 # HPInfo 单元测试
 # =========================================================================
