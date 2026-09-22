@@ -1,7 +1,8 @@
 /* ============================================================
    聊天气泡（::: chat 容器）
-   左：骰娘与其他人（含私聊标注）；右：示例用户（QQ 群昵称）
-   配色全部走 VitePress 主题变量，自动适配亮色/暗色
+   左：骰娘（含「屠龙骰（私聊）」等变体）；右：DM 与所有玩家
+   配色全部走 VitePress 主题变量，自动适配亮色/暗色；
+   群友头像色由名册经 --chat-avatar-color 注入，未登记昵称按名称哈希兜底
    ============================================================ */
 
 .chat {
@@ -40,12 +41,31 @@
   user-select: none;
 }
 
+/* 骰娘：固定品牌渐变 */
 .chat-avatar--bot {
   background-image: linear-gradient(135deg, #6366f1, #a855f7);
 }
 
+/* 群友：每人一色（色值经 --chat-avatar-color 注入），同色系加深渐变增加立体感；
+   字色由 --chat-avatar-text 注入（亮底深字、暗底白字，浅色名册项也清晰）；
+   浏览器不支持 color-mix 时整个 background-image 声明失效，自动退回纯色底 */
 .chat-avatar--user {
-  background-image: linear-gradient(135deg, #0ea5e9, #10b981);
+  color: var(--chat-avatar-text, #ffffff);
+  background-color: var(--chat-avatar-color, #0ea5e9);
+  background-image: linear-gradient(
+    135deg,
+    var(--chat-avatar-color, #0ea5e9),
+    color-mix(in srgb, var(--chat-avatar-color, #0ea5e9) 62%, #0f172a)
+  );
+}
+
+/* 暗色模式：渐变改为「提亮 → 本色」，避免深色底上头像发闷 */
+.dark .chat-avatar--user {
+  background-image: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--chat-avatar-color, #0ea5e9) 82%, #ffffff),
+    var(--chat-avatar-color, #0ea5e9)
+  );
 }
 
 .chat-body {
