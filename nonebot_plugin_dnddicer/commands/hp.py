@@ -42,7 +42,10 @@ from ..data.npc_health import (
 from ..engine.roll.ast_engine.adapter import exec_roll_exp_unified
 from ..engine.roll.result import RollResult
 from ..engine.roll.roll_utils import RollDiceError
-from ..platform.onebot_v11 import get_group_member_nickname
+from ..platform.onebot_v11 import (
+    event_sender_nickname,
+    get_group_member_nickname,
+)
 from . import base, text
 
 # =========================================================================
@@ -177,6 +180,23 @@ async def search_target(
     return source, target_id
 
 
+async def resolve_target_display_name(
+    bot: Bot, event: GroupMessageEvent, target_id: str
+) -> str:
+    """目标展示名回退链：事件群名片/昵称（本人）→ 群成员信息查询 → 「未知玩家」。
+
+    角色卡名由调用方优先取用（``character.name or ...``）；本链与 ``.hp list``
+    的成员名解析保持一致。修复（2026-09-22）：无角色卡的玩家经先攻表解析为
+    PC 目标时，反馈此前直接显示 QQ 号（如 ``.hp 名称+9`` 给未建卡玩家加血）。
+    """
+    if target_id == str(event.user_id):
+        name = event_sender_nickname(event)
+        if name:
+            return name
+    name = await get_group_member_nickname(bot, event.group_id, int(target_id))
+    return name or text.TXT_HP_UNKNOWN_NAME
+
+
 # =========================================================================
 # 参数解析
 # =========================================================================
@@ -247,8 +267,9 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
         await hp_matcher.finish(feedback)
 
     # 列表（无卡记录不再直接显示 QQ 号——名称回退链
-    # 角色卡名 → 群名片 → QQ 昵称 → 「未知玩家」；无卡名成员需调
-    # get_group_member_info，本插件放宽「离线可用」原则的唯一一处，
+    # 角色卡名 → 群名片 → QQ 昵称 → 「未知玩家」，与目标结算反馈
+    # resolve_target_display_name 同款；无卡名成员需调
+    # get_group_member_info，本插件放宽「离线可用」原则的两处之一，
     # API 失败/异常由适配层吞掉、名称回退下一级，不影响列表主流程）
     if arg_str.startswith("list"):
         chars = await list_characters_by_group(event.group_id)
@@ -390,10 +411,9 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
         character.is_init = True
         await save_character(character)
 
-        if target_id == str(event.user_id):
-            name = character.name or base.get_display_name(event)
-        else:
-            name = character.name or target_id
+        name = character.name or await resolve_target_display_name(
+            bot, event, target_id
+        )
         feedback += text.TXT_HP_MOD.format(name=name, hp_mod=mod_info) + "\n"
 
     await hp_matcher.finish(feedback.strip())

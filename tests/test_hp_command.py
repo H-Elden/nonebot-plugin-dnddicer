@@ -18,18 +18,23 @@ from nonebot_plugin_dnddicer.engine.roll.sequence_runtime import SequenceRuntime
 _GROUP = 87654321
 _LIST_GROUP = 99001
 _LIST_EMPTY_GROUP = 99002
+_INIT_GROUP = 99003
+_INIT_API_FAIL_GROUP = 99004
 
 
 @pytest.fixture(autouse=True)
 def _clear_character_data():
-    """每个用例前清空角色卡数据（缓存 + JSON），避免跨运行残留。"""
+    """每个用例前清空角色卡与先攻表数据（缓存 + JSON），避免跨运行残留。"""
     from nonebot_plugin_dnddicer.data import characters as _chars
     from nonebot_plugin_dnddicer.data import get_data_file
+    from nonebot_plugin_dnddicer.data import initiative as _init
 
     _chars._cache = None
-    path = get_data_file("characters.json")
-    if path.exists():
-        path.write_text("{}", encoding="utf-8")
+    _init._cache = None
+    for name in ("characters.json", "initiative.json"):
+        path = get_data_file(name)
+        if path.exists():
+            path.write_text("{}", encoding="utf-8")
     yield
 
 
@@ -358,6 +363,84 @@ async def test_hp_target_not_found(app: App):
         app, hp_matcher, _event(".hp 不存在 10", user_id=20016),
         "找不到不存在的生命值信息\n新NPC需要先加入先攻表才可设置HP",
     )
+
+
+@pytest.mark.asyncio
+async def test_hp_target_without_char_uses_member_name(app: App):
+    """无卡玩家经先攻表解析：.hp 目标反馈走名称回退链（群名片），不显示 QQ 号。
+
+    复现场景（2026-09-22 修复）：群成员无角色卡、无 HP 记录，以 .ri 入先攻表
+    后 DM 用 ``.hp 名称+9`` 结算——此前反馈名直接取 QQ 号，与 .hp list 的
+    「角色卡名 → 群名片 → QQ 昵称 → 未知玩家」回退链不一致。
+    """
+    from nonebot.adapters.onebot.v11.event import Sender
+
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+    from nonebot_plugin_dnddicer.commands.initiative import initiative_matcher
+
+    g = _INIT_GROUP
+    qq = 1270859720
+    player = Sender(card="陈莉莉", nickname="莉莉", role="member")
+    # 玩家以 .ri 入先攻表（无角色卡：条目名取群名片，owner 绑定 QQ）
+    await _expect(
+        app, initiative_matcher,
+        fake_group_message_event_v11(
+            message=Message(".ri20"), group_id=g, user_id=qq, sender=player
+        ),
+        "陈莉莉的先攻值是 20",
+    )
+    # DM 先记伤害、再治疗：两条反馈的落款均为群名片
+    for text_msg, expected in (
+        (".hp 陈莉莉-9", "陈莉莉: 当前HP减少9\n损失HP:0 -> 损失HP:9"),
+        (".hp 陈莉莉+9", "陈莉莉: 当前HP增加9\n损失HP:9 -> 损失HP:0"),
+    ):
+        event = _event_in_group(g, text_msg, user_id=20099)
+        async with app.test_matcher(hp_matcher) as ctx:
+            adapter = ctx.create_adapter(base=OnebotV11Adapter)
+            bot = ctx.create_bot(base=Bot, adapter=adapter)
+            ctx.should_call_api(
+                "get_group_member_info",
+                data={"group_id": g, "user_id": qq},
+                result={"user_id": qq, "card": "陈莉莉", "nickname": "莉莉"},
+            )
+            ctx.should_call_send(event, expected)
+            ctx.receive_event(bot, event)
+
+
+@pytest.mark.asyncio
+async def test_hp_target_without_char_api_failure_falls_back(app: App):
+    """无卡玩家经先攻表解析且群成员查询失败 → 回退「未知玩家」（非 QQ 号）。"""
+    from nonebot.adapters.onebot.v11.event import Sender
+
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+    from nonebot_plugin_dnddicer.commands.initiative import initiative_matcher
+
+    g = _INIT_API_FAIL_GROUP
+    qq = 1270859721
+    await _expect(
+        app, initiative_matcher,
+        fake_group_message_event_v11(
+            message=Message(".ri20"),
+            group_id=g,
+            user_id=qq,
+            sender=Sender(card="陈莉莉", nickname="莉莉", role="member"),
+        ),
+        "陈莉莉的先攻值是 20",
+    )
+
+    event = _event_in_group(g, ".hp 陈莉莉-9", user_id=20099)
+    async with app.test_matcher(hp_matcher) as ctx:
+        adapter = ctx.create_adapter(base=OnebotV11Adapter)
+        bot = ctx.create_bot(base=Bot, adapter=adapter)
+        ctx.should_call_api(
+            "get_group_member_info",
+            data={"group_id": g, "user_id": qq},
+            exception=Exception("群成员查询失败"),
+        )
+        ctx.should_call_send(
+            event, "未知玩家: 当前HP减少9\n损失HP:0 -> 损失HP:9"
+        )
+        ctx.receive_event(bot, event)
 
 
 # =========================================================================

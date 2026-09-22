@@ -8,8 +8,8 @@
 - ``event_sender_nickname``：事件 sender 字段的离线展示名（base.py
   get_display_name 回退链，群名片 → 昵称）；
 - ``get_group_member_nickname``：get_group_member_info 查询群成员展示名
-  （.hp list 名称回退链；本插件放宽「离线可用」的唯一一处，失败返回
-  None 由调用方兜底、不影响列表主流程）；
+  （.hp 名称回退链：列表与目标结算反馈共用；本插件放宽「离线可用」原则的
+  两处之一，失败返回 None 由调用方兜底、不影响列表/结算主流程）；
 - ``send_private_msg``：私聊发送（.rh 暗骰结果，原 roll.py 直连 call_api）。
 """
 
