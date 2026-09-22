@@ -263,7 +263,7 @@ async def test_hp_list_char_name_takes_priority(app: App):
 
 @pytest.mark.asyncio
 async def test_hp_list_api_failure_falls_back(app: App):
-    """.hp list 群成员 API 失败 → 回退「未知玩家」（非 QQ 号），列表不受影响。"""
+    """.hp list 群成员 API 失败 → 回退「未知玩家（QQ号）」，列表不受影响。"""
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
 
     await _expect(app, hp_matcher, _event_in_group(_LIST_GROUP, ".hp 20/30", user_id=20016), "test: HP=20/30\n当前HP:20/30")
@@ -277,7 +277,7 @@ async def test_hp_list_api_failure_falls_back(app: App):
             data={"group_id": _LIST_GROUP, "user_id": 20016},
             exception=Exception("群成员查询失败"),
         )
-        ctx.should_call_send(event, "未知玩家 HP:20/30")
+        ctx.should_call_send(event, "未知玩家（20016） HP:20/30")
         ctx.receive_event(bot, event)
 
 
@@ -371,7 +371,7 @@ async def test_hp_target_without_char_uses_member_name(app: App):
 
     复现场景（2026-09-22 修复）：群成员无角色卡、无 HP 记录，以 .ri 入先攻表
     后 DM 用 ``.hp 名称+9`` 结算——此前反馈名直接取 QQ 号，与 .hp list 的
-    「角色卡名 → 群名片 → QQ 昵称 → 未知玩家」回退链不一致。
+    「角色卡名 → 群名片 → QQ 昵称 → 未知玩家（QQ号）」回退链不一致。
     """
     from nonebot.adapters.onebot.v11.event import Sender
 
@@ -409,7 +409,7 @@ async def test_hp_target_without_char_uses_member_name(app: App):
 
 @pytest.mark.asyncio
 async def test_hp_target_without_char_api_failure_falls_back(app: App):
-    """无卡玩家经先攻表解析且群成员查询失败 → 回退「未知玩家」（非 QQ 号）。"""
+    """无卡玩家经先攻表解析且群成员查询失败 → 回退「未知玩家（QQ号）」。"""
     from nonebot.adapters.onebot.v11.event import Sender
 
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
@@ -438,7 +438,7 @@ async def test_hp_target_without_char_api_failure_falls_back(app: App):
             exception=Exception("群成员查询失败"),
         )
         ctx.should_call_send(
-            event, "未知玩家: 当前HP减少9\n损失HP:0 -> 损失HP:9"
+            event, "未知玩家（1270859721）: 当前HP减少9\n损失HP:0 -> 损失HP:9"
         )
         ctx.receive_event(bot, event)
 

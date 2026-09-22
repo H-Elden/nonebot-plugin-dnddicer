@@ -115,8 +115,9 @@ TXT_HP_DEL_PC_TARGET = "「{name}」是玩家角色卡，.hp del/clr 仅用于�
 #: .hp clr：清空本群全部 NPC 血量记录（含跨战斗保持的）
 TXT_HP_CLR_DONE = "已清空{n}条NPC血量记录"
 TXT_HP_CLR_NONE = "本群没有任何NPC生命值信息"
-#: .hp list 无角色卡名且查不到群名片/昵称时的兜底展示名（不直接显示 QQ 号）
-TXT_HP_UNKNOWN_NAME = "未知玩家"
+#: .hp 名称回退链的兜底展示名：附 QQ 号便于对不上名时定位到具体成员
+#: （2026-09-22 修订：此前仅「未知玩家」，DM 无从判断是谁）
+TXT_HP_UNKNOWN_NAME = "未知玩家（{qq}）"
 
 # ── NPC 血量跨战斗保持 .npc（群级、按名称）────────────────────────────────
 TXT_NPC_PERSIST_ON = "已将NPC「{name}」设为跨战斗保持血量（.ri 再次入表时不再自动回满）"

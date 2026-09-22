@@ -183,7 +183,7 @@ async def search_target(
 async def resolve_target_display_name(
     bot: Bot, event: GroupMessageEvent, target_id: str
 ) -> str:
-    """目标展示名回退链：事件群名片/昵称（本人）→ 群成员信息查询 → 「未知玩家」。
+    """目标展示名回退链：事件群名片/昵称（本人）→ 群成员信息查询 → 「未知玩家（QQ号）」。
 
     角色卡名由调用方优先取用（``character.name or ...``）；本链与 ``.hp list``
     的成员名解析保持一致。修复（2026-09-22）：无角色卡的玩家经先攻表解析为
@@ -194,7 +194,7 @@ async def resolve_target_display_name(
         if name:
             return name
     name = await get_group_member_nickname(bot, event.group_id, int(target_id))
-    return name or text.TXT_HP_UNKNOWN_NAME
+    return name or text.TXT_HP_UNKNOWN_NAME.format(qq=target_id)
 
 
 # =========================================================================
@@ -267,7 +267,7 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
         await hp_matcher.finish(feedback)
 
     # 列表（无卡记录不再直接显示 QQ 号——名称回退链
-    # 角色卡名 → 群名片 → QQ 昵称 → 「未知玩家」，与目标结算反馈
+    # 角色卡名 → 群名片 → QQ 昵称 → 「未知玩家（QQ号）」，与目标结算反馈
     # resolve_target_display_name 同款；无卡名成员需调
     # get_group_member_info，本插件放宽「离线可用」原则的两处之一，
     # API 失败/异常由适配层吞掉、名称回退下一级，不影响列表主流程）
@@ -281,7 +281,9 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
                     name = await get_group_member_nickname(
                         bot, event.group_id, int(char.user_id)
                     )
-                    name = name or text.TXT_HP_UNKNOWN_NAME
+                    name = name or text.TXT_HP_UNKNOWN_NAME.format(
+                        qq=char.user_id
+                    )
                 feedback += f"{name} {char.hp_info.get_info()}\n"
         # NPC/怪物血量（对齐 DicePP：PC 在前、NPC 在后）
         for npc in await list_npc_health(event.group_id):
