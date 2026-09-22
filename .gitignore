@@ -42,3 +42,8 @@ Thumbs.db
 
 # ---- 发布流程临时产物（release workflow 提取的 Release 正文；本地试跑同名脚本时也会生成）----
 .release-notes.md
+
+# ---- 文档站（VitePress，仅构建文档用，不进发布产物）----
+node_modules/
+docs/.vitepress/dist/
+docs/.vitepress/cache/

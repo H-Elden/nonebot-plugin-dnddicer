@@ -1,0 +1,15 @@
+{
+  "name": "nonebot-plugin-dnddicer-docs",
+  "private": true,
+  "type": "module",
+  "description": "屠龙骰（DNDDicer）使用文档站——基于 VitePress 构建，仅用于文档开发与部署",
+  "scripts": {
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
+  },
+  "devDependencies": {
+    "markdown-it-container": "^4.0.0",
+    "vitepress": "^1.6.4"
+  }
+}

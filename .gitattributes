@@ -12,6 +12,12 @@
 *.lock text eol=lf
 *.gitignore text eol=lf
 *.gitattributes text eol=lf
+# 文档站（VitePress）前端文件
+*.mts text eol=lf
+*.ts text eol=lf
+*.js text eol=lf
+*.css text eol=lf
+*.vue text eol=lf
 
 # 二进制文件不转换
 *.png binary
