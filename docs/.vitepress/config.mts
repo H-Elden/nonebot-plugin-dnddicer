@@ -33,6 +33,7 @@ export default defineConfig({
         text: '开始',
         items: [
           { text: '快速开始', link: '/guide/quickstart' },
+          { text: '示例团与人物', link: '/guide/cast' },
           { text: '命令总览', link: '/guide/overview' },
         ],
       },
