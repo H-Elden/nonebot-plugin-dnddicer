@@ -2,7 +2,7 @@
 
 屠龙骰是专精 **DND5e / DND5r** 跑团的 [NoneBot2](https://nonebot.dev/) 骰娘插件（OneBot V11 适配器），为 QQ 群跑团提供一站式支持：掷骰表达式、角色卡与检定点命令、HP 管理、先攻列表与战斗轮。命令手感对齐 [nonebot-dicepp](https://github.com/pear-studio/nonebot-dicepp)（梨骰）。
 
-> **版本**：v0.2.0。规则范围：**仅支持 DND5e/5r**。安装与配置见 [快速开始](./guide/quickstart.md)。
+> **版本**：v0.2.1。规则范围：**仅支持 DND5e/5r**。安装与配置见 [快速开始](./guide/quickstart.md)。
 
 ## 功能一览
 
