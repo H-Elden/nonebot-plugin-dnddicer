@@ -13,6 +13,7 @@ from __future__ import annotations
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageEvent
 
 from ..data.group_config import get_group_config, set_group_config_field
+from ..engine.roll.ast_engine.errors import RollEngineError
 from ..engine.roll.default_dice import format_default_expr_from_input, format_default_expr_from_storage
 from ..engine.roll.roll_utils import RollDiceError
 from ..platform import onebot_v11
@@ -49,7 +50,8 @@ async def handle_dset(event: MessageEvent) -> None:
 
     try:
         new_expr = format_default_expr_from_input(rest)
-    except RollDiceError as exc:
+    except (RollDiceError, RollEngineError) as exc:
+        # 引擎错误（如优势/劣势粘连检查）同样回可读原因，避免落入全局异常兜底
         await dset_matcher.finish(text.TXT_DSET_INVALID.format(reason=exc.info))
 
     await set_group_config_field(event.group_id, "default_dice", new_expr)

@@ -257,3 +257,28 @@ class TestHistoricalEdgeRegressions:
         """Complex multi-dice arithmetic expression should execute."""
         result = exec_roll_exp("1D1+1D1+1D1")
         assert result.get_val() == 3
+
+    # --- 2026-09-22 优势/劣势别名粘连与 K/KL 取点上限（本地有意偏离上游） ---
+
+    def test_sticky_chinese_alias_raises_with_hint(self):
+        """优势/劣势 后紧跟数字 → 可读指引（不再粘连成 K120/KL120 静默求值）。"""
+        for exp in ("D劣势20+6", "D优势20+6", "D劣势２０+6", "D20优势20"):
+            with pytest.raises(RollDiceError) as exc:
+                exec_roll_exp(exp)
+            assert "优势/劣势 后不能直接跟数字" in exc.value.info
+
+    def test_keep_count_exceeding_dice_raises(self):
+        """K/KL 取点数超过骰子数量 → 报错（上游为静默全保留并求和）。"""
+        for exp in ("2D20KL120", "2D20K120", "1D20KL2"):
+            with pytest.raises(RollDiceError) as exc:
+                exec_roll_exp(exp)
+            assert "取点数不能超过骰子数量" in exc.value.info
+
+    def test_keep_count_within_dice_unchanged(self):
+        """防回归：取点数不超过骰子数时行为不变（含多取点 KL2 / K3）。"""
+        token = set_runtime(SequenceRuntime([1, 3, 6, 5, 4, 6, 4, 5, 1, 3]))
+        try:
+            assert exec_roll_exp("5D6KL2").get_val() == 4   # 最低两颗 1+3
+            assert exec_roll_exp("5D6K3").get_val() == 15   # 最高三颗 6+5+4
+        finally:
+            reset_runtime(token)

@@ -248,3 +248,42 @@ async def test_roll_special_mode_a_placeholder(app: App, roll_matcher):
     """a 判定模式（DicePP .r a<阈值>）第一期未实现 → 显式提示而非静默。"""
     event = fake_group_message_event_v11(message=Message(".r a70 力量检定"))
     await _expect_send(app, roll_matcher, event, "该掷骰模式（a）尚未实现，敬请期待。")
+
+
+@pytest.mark.asyncio
+async def test_roll_alias_misplaced_face_hint(app: App, roll_matcher):
+    """面数写错位（.rd劣势20+6 / .rd优势20+6）：回可读指引而非荒谬结果。
+
+    2026-09-22 修复：此前别名展开会把 ``KL1``/``K1`` 与后随数字静默粘成
+    ``2D20KL120``（保留 120 个 = 两骰求和），得到「MIN{[9], [18]}+6=33」
+    这类显示与数值不自洽的结果。
+    """
+    hint = (
+        "优势/劣势 后不能直接跟数字：骰子面数请写在前面（如 d20劣势+6），"
+        "加值请写成 +N（如 d劣势+2）"
+    )
+    for text_msg in (".rd劣势20+6", ".rd优势20+6"):
+        event = fake_group_message_event_v11(message=Message(text_msg))
+        await _expect_send(app, roll_matcher, event, hint)
+
+
+@pytest.mark.asyncio
+async def test_roll_alias_valid_forms(app: App, roll_matcher):
+    """正确写法回归：.rd劣势+6 与 .rd20劣势+6 均正常（两骰取低 + 加值）。"""
+    token = set_runtime(SequenceRuntime([5, 15, 5, 15]))
+    try:
+        for text_msg in (".rd劣势+6", ".rd20劣势+6"):
+            event = fake_group_message_event_v11(message=Message(text_msg))
+            await _expect_send(
+                app, roll_matcher, event,
+                "test 的掷骰结果为 2D20KL1+6=MIN{[5], [15]}+6=11",
+            )
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_roll_keep_count_exceeding_dice_hint(app: App, roll_matcher):
+    """手输超量取点（.r2d20kl120）：报可读错误而非静默两骰求和。"""
+    event = fake_group_message_event_v11(message=Message(".r2d20kl120"))
+    await _expect_send(app, roll_matcher, event, "取点数不能超过骰子数量：120 > 2")

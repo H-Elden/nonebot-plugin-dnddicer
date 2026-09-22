@@ -1,8 +1,9 @@
 # ---------------------------------------------------------------------------
 # 本文件移植自 nonebot-dicepp (https://github.com/pear-studio/nonebot-dicepp)
 # Copyright (c) 2022 pear-studio, MIT License（许可全文见本项目 LICENSE）。
-# Ported from nonebot-dicepp — 逻辑语义与上游一致，仅做 import/路径适配；
-# 改动记录见移植说明文件头注释。
+# Ported from nonebot-dicepp — 主体逻辑与上游一致，仅做 import/路径适配；
+# 本地有意偏离：2026-09-22 K/KL 取点数超过现有骰子数时报错（上游静默保留全部
+# 并求和，显示与实际值自相矛盾，详见 _ensure_keep_within_dice）。
 # ---------------------------------------------------------------------------
 """
 AST Evaluator for Roll Expressions
@@ -284,9 +285,23 @@ class Evaluator(ASTVisitor):
 
         return rolls, {}
     
+    def _ensure_keep_within_dice(self, kept_rolls: List[DiceRoll], keep: int) -> None:
+        """K/KL 取点数不得超过现有骰子数（2026-09-22 有意偏离上游）。
+
+        上游对超量取点静默保留全部并按求和计算（如 2D20KL120 得到两骰之和），
+        与 MAX{...}/MIN{...} 的展示语义自相矛盾（显示像取最大/最小值、实际是
+        求和），构成误导，故在此拦截。
+        """
+        if keep > len(kept_rolls):
+            raise RollRuntimeError(
+                f"取点数不能超过骰子数量：{keep} > {len(kept_rolls)}",
+                code=RollErrorCode.INVALID_MODIFIER,
+            )
+
     def _apply_keep_highest(self, rolls: List[DiceRoll], keep: int) -> List[DiceRoll]:
         """Keep only the highest N rolls."""
         kept_rolls = [r for r in rolls if r.kept]
+        self._ensure_keep_within_dice(kept_rolls, keep)
         sorted_rolls = sorted(kept_rolls, key=lambda r: r.value, reverse=True)
         
         for i, roll in enumerate(sorted_rolls):
@@ -297,6 +312,7 @@ class Evaluator(ASTVisitor):
     def _apply_keep_lowest(self, rolls: List[DiceRoll], keep: int) -> List[DiceRoll]:
         """Keep only the lowest N rolls."""
         kept_rolls = [r for r in rolls if r.kept]
+        self._ensure_keep_within_dice(kept_rolls, keep)
         sorted_rolls = sorted(kept_rolls, key=lambda r: r.value)
         
         for i, roll in enumerate(sorted_rolls):

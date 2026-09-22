@@ -77,6 +77,21 @@ async def test_dset_invalid_input(app: App):
 
 
 @pytest.mark.asyncio
+async def test_dset_engine_error_displayed(app: App):
+    """.dset 触发引擎错误（优势/劣势粘连检查）时回显原因，不落入全局异常兜底。"""
+    from nonebot_plugin_dnddicer.commands.group_config import dset_matcher
+
+    event = _group_event(".dset d劣势20", role="admin")
+    await _expect(
+        app,
+        dset_matcher,
+        event,
+        "默认掷骰表达式无效：优势/劣势 后不能直接跟数字："
+        "骰子面数请写在前面（如 d20劣势+6），加值请写成 +N（如 d劣势+2）",
+    )
+
+
+@pytest.mark.asyncio
 async def test_dset_private_denied(app: App):
     """私聊使用 .dset → 提示仅群聊可用。"""
     from nonebot_plugin_dnddicer.commands.group_config import dset_matcher
