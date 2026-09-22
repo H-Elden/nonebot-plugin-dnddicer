@@ -1,0 +1,116 @@
+/* ============================================================
+   聊天气泡（::: chat 容器）
+   左：骰娘与其他人（含私聊标注）；右：示例用户（QQ 群昵称）
+   配色全部走 VitePress 主题变量，自动适配亮色/暗色
+   ============================================================ */
+
+.chat {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 16px 0;
+  padding: 16px 18px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  background-color: var(--vp-c-bg-soft);
+}
+
+.chat-msg {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.chat-msg--right {
+  flex-direction: row-reverse;
+}
+
+.chat-avatar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+  user-select: none;
+}
+
+.chat-avatar--bot {
+  background-image: linear-gradient(135deg, #6366f1, #a855f7);
+}
+
+.chat-avatar--user {
+  background-image: linear-gradient(135deg, #0ea5e9, #10b981);
+}
+
+.chat-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: min(calc(100% - 44px), 620px);
+}
+
+.chat-msg--right .chat-body {
+  align-items: flex-end;
+}
+
+.chat-name {
+  padding: 0 2px;
+  color: var(--vp-c-text-2);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.chat-bubble {
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  background-color: var(--vp-c-bg);
+  color: var(--vp-c-text-1);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chat-msg--right .chat-bubble {
+  border-color: var(--vp-c-brand-1);
+  background-color: var(--vp-c-brand-soft);
+}
+
+/* 注释条：气泡下方的补充说明（支持行内 markdown） */
+.chat-note {
+  display: flex;
+  gap: 8px;
+  margin-left: 44px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--vp-c-brand-1);
+  border-radius: 0 8px 8px 0;
+  background-color: var(--vp-c-bg);
+  color: var(--vp-c-text-2);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.chat-note__tag {
+  flex: none;
+  color: var(--vp-c-brand-1);
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .chat {
+    padding: 12px;
+  }
+
+  .chat-note {
+    margin-left: 0;
+  }
+}

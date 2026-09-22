@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitepress'
+import { chatContainer } from './plugins/chat-container.mts'
 
 // 屠龙骰（DNDDicer）使用文档站配置。
 // 注意：站点发布在 GitHub Pages 的仓库子路径下，base 必须与实际部署路径一致，
@@ -11,6 +12,13 @@ export default defineConfig({
   base: '/nonebot-plugin-dnddicer/',
   cleanUrls: true,
   lastUpdated: true,
+
+  markdown: {
+    config: (md) => {
+      // `::: chat` 聊天气泡容器（示例渲染）
+      md.use(chatContainer)
+    },
+  },
 
   themeConfig: {
     nav: [
