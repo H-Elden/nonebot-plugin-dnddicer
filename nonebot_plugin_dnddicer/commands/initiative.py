@@ -5,12 +5,20 @@
 - ``.ri``：投掷先攻入表——``.ri`` 自己、``.ri(+|-|=)调整``、``.ri 表达式 名称``
   （空格分隔）、``.ri20 地精`` 固定值、``.ri 地精/兽人`` 复数同掷、
   ``.ri 3#地精`` 批量（a/b/c 后缀）、名称内可带 优势/劣势/±额外加值
-  （如 ``.ri+2 地精优势/灵活地精+1``）；
+  （如 ``.ri+2 地精优势/灵活地精+1``）、``.ri+3 @玩家`` 代不在场的玩家掷骰
+  （@ 提及目标：条目名取该玩家角色卡名并与该玩家绑定，见下）；
 - ``.init`` / ``.先攻``：无参数或 list/列表 查看；clr/清除 清空；del/删除
   删除条目（支持 A/B 多删与部分匹配）；first/fst/提前 同值条目提前；
   swap/交换 互换两个条目（单参数时与自己换）；
 - ``.先攻检定``（角色卡检定点命令）掷出结果自动入表——联动入口在本文件
   ``add_initiative_entities``。
+
+@ 提及目标（2026-09-22 新增，DM 代操作场景）：``.ri+3 @玩家`` 以该玩家的
+角色卡名入表并绑定其 QQ——重掷替换旧条目、轮到该条目时照常 @ 提醒、``.hp``
+按名称也能命中（三层搜索第 3 层带 owner → 解析为 PC）；无卡时以真 @ 消息段
+引导建卡（不按群名片硬建无主条目）；``3#`` 批量与 @ 组合会被拦截引导；
+@ 落在表达式段（``.ri @小明 布兰克``）或命令前（``@小明 .ri+3``）时提示
+「目标请写在表达式右侧」且不执行（避免静默给发送者自己掷先攻）。
 
 与 DicePP 的差异（已注于各函数）：
 - 不迁移 DicePP 的 get_nickname API 刷新：实体名称为入表时快照（角色名 →
@@ -41,7 +49,7 @@ from nonebot.rule import Rule
 
 from ..character.models import HPInfo
 from ..config import get_config
-from ..data.characters import list_characters_by_group
+from ..data.characters import get_character, list_characters_by_group
 from ..data.initiative import clear_init_list, get_init_list, save_init_list
 from ..data.npc_health import (
     delete_npc_health,
@@ -52,6 +60,7 @@ from ..data.npc_health import (
 from ..engine.roll.ast_engine.adapter import exec_roll_exp_unified, sift_roll_exp_and_reason
 from ..engine.roll.roll_utils import RollDiceError
 from ..initiative.models import InitiativeError, InitList
+from ..platform import onebot_v11
 from . import base, text
 
 _HELP_INIT = (
@@ -77,6 +86,10 @@ _HELP_RI = (
     ".ri20 地精 //将地精以固定先攻20加入先攻列表\n"
     ".ri+2 地精/灵活地精+1/笨拙地精-1 //将3个地精分别加入先攻列表\n"
     ".ri-2 2#食人魔僵尸 //将2个食人魔僵尸(a,b)以相同掷骰加入先攻列表\n"
+    "指定@玩家: .ri+3 @玩家 //条目名取该玩家角色卡名并与该玩家绑定\n"
+    "  (重掷替换旧条目、回合提醒与 .hp 解析同步生效)\n"
+    "  优劣势/加值写在标记之后: .ri @玩家优势 / .ri @玩家+2\n"
+    "  可与NPC条目混写: .ri 地精/@玩家; 无卡会引导先建卡\n"
     "如需查看先攻表格相关的指令请输入.help init\n"
     "如需查看回合与轮次相关的指令请输入.help 战斗轮"
 )
@@ -191,6 +204,7 @@ async def add_initiative_entities(
     result_dict: Dict[str, Tuple[int, str]],
     owner_id: str,
     group_id: int | str,
+    entity_owners: Optional[Dict[str, str]] = None,
 ) -> str:
     """把掷骰结果加入先攻表，返回反馈文案。
 
@@ -199,6 +213,9 @@ async def add_initiative_entities(
         owner_id: 非空代表这些条目绑定的玩家 QQ（无显式名称的 .ri 本人掷骰）；
             DicePP 的语义为整个请求一个 owner（NPC 显式命名时传 ""）。
         group_id: 目标群号。
+        entity_owners: 按条目覆盖归属 QQ（@ 提及目标：条目名取角色卡名并与
+            该玩家绑定）；缺省 None 时行为与既有完全一致（.先攻检定 调用点
+            不受影响）。
 
     行为（对齐 DicePP add_initiative_entities）：
     - 同先攻值可并存，输出提示让 DM 用 .init first 决定先后；
@@ -226,28 +243,32 @@ async def add_initiative_entities(
     refill_list: List[Tuple[str, str, str]] = []
     for roll_str, (name_list, roll_val) in final_result_dict.items():
         for name in name_list:
+            # 本条目归属：按条目覆盖优先（@ 目标），否则用请求级 owner
+            entry_owner = owner_id
+            if entity_owners and name in entity_owners:
+                entry_owner = entity_owners[name]
             # 按现状（含将被替换的旧条目）扫描重复/同值提示
             has_same = False
             same: List[str] = []
             already_present = any(e.name == name for e in init_data.entities)
             for entity in init_data.entities:
-                if (owner_id and entity.owner == owner_id) or entity.name == name:
+                if (entry_owner and entity.owner == entry_owner) or entity.name == name:
                     repeatted = True
                 if entity.init == roll_val:
                     has_same = True
                     same.append(entity.name)
             # 绑定玩家旧条目先删（名字可能不同源），再入新条目
-            if owner_id:
+            if entry_owner:
                 for stale in [
                     e for e in init_data.entities
-                    if e.owner == owner_id and e.name != name
+                    if e.owner == entry_owner and e.name != name
                 ]:
                     try:
                         init_data.del_entity(stale.name)
                     except InitiativeError:
                         pass
             try:
-                init_data.add_entity(name, owner_id, roll_val)
+                init_data.add_entity(name, entry_owner, roll_val)
             except InitiativeError as exc:
                 feedback_list.append(
                     text.TXT_INIT_ERROR.format(error_info=exc.info)
@@ -259,7 +280,7 @@ async def add_initiative_entities(
                     entity_list=name + sames
                 )
             # NPC 新条目入表：按需自动回满（同名重掷不触发）
-            if not owner_id and not already_present:
+            if not entry_owner and not already_present:
                 refilled = await _auto_refill_npc_health(name, group_id)
                 if refilled is not None:
                     refill_list.append(refilled)
@@ -364,8 +385,15 @@ async def _roll_initiative(
 ) -> None:
     """执行 .ri：掷骰并把结果加入先攻表；失败以用户可见文案直接回复。"""
     exp_str, name = _parse_ri_arg(arg_str)
+    # 游离 @：@ 落在表达式段（如 .ri @小明 布兰克）→ 提示并不执行
+    if onebot_v11.iter_mentions(exp_str):
+        await initiative_matcher.finish(text.TXT_MENTION_RI_POS_HINT)
     owner_id = ""
     if not name:
+        # 游离 @：@ 不在表达式右侧目标位（如 @小明 .ri+3）→ 提示并不执行
+        # （此前 @ 段被纯文本丢弃会静默给发送者自己掷先攻）
+        if onebot_v11.list_mentions(event):
+            await initiative_matcher.finish(text.TXT_MENTION_RI_POS_HINT)
         name = "self"
         owner_id = str(event.user_id)
     if not exp_str:
@@ -377,7 +405,7 @@ async def _roll_initiative(
         if not n:
             continue
         final_exp_str = exp_str.lower()
-        # 名称内附带 优势/劣势/±加值（对齐 DicePP）
+        # 名称内附带 优势/劣势/±加值（对齐 DicePP；写在 @ 标记之后同样生效）
         if ("优势" in n and not n.startswith("优势")) or (
             "劣势" in n and not n.startswith("劣势")
         ):
@@ -401,6 +429,10 @@ async def _roll_initiative(
 
         if "#" in n:
             num_str, n = n.split("#", 1)
+            # N# 批量与 @ 目标组合：批量会派生 a/b/c 后缀，与「条目名取角色
+            # 卡名并与该玩家绑定」的语义冲突，引导直接写条目名称
+            if onebot_v11.parse_mention_token(n) is not None:
+                await initiative_matcher.finish(text.TXT_MENTION_RI_BATCH)
             try:
                 num = int(num_str)
                 assert 1 <= num <= 10
@@ -422,13 +454,30 @@ async def _roll_initiative(
             name_dict[n] = (val, display)
 
     result_dict: Dict[str, Tuple[int, str]] = {}
+    #: 条目名 → 归属 QQ（@ 目标：入表名取角色卡名，但归属为该玩家）
+    entry_owners: Dict[str, str] = {}
     for n, (val, display) in name_dict.items():
         if n == "self" or n == "我":
             n = await resolve_self_name(bot, event, event.user_id)
+        else:
+            target_qq = onebot_v11.parse_mention_token(n)
+            if target_qq is not None:
+                character = await get_character(event.group_id, target_qq)
+                if character is None or not character.is_init:
+                    await initiative_matcher.finish(
+                        onebot_v11.at_reply(target_qq, text.TXT_MENTION_NO_CHAR_RI)
+                    )
+                n = await base.resolve_display_name(
+                    bot, event, target_qq, char_name=character.name
+                )
+                entry_owners[n] = target_qq
         result_dict[n] = (val, display)
 
     feedback = await add_initiative_entities(
-        result_dict, owner_id, event.group_id
+        result_dict,
+        owner_id,
+        event.group_id,
+        entity_owners=entry_owners or None,
     )
     await initiative_matcher.finish(feedback)
     return None
@@ -479,7 +528,7 @@ async def handle_initiative(bot: Bot, event: MessageEvent) -> None:
     if not isinstance(event, GroupMessageEvent):
         await initiative_matcher.finish(text.TXT_GROUP_ONLY)
 
-    parsed = base.parse_command_text(event.get_plaintext())
+    parsed = base.parse_command_with_mentions(event)
     if parsed is None:
         return  # 理论不可达（rule 已过滤）
     name, rest = parsed[1], parsed[2]

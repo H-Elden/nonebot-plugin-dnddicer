@@ -7,7 +7,7 @@
 import pytest
 from nonebug import App
 from nonebot.adapters.onebot.v11 import Adapter as OnebotV11Adapter
-from nonebot.adapters.onebot.v11 import Bot, Message
+from nonebot.adapters.onebot.v11 import Bot, Message, MessageSegment
 
 from fake_event import fake_group_message_event_v11
 
@@ -482,3 +482,176 @@ async def test_check_initiative_20_no_critical(app: App):
         )
     finally:
         reset_runtime(token)
+
+
+# =========================================================================
+# @ 提及目标（2026-09-22：DM 代不在场的玩家掷先攻）
+# =========================================================================
+
+
+def _mention_event(group_id: int, *parts, user_id: int = 10001):
+    """构造带 @ 段的群消息事件（parts 依次拼接，可为文本或消息段）。"""
+    message = Message()
+    for part in parts:
+        message += part
+    return fake_group_message_event_v11(
+        message=message, group_id=group_id, user_id=user_id
+    )
+
+
+@pytest.mark.asyncio
+async def test_ri_mention_binds_owner(app: App):
+    """.ri+3 @玩家 → 条目名取角色卡名、归属绑定该玩家（不再静默给自己掷）。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.initiative import initiative_matcher
+    from nonebot_plugin_dnddicer.data.initiative import get_init_list
+
+    g = 100030
+    await _expect(
+        app, char_matcher,
+        _event(g, f".角色卡记录 {_RECORD_SIMPLE}", user_id=30010),
+        "角色卡已设置",
+    )
+    token = set_runtime(SequenceRuntime([10]))
+    try:
+        await _expect(
+            app, initiative_matcher,
+            _mention_event(g, ".ri+3 ", MessageSegment.at(30010), user_id=30000),
+            "伊丽莎白的先攻值是 1D20+3=[10]+3=13",
+        )
+    finally:
+        reset_runtime(token)
+
+    init_data = await get_init_list(g)
+    assert init_data is not None
+    assert [(e.name, e.owner, e.init) for e in init_data.entities] == [
+        ("伊丽莎白", "30010", 13)
+    ]
+    # 发送者（DM）自己未入表
+    await _expect(
+        app, initiative_matcher, _event(g, ".init"),
+        "先攻列表如下: \n当前是第1轮,伊丽莎白的回合\n1.伊丽莎白 先攻:13",
+    )
+
+
+@pytest.mark.asyncio
+async def test_ri_mention_fixed_value_and_suffix(app: App):
+    """.ri 20 @玩家 固定值；.ri @玩家+2 加值写在标记之后。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.initiative import initiative_matcher
+
+    g = 100031
+    await _expect(
+        app, char_matcher,
+        _event(g, f".角色卡记录 {_RECORD_SIMPLE}", user_id=30011),
+        "角色卡已设置",
+    )
+    await _expect(
+        app, initiative_matcher,
+        _mention_event(g, ".ri 20 ", MessageSegment.at(30011), user_id=30000),
+        "伊丽莎白的先攻值是 20",
+    )
+    token = set_runtime(SequenceRuntime([8]))
+    try:
+        await _expect(
+            app, initiative_matcher,
+            _mention_event(g, ".ri ", MessageSegment.at(30011), "+2", user_id=30000),
+            "你重复投掷了先攻\n伊丽莎白的先攻值是 1D20+2=[8]+2=10",
+        )
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_ri_mention_advantage_suffix(app: App):
+    """.ri @玩家优势 → 优劣势写在标记之后同样并入掷骰表达式。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.initiative import initiative_matcher
+
+    g = 100032
+    await _expect(
+        app, char_matcher,
+        _event(g, f".角色卡记录 {_RECORD_SIMPLE}", user_id=30012),
+        "角色卡已设置",
+    )
+    token = set_runtime(SequenceRuntime([9, 7]))
+    try:
+        await _expect(
+            app, initiative_matcher,
+            _mention_event(g, ".ri ", MessageSegment.at(30012), "优势", user_id=30000),
+            "伊丽莎白的先攻值是 2D20K1=MAX{[9], [7]}=9",
+        )
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_ri_mention_mixed_with_npc(app: App):
+    """.ri 地精/@玩家 → NPC 条目与 @ 目标混写（各自掷骰与归属）。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.initiative import initiative_matcher
+    from nonebot_plugin_dnddicer.data.initiative import get_init_list
+
+    g = 100033
+    await _expect(
+        app, char_matcher,
+        _event(g, f".角色卡记录 {_RECORD_SIMPLE}", user_id=30013),
+        "角色卡已设置",
+    )
+    token = set_runtime(SequenceRuntime([3, 4]))
+    try:
+        await _expect(
+            app, initiative_matcher,
+            _mention_event(g, ".ri 地精/", MessageSegment.at(30013), user_id=30000),
+            "地精的先攻值是 1D20=[3]=3\n伊丽莎白的先攻值是 1D20=[4]=4",
+        )
+    finally:
+        reset_runtime(token)
+
+    init_data = await get_init_list(g)
+    assert init_data is not None
+    assert [(e.name, e.owner) for e in init_data.entities] == [
+        ("伊丽莎白", "30013"),
+        ("地精", ""),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_ri_mention_no_char_and_batch_guard(app: App):
+    """@ 目标无卡 → 真 @ 段引导建卡；3#@玩家 → 批量写法守卫。"""
+    from nonebot_plugin_dnddicer.commands.initiative import initiative_matcher
+
+    g = 100034
+    await _expect(
+        app, initiative_matcher,
+        _mention_event(g, ".ri+3 ", MessageSegment.at(39999), user_id=30000),
+        Message(MessageSegment.at("39999"))
+        + " 还没有在本群建立角色卡（可用 .角色卡记录 建卡后再试）；"
+        "如需临时加同名怪物条目，可直接写名称（.ri+3 名称）",
+    )
+    await _expect(
+        app, initiative_matcher,
+        _mention_event(g, ".ri 3#", MessageSegment.at(39999), user_id=30000),
+        "@ 目标不支持 N# 批量写法，请直接写条目名称",
+    )
+
+
+@pytest.mark.asyncio
+async def test_ri_stray_mention_not_executed(app: App):
+    """游离 @（@ 落在表达式段或命令前）→ 提示且不给发送者自己掷先攻。"""
+    from nonebot_plugin_dnddicer.commands.initiative import initiative_matcher
+    from nonebot_plugin_dnddicer.data.initiative import get_init_list
+
+    g = 100035
+    hint = "未执行：目标请写在表达式右侧，例如 .ri+3 @小明"
+    await _expect(
+        app, initiative_matcher,
+        _mention_event(g, ".ri ", MessageSegment.at(39998), " 布兰克", user_id=30000),
+        hint,
+    )
+    await _expect(
+        app, initiative_matcher,
+        _mention_event(g, MessageSegment.at(39998), " .ri+3", user_id=30000),
+        hint,
+    )
+    assert await get_init_list(g) is None
