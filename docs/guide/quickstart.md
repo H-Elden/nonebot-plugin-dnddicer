@@ -126,5 +126,5 @@ dnddicer_default_face=20
 - 认识贯穿全站的示例团：[示例团与人物](./cast.md)
 - 全部命令一览：[命令总览](./overview.md)
 - 掷骰表达式、优势劣势与暗骰：[掷骰基础](./roll-basics.md)与[掷骰进阶](./roll-advanced.md)
-- 建一张规则完整的角色卡：[角色卡与检定](./character-card.md)
+- 建一张规则完整的角色卡：[角色卡与属性](./character-card.md)
 - DM 代操作（@ 指定玩家结算）：[@ 提及目标](./overview.md#提及目标-dm-代操作)

@@ -18,8 +18,8 @@ DNDDicer 的目标是填补「NoneBot 商店中缺少 **DND5e/5r 专业 + 现代
 详细用法、输入/输出示例与常见问题见仓库 `docs/` 使用文档：
 
 - [命令总表与快速开始](./docs/index.md) · [群管理与 FAQ](./docs/guide/faq.md)
-- [掷骰基础](./docs/guide/roll-basics.md) · [掷骰进阶](./docs/guide/roll-advanced.md) · [角色卡与检定](./docs/guide/character-card.md)
-- [属性生成](./docs/guide/attributes.md) · [HP 管理](./docs/guide/hp-rest.md)
+- [掷骰基础](./docs/guide/roll-basics.md) · [掷骰进阶](./docs/guide/roll-advanced.md) · [角色卡与属性](./docs/guide/character-card.md)
+- [检定与豁免](./docs/guide/checks.md) · [HP 与长休](./docs/guide/hp-rest.md)
 - [先攻列表](./docs/guide/initiative.md) · [战斗轮](./docs/guide/battle.md)
 
 ## 📦 安装

@@ -33,6 +33,10 @@ SYNCED_PAGES = [
     "guide/roll-basics.md",
     "guide/roll-advanced.md",
     "guide/initiative.md",
+    "guide/character-card.md",
+    "guide/checks.md",
+    "guide/hp-rest.md",
+    "guide/battle.md",
 ]
 
 _OPEN_PATTERN = re.compile(r"^:::\s*chat\s*$")

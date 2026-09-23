@@ -8,7 +8,7 @@ export default defineConfig({
   lang: 'zh-CN',
   title: '屠龙骰 DNDDicer',
   description:
-    '专精 DND5e/5r 的 QQ 跑团骰娘插件使用文档：掷骰表达式、角色卡与检定、属性生成、HP 管理、先攻列表与战斗轮',
+    '专精 DND5e/5r 的 QQ 跑团骰娘插件使用文档：掷骰表达式、角色卡与属性、检定与豁免、HP 管理、先攻列表与战斗轮',
   base: '/nonebot-plugin-dnddicer/',
   cleanUrls: true,
   lastUpdated: true,
@@ -46,19 +46,13 @@ export default defineConfig({
         ],
       },
       {
-        text: '角色与检定',
+        text: '第二章 · 进阶操作',
         items: [
-          { text: '角色卡与检定', link: '/guide/character-card' },
-          { text: '属性生成', link: '/guide/attributes' },
+          { text: '角色卡与属性', link: '/guide/character-card' },
+          { text: '检定与豁免', link: '/guide/checks' },
+          { text: 'HP 与长休', link: '/guide/hp-rest' },
+          { text: '战斗轮', link: '/guide/battle' },
         ],
-      },
-      {
-        text: '生命值',
-        items: [{ text: 'HP 管理与长休', link: '/guide/hp-rest' }],
-      },
-      {
-        text: '战斗',
-        items: [{ text: '战斗轮', link: '/guide/battle' }],
       },
       {
         text: '参考',
