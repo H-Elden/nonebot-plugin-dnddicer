@@ -33,10 +33,14 @@ features:
     details: 记录、伤害/治疗（支持掷骰表达式）、临时 HP、NPC 血量跨战斗保持；.长休 一键结算
     link: /guide/hp-rest
     linkText: HP 与长休
-  - title: 先攻与战斗轮
-    details: .ri 掷先攻入表、.init/.先攻 管理条目；.br 开局、.回合/.轮次 推进，轮到玩家自动 @ 提醒
+  - title: 先攻列表
+    details: .ri 掷先攻入表、.init/.先攻 管理条目；支持 @ 代掷与批量入表，列表联动 NPC 血量
     link: /guide/initiative
     linkText: 先攻列表
+  - title: 战斗轮
+    details: .br 开局、.回合/.轮次 推进回合；轮到玩家自动 @ 提醒，怪物回合由 DM 的 .ed 推进
+    link: /guide/battle
+    linkText: 战斗轮
   - title: DM 实战指南
     details: 一次开团的完整流程：开团前整备与入表、三种伤害结算、回合推进、暗骰与速查表
     link: /guide/dm-guide
