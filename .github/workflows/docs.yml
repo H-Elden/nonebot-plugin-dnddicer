@@ -1,0 +1,75 @@
+# 文档站部署（GitHub Pages）
+#
+# 触发时机 = 发布时机：只有推 v* 标签（发版）或手动触发时才构建并部署。
+# 平时往 main 推送的文档改动只留在仓库里，不会改变线上页面——
+# 需要让某个改动上线时，要么随下一次发版，要么在 Actions 里手动运行本工作流。
+#
+# 首次使用：仓库 Settings → Pages → Source 选「GitHub Actions」。
+# 未启用前本工作流会自动跳过（保持绿色），启用后无需再改任何配置。
+name: docs
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.pages.outputs.enabled }}
+    steps:
+      - name: 检查 Pages 是否已启用
+        id: pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api "repos/$GITHUB_REPOSITORY/pages" > /dev/null 2>&1; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "Pages 已启用，继续构建与部署。"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=文档站尚未启用::仓库 Settings → Pages 还没把 Source 选为 GitHub Actions，跳过本次部署；启用后手动运行本工作流、或等下一次发版即可。"
+          fi
+
+  build:
+    needs: check
+    if: needs.check.outputs.enabled == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: 安装文档站依赖
+        run: npm ci
+      # docs:build 自带「从 CHANGELOG.md 生成《更新日志》页」一步，站点更新日志随仓库同步
+      - name: 构建文档站
+        run: npm run docs:build
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/.vitepress/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 部署到 GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
