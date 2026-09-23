@@ -3,7 +3,7 @@
 语义（宿主新需求，2026-09-09 登记）：
 - 群聊服务默认**关闭**（白名单）：未开启的群不响应本插件命令（管理命令 .bot 除外），
   由群主/管理员发送 ``.bot on`` 开启、``.bot off`` 关闭；
-- 私聊不设门禁（可直接使用全部功能）；
+- 私聊不设门禁（不受开关限制；角色卡、HP、先攻等按群归属的命令仍在私聊提示仅限群聊）；
 - 存储文件：localstore 数据目录下 ``service_state.json``，
   结构：``{"schema_version": 1, "data": {"enabled_groups": ["<group_id(str)>", ...]}}``；
 - 访问：进程内缓存 + ``asyncio.Lock`` + ``asyncio.to_thread`` 落盘（与

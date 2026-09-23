@@ -51,6 +51,15 @@ quickstart_first_roll = Scene(
     ],
 )
 
+quickstart_private_limits = Scene(
+    id="quickstart_private_limits",
+    title="私聊的能力边界：角色卡等按群归属的命令会被挡下",
+    steps=[
+        # 私聊没有「本群」这一上下文：角色卡、HP、先攻等按群存放的命令一律提示仅限群聊
+        Step("小满", ".角色卡", channel="private"),
+    ],
+)
+
 # ── 第二幕：旅店试骰（掷骰基础 / 掷骰进阶） ────────────────────────────────
 
 roll_basics_basic = Scene(
@@ -870,6 +879,7 @@ TIMELINE = [
     quickstart_bot_info,
     cast_setup,
     quickstart_first_roll,
+    quickstart_private_limits,
     # 第二幕：旅店试骰（掷骰基础 / 掷骰进阶）
     roll_basics_basic,
     roll_basics_plain_d,

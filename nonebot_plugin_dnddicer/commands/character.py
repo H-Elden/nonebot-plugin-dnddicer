@@ -28,6 +28,7 @@ from nonebot import logger
 from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, MessageEvent
 from nonebot.matcher import Matcher
 from nonebot.plugin import on_message
+from nonebot.rule import Rule
 
 from ..character.constants import (
     ABILITY_LIST,
@@ -123,9 +124,7 @@ def parse_check_body(body: str) -> Optional[Tuple[int, str, str]]:
     return times, name, mod
 
 
-def _check_command_rule() -> "Rule":
-    from nonebot.rule import Rule
-
+def _check_command_rule() -> Rule:
     async def _checker(event: MessageEvent) -> bool:
         text = event.get_plaintext().strip()
         if not text:
@@ -161,7 +160,7 @@ check_matcher = _make_check_matcher()
 
 
 @char_matcher.handle()
-async def handle_character(bot: Bot, event: GroupMessageEvent) -> None:
+async def handle_character(bot: Bot, event: MessageEvent) -> None:
     """处理 .角色卡 系列子命令。"""
     if not isinstance(event, GroupMessageEvent):
         await char_matcher.finish(text.TXT_GROUP_ONLY)
@@ -272,7 +271,7 @@ def _split_target_mention(mod_str: str) -> Tuple[Optional[str], str]:
 
 
 @check_matcher.handle()
-async def handle_check(bot: Bot, event: GroupMessageEvent) -> None:
+async def handle_check(bot: Bot, event: MessageEvent) -> None:
     """处理检定/豁免/攻击点命令（rule 已确保命中且参数可解析）。"""
     if not isinstance(event, GroupMessageEvent):
         await check_matcher.finish(text.TXT_GROUP_ONLY)

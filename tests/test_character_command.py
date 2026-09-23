@@ -9,7 +9,7 @@ from nonebug import App
 from nonebot.adapters.onebot.v11 import Adapter as OnebotV11Adapter
 from nonebot.adapters.onebot.v11 import Bot, Message, MessageSegment
 
-from fake_event import fake_group_message_event_v11
+from fake_event import fake_group_message_event_v11, fake_private_message_event_v11
 
 from nonebot_plugin_dnddicer.engine.roll.karma_runtime import reset_runtime, set_runtime
 from nonebot_plugin_dnddicer.engine.roll.sequence_runtime import SequenceRuntime
@@ -458,3 +458,29 @@ async def test_check_initiative_mention_binds_owner(app: App):
         ),
         "先攻列表如下: \n当前是第1轮,伊丽莎白的回合\n1.伊丽莎白 先攻:7 HP:20/30 (5)",
     )
+
+
+# ── 私聊（仅群聊可用的命令在私聊要给出提示，而不是静默）────────────────────
+
+
+@pytest.mark.asyncio
+async def test_char_private_denied(app: App):
+    """私聊使用 .角色卡 → 提示仅群聊可用。
+
+    角色卡按「群」存放，私聊没有本群上下文；提示必须真的发得出去——
+    处理器事件参数若注成 GroupMessageEvent，私聊事件在参数注入阶段就被滤掉、
+    整个处理器不执行（表现为静默），与其他命令族的提示口径不一致。
+    """
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+
+    event = fake_private_message_event_v11(message=Message(".角色卡"))
+    await _expect(app, char_matcher, event, "该指令仅在群聊中可用。")
+
+
+@pytest.mark.asyncio
+async def test_check_private_denied(app: App):
+    """私聊使用检定点命令 → 提示仅群聊可用（检定读的是本群角色卡，同上）。"""
+    from nonebot_plugin_dnddicer.commands.character import check_matcher
+
+    event = fake_private_message_event_v11(message=Message(".力量检定"))
+    await _expect(app, check_matcher, event, "该指令仅在群聊中可用。")
