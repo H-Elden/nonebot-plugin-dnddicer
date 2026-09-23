@@ -1,8 +1,8 @@
-"""先攻列表数据模型（语义移植自 nonebot-dicepp core/data/models/initiative.py）。
+"""先攻列表数据模型。
 
 - ``InitList`` 同时承载「先攻表」与「战斗轮状态机」：实体列表（按先攻值降序）
   + round/turn 两个指针（turns_in_round 为当前轮内回合数，first_turn 标记战斗
-  是否已开始）——与 DicePP 一致，一个群一张表，战斗轮只是表的"进行中状态"；
+  是否已开始）——一个群一张表，战斗轮只是表的"进行中状态"；
 - 入表/删除时自动修正 turn/round 指针（战斗开始后新增/移除实体不影响当前行动者）；
 - 本实现为纯模型（不含磁盘 IO），持久化见 data/initiative.py。
 """
@@ -28,7 +28,7 @@ class InitEntity(BaseModel):
     """先攻列表中的单个实体。
 
     - name：展示名称（入表时快照：角色名 → 群名片/昵称 → QQ 号）；
-    - owner：绑定的玩家 QQ 号，空串代表无主 NPC（与 DicePP 相同）；
+    - owner：绑定的玩家 QQ 号，空串代表无主 NPC；
     - init：先攻值。
     """
 
@@ -41,12 +41,12 @@ class InitEntity(BaseModel):
         return f"{self.name} 先攻:{self.init}"
 
 
-#: 单个先攻列表的容量上限（对齐 DicePP）
+#: 单个先攻列表的容量上限
 INIT_LIST_SIZE = 30
 
 
 class InitList(BaseModel):
-    """群级先攻表 + 战斗轮状态（迁移自 DicePP InitList，仅去掉 mod_time）。"""
+    """群级先攻表 + 战斗轮状态。"""
 
     group_id: str = ""
     entities: List[InitEntity] = Field(default_factory=list)
@@ -85,7 +85,7 @@ class InitList(BaseModel):
 
         if not self.first_turn:
             # 战斗进行中插入新实体：插在当前回合位及之前则回合指针后移，
-            # 保证正在行动者不变（对齐 DicePP）
+            # 保证正在行动者不变
             for index, entity in enumerate(self.entities):
                 if entity.name == entity_name and self.turn >= index + 1:
                     self.turn += 1

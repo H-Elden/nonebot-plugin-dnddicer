@@ -1,13 +1,11 @@
 # ---------------------------------------------------------------------------
-# 本文件移植自 nonebot-dicepp (https://github.com/pear-studio/nonebot-dicepp)
+# 移植自 nonebot-dicepp (https://github.com/pear-studio/nonebot-dicepp)
 # Copyright (c) 2022 pear-studio, MIT License（许可全文见本项目 LICENSE）。
-# Ported from nonebot-dicepp — 自上游 utils/string.py 裁剪，仅保留掷骰引擎
-# 使用的 to_english_str()；逻辑语义与上游一致，不做改动。
 # ---------------------------------------------------------------------------
 
-"""字符串工具（上游 nonebot-dicepp utils/string.py 的引擎用子集）。
+"""字符串工具（仅保留 to_english_str()：中文符号与全角字符 → 英文半角）。
 
-供 engine/roll/ast_engine/preprocessor.py 做全角→半角转换。
+供 engine/roll/ast_engine/preprocessor.py 做输入归一化。
 """
 
 

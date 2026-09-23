@@ -236,7 +236,7 @@ async def test_roll_default_dice(app: App, roll_matcher):
 async def test_roll_syntax_error(app: App, roll_matcher):
     """非法表达式：回复引擎语法错误文案（非静默）。
 
-    注：表达式以 a/n 等字母开头会被 DicePP 识别为特殊判定模式（见下方
+    注：表达式以 a/n 等字母开头会被识别为特殊判定模式（见下方
     test_roll_special_mode_a_placeholder），因此这里用 q 开头的非法表达式。
     """
     event = fake_group_message_event_v11(message=Message(".r qqq"))
@@ -245,7 +245,7 @@ async def test_roll_syntax_error(app: App, roll_matcher):
 
 @pytest.mark.asyncio
 async def test_roll_special_mode_a_placeholder(app: App, roll_matcher):
-    """a 判定模式（DicePP .r a<阈值>）第一期未实现 → 显式提示而非静默。"""
+    """a 判定模式（.r a<阈值>）第一期未实现 → 显式提示而非静默。"""
     event = fake_group_message_event_v11(message=Message(".r a70 力量检定"))
     await _expect_send(app, roll_matcher, event, "该掷骰模式（a）尚未实现，敬请期待。")
 

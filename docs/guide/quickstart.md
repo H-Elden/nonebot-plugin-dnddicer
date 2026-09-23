@@ -69,7 +69,7 @@ dnddicer_default_face=20
 ::: chat
 白鸦 | @屠龙骰 .bot
 屠龙骰 | 屠龙骰（nonebot-plugin-dnddicer）v0.2.1
-专精 DND5e/5r 跑团的骰娘：掷骰表达式、角色卡与检定/豁免/攻击、属性生成、HP 管理、先攻列表、战斗轮、群配置，命令手感对齐 nonebot-dicepp。
+专精 DND5e/5r 跑团的骰娘：掷骰表达式、角色卡与检定/豁免/攻击、属性生成、HP 管理、先攻列表、战斗轮、群配置。
 本群服务已开启，可直接使用本插件的全部命令。
 用法：.bot on / .bot off——仅限群聊，需群主或管理员权限。
 :::
@@ -134,7 +134,7 @@ dnddicer_default_face=20
 
 ## 开发与致谢
 
-- 本项目以 MIT License 发布；**掷骰引擎与命令语法移植自 [nonebot-dicepp](https://github.com/pear-studio/nonebot-dicepp)**（Copyright (c) 2022 pear-studio，MIT），业务层为独立实现；
+- 本项目以 MIT License 发布；**掷骰引擎移植自 [nonebot-dicepp](https://github.com/pear-studio/nonebot-dicepp)**（Copyright (c) 2022 pear-studio，MIT），业务层为独立实现；
 - 规则查询类资料内容不随插件分发，需要时由使用者自行提供；
 - 发布、配置与开发信息见仓库 README。
 

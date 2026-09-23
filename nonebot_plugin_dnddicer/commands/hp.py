@@ -1,12 +1,9 @@
 """HP 管理命令：``.hp`` + 长休 ``.长休``。
 
-迁移自 nonebot-dicepp ``module/character/dnd5e/hp_command.py``（commit 732ff74），
-适配本插件 ``on_dnd_command`` 注册模式。
-
-目标搜索覆盖三类（对齐 DicePP 优先级）：PC 角色卡 → NPC 血量条目 → 先攻表；
+目标搜索覆盖三类（优先级由高到低）：PC 角色卡 → NPC 血量条目 → 先攻表；
 NPC 血量条目在目标经先攻表解析时按需创建——即 NPC 需先 ``.ri`` 入先攻表
-（或已存在血量记录），与 DicePP 一致；先攻表联动（查看显示 / 清空与删除时
-清理）见 commands/initiative.py。
+（或已存在血量记录）；先攻表联动（查看显示 / 清空与删除时清理）见
+commands/initiative.py。
 
 DM 掷伤害扩展：目标名后可带 抗性/易伤 后缀（伤害减半/加倍，仅对 - 生效），
 目标以 ;（半角/全角）分隔可一次对多个目标结算 AOE；伤害表达式只掷骰一次。
@@ -17,9 +14,9 @@ AOE 混写（``.hp @玩家;地精 -d4``）；提及者无卡时以真 @ 消息�
 游离 @（@ 未落在目标位置，如 ``.hp -d4 @小明``）不再静默按发送者自身结算，
 改为提示目标位置写法（见 handle_hp）。
 
-与 DicePP 的差异（2026-09-21 语义修订）：``.hp del`` / ``.hp clr`` 仅作用于
+删除语义（2026-09-21 修订）：``.hp del`` / ``.hp clr`` 仅作用于
 **NPC 血量记录**——``del 名称``（多个用 / 分隔）删单个、``clr`` 清空本群全部
-（含跨战斗保持的），形状与 .init 的 del/clr 一致；上游的 del/clr 无对象时会
+（含跨战斗保持的），形状与 .init 的 del/clr 一致；早先 del/clr 无对象时会
 删除整张角色卡，粒度超出 .hp 语义且易误触，删整卡统一由 ``.角色卡清除`` 负责。
 """
 
@@ -93,7 +90,7 @@ long_rest_matcher = base.on_dnd_command("长休", _HELP_LONG_REST)
 
 
 # =========================================================================
-# 目标搜索（PC 角色卡 → NPC 血量 → 先攻表，对齐 DicePP 优先级）
+# 目标搜索（PC 角色卡 → NPC 血量 → 先攻表，优先级由高到低）
 # =========================================================================
 
 #: 目标名后缀 → 伤害折算因子（DM 掷伤害用）
@@ -116,8 +113,8 @@ def _match_substring(substring: str, str_list: list[str]) -> list[str]:
 
     完全匹配优先（2026-09-21 修订）：先攻表/血量条目里同时有「地精」与
     「熊地精」时，``.hp 地精`` 应直接命中地精——与 ``.init`` 子指令的
-    「精确 → 模糊 substring」两级匹配一致（DicePP 原版仅做 substring，
-    会把两者都列为歧义）。
+    「精确 → 模糊 substring」两级匹配一致（只做 substring 会把两者
+    都列为歧义）。
     """
     if substring in str_list:
         return [substring]
@@ -136,7 +133,7 @@ async def search_target(
     - ("multiple", "name1/name2") 多个匹配
     - ("", "") 未找到
 
-    优先级（对齐 DicePP）：精确匹配 角色卡 > NPC > 先攻表；部分匹配同序
+    优先级：精确匹配 角色卡 > NPC > 先攻表；部分匹配同序
     取先到者，但后续来源的**精确**匹配可覆盖前序部分匹配。
 
     @ 标记（2026-09-22 新增）为**直连**语义：只查该 QQ 的角色卡、不进入名称
@@ -179,7 +176,7 @@ async def search_target(
         if matches[0] == target_intent:
             return "npc", matches[0]
 
-    # 3. 先攻表（NPC 需先入表才能被 .hp 解析并创建血量，对齐 DicePP）
+    # 3. 先攻表（NPC 需先入表才能被 .hp 解析并创建血量）
     init_data = await get_init_list(group_id)
     if init_data is not None:
         entity_map: dict[str, str] = {
@@ -243,8 +240,7 @@ def _parse_hp_args(arg_str: str) -> Tuple[
 ]:
     """解析调整表达式（不含目标前缀与操作符），返回 (cur, max, temp, error)。
 
-    对齐 DicePP hp_command.process_msg 表达式解析段：末尾 ``(expr)`` 为临时 HP，
-    其余按 ``/`` 拆为 当前/最大 HP。
+    表达式规则：末尾 ``(expr)`` 为临时 HP，其余按 ``/`` 拆为 当前/最大 HP。
     """
     # 临时 HP：末尾 (expr)
     hp_temp_result: Optional[RollResult] = None
@@ -318,7 +314,7 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
                     bot, event, char.user_id, char_name=char.name
                 )
                 feedback += f"{name} {char.hp_info.get_info()}\n"
-        # NPC/怪物血量（对齐 DicePP：PC 在前、NPC 在后）
+        # NPC/怪物血量（PC 在前、NPC 在后）
         for npc in await list_npc_health(event.group_id):
             feedback += f"{npc.name} {npc.hp_info.get_info()}\n"
         feedback = feedback.strip()
@@ -327,7 +323,7 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
         await hp_matcher.finish(feedback)
 
     # 删除（.hp del 名称[多个用 / 分隔] / .hp clr 清空全部）——仅作用于 NPC 血量记录
-    # （2026-09-21 语义修订：不再删除自己/他人的角色卡——DicePP 原版 del/clr 无对象
+    # （2026-09-21 语义修订：不再删除自己/他人的角色卡——早先 del/clr 无对象
     #  即删除整张角色卡，粒度超出 .hp 语义且易误触；删整卡由 .角色卡清除 负责）
     if arg_str.startswith("del") or arg_str.startswith("clr"):
         del_arg = arg_str[3:].strip()
@@ -391,10 +387,9 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
                 view_lines.append(text.TXT_HP_INFO_MISS.format(name=name))
         await hp_matcher.finish(base.join_lines(view_lines))
 
-    # 调整 HP（流程对齐 DicePP hp_command.process_msg：先定位操作符，
-    # 再剥离目标前缀，最后解析调整表达式）。操作符 = 首个 + / - / = ，
-    # 或首个空格（设置目标 HP）；空格后紧跟 +/-/= 时按该符号识别
-    # （如 ".hp 爱丽丝 -d8+3+d6" 的 - 是伤害操作符，空格不视为设置符）。
+    # 调整 HP（流程：先定位操作符，再剥离目标前缀，最后解析调整表达式）。
+    # 操作符 = 首个 + / - / = ，或首个空格（设置目标 HP）；空格后紧跟 +/-/= 时
+    # 按该符号识别（如 ".hp 爱丽丝 -d8+3+d6" 的 - 是伤害操作符，空格不视为设置符）。
     cmd_type: str = "="
     max_len = 2 ** 20
     cmd_index_eq = arg_str.find("=") if "=" in arg_str else max_len
@@ -421,8 +416,8 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
         arg_str = arg_str[1:].strip()
     elif cmd_index > 0:
         target_part = arg_str[:cmd_index].strip()
-        # 本插件扩展：DicePP 会把 ".hp 10/30 (5)" 的 "10/30" 当目标搜索而报错；
-        # 目标部分含 "/" 或 "(" 时视为表达式而非目标，不做剥离
+        # 扩展：".hp 10/30 (5)" 这类无目标的写法，若无此判断会把 "10/30" 当
+        # 目标搜索而报错；目标部分含 "/" 或 "(" 时视为表达式而非目标，不做剥离
         if target_part and "/" not in target_part and "(" not in target_part:
             arg_str = arg_str[cmd_index + 1:].strip()
             # 目标以 ;（半角/全角）分隔实现 AOE 多目标一次结算；含 @ 标记时

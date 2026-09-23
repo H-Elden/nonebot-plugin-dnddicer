@@ -150,7 +150,7 @@ async def test_dnd_reason(app: App):
 
 @pytest.mark.asyncio
 async def test_dnd_reason_no_space(app: App):
-    """.dnd1 原因：无空格次数 + 原因（对齐 DicePP 解析语义）。"""
+    """.dnd1 原因：无空格次数 + 原因（次数连写解析）。"""
     token = set_runtime(SequenceRuntime(_ALL_SIX))
     try:
         event = _group_event(".dnd1 为了勇者")
@@ -231,7 +231,7 @@ async def test_dnd_times_zero(app: App):
 
 @pytest.mark.asyncio
 async def test_dnd_private(app: App):
-    """私聊也可用（DicePP 端口语义：群聊/私聊均可）。"""
+    """私聊也可用（群聊/私聊均可）。"""
     token = set_runtime(SequenceRuntime(_ALL_SIX))
     try:
         event = fake_private_message_event_v11(message=Message(".dnd"))
@@ -366,7 +366,7 @@ def test_parse_dnd_args():
 
 
 def test_parse_dnd_args_reason_truncated():
-    """原因超过 50 字符被截断（对齐 DicePP MAX_DND_RESULT_LEN）。"""
+    """原因超过 50 字符被截断（MAX_DND_REASON_LEN）。"""
     long_reason = "长" * (MAX_DND_REASON_LEN + 20)
     times, reason = parse_dnd_args(f"1 {long_reason}")
     assert times == 1

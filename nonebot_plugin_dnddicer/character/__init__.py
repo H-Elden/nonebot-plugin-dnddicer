@@ -1,4 +1,4 @@
-"""DND5e 角色卡/检定业务包（自研，语义对齐 nonebot-dicepp character/dnd5e）。
+"""DND5e 角色卡/检定业务包。
 
 - ``constants``：六属性/18 技能/豁免/攻击词汇表与统一检定条目索引；
 - ``models``：AbilityInfo / HPInfo / DNDCharacter（每人在每群一张卡）；

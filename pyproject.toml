@@ -13,11 +13,11 @@ build-backend = "hatchling.build"
 [project]
 name = "nonebot-plugin-dnddicer"
 dynamic = ["version"]
-description = "专精 DND5e/5r 跑团的 NoneBot2 骰娘插件（屠龙骰）：掷骰表达式、角色卡与检定、属性生成、HP 管理、先攻列表、战斗轮等，命令手感对齐 nonebot-dicepp"
+description = "专精 DND5e/5r 跑团的 NoneBot2 骰娘插件（屠龙骰）：掷骰表达式、角色卡与检定、属性生成、HP 管理、先攻列表、战斗轮等"
 readme = "README.md"
 requires-python = ">=3.11"
 # 自有许可为 MIT；掷骰引擎移植自 nonebot-dicepp（MIT, Copyright (c) 2022 pear-studio），
-# 移植落地时引擎文件头将保留 pear-studio 版权声明与 MIT 许可全文（见 README「许可与致谢」）
+# 引擎文件头保留 pear-studio 版权声明（见 README「许可与致谢」）
 license = "MIT"
 keywords = [
     "nonebot",
@@ -47,7 +47,7 @@ dependencies = [
     "nonebot-adapter-onebot>=2.4.6,<3.0.0",
     # 本地数据存储（商店要求：必须使用 localstore，代码中 require 后再 import）
     "nonebot-plugin-localstore>=0.7.4,<1.0.0",
-    # 掷骰表达式引擎文法解析（移植自 nonebot-dicepp ast_engine，上游同款依赖）
+    # 掷骰表达式引擎文法解析（Lark 文法解析器）
     "lark>=1.1.0,<2.0.0",
 ]
 
@@ -94,6 +94,6 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 markers = [
-    "quick: 上游 nonebot-dicepp 随迁测试中的快速测试分组标记（本仓库未按该分组筛选，仅注册以免告警）",
+    "quick: 随迁引擎测试中的快速测试分组标记（本仓库未按该分组筛选，仅注册以免告警）",
     "service_gate: 走真实群聊服务白名单门禁的命令测试（其余测试由 conftest 自动旁路门禁，见 tests/conftest.py）",
 ]

@@ -82,7 +82,7 @@ export default defineConfig({
     sidebarMenuLabel: '目录',
     darkModeSwitchLabel: '外观',
     footer: {
-      message: '以 MIT 许可发布 · 掷骰引擎与命令语法移植自 nonebot-dicepp（MIT）',
+      message: '以 MIT 许可发布 · 掷骰引擎移植自 nonebot-dicepp（MIT）',
       copyright: 'Copyright © 2026 DNDDicer contributors',
     },
   },

@@ -1,8 +1,7 @@
 """NPC/怪物血量持久化（localstore + 单 JSON 文件 + 进程内缓存）。
 
 存储：``{"schema_version": 1, "data": {"<group_id>:<name>": <NPCHealth model_dump>, ...}}``
-——对齐 DicePP npc_health 表（group+name 为主键），群级隔离；版本化机制见
-data/schema.py。
+——group+name 为主键，群级隔离；版本化机制见 data/schema.py。
 
 读写模式与 data/characters.py 相同：内存缓存 + asyncio.Lock + asyncio.to_thread 落盘。
 """

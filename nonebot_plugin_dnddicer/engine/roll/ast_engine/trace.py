@@ -1,15 +1,10 @@
 # ---------------------------------------------------------------------------
-# 本文件移植自 nonebot-dicepp (https://github.com/pear-studio/nonebot-dicepp)
+# 移植自 nonebot-dicepp (https://github.com/pear-studio/nonebot-dicepp)
 # Copyright (c) 2022 pear-studio, MIT License（许可全文见本项目 LICENSE）。
-# Ported from nonebot-dicepp — 逻辑语义与上游一致，仅做 import/路径适配；
-# 改动记录见移植说明文件头注释。
-#
-# ── 本仓库改动记录（上游升级 diff 同步时对照）────────────────────────────
-# 2026-09-09：OperationEvent 渲染（render()）对复合
-# 操作数按运算优先级补括号。背景：preprocessor 将「expr抗性/易伤」展开为
-# (expr)/2、(expr)*2，但括号节点不产生 trace 事件，栈重建 infix 时复合
-# 操作数不带括号（显示 5+2+3/2，与真实计算值语义不一致）。仅渲染层变化，
-# 求值语义不变。
+# 本地改动记录（2026-09-09）：OperationEvent 渲染对复合操作数按运算优先级补
+# 括号。背景：preprocessor 将「expr抗性/易伤」展开为 (expr)/2、(expr)*2，但
+# 括号节点不产生 trace 事件，栈重建 infix 时复合操作数会缺括号（显示
+# 5+2+3/2，与真实计算值语义不一致）。仅渲染层变化，求值语义不变。
 # ---------------------------------------------------------------------------
 """
 Structured Trace Model for Roll Expressions

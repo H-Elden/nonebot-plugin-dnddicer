@@ -1,13 +1,11 @@
 # ---------------------------------------------------------------------------
-# 本文件移植自 nonebot-dicepp (https://github.com/pear-studio/nonebot-dicepp)
+# 移植自 nonebot-dicepp (https://github.com/pear-studio/nonebot-dicepp)
 # Copyright (c) 2022 pear-studio, MIT License（许可全文见本项目 LICENSE）。
-# Ported from nonebot-dicepp — 逻辑语义与上游一致；仅将绝对 import 改为相对
-# import（plugins.DicePP.module.roll.* → 本包 engine/roll/ 同级）。
 # ---------------------------------------------------------------------------
 
-"""默认骰面处理（上游 nonebot-dicepp module/roll/default_dice.py）。
+"""默认骰面处理。
 
-- 解析/校验「默认骰表达式」配置（.dset 群配置落地前，使用插件全局配置）；
+- 解析/校验「默认骰表达式」配置（群可用 .dset 覆盖，未设置时用插件全局配置）；
 - ``apply_default_expr``：在掷骰表达式中注入默认骰（裸 ``D`` / ``3D`` /
   以运算符开头的表达式补上默认骰面），例如默认 D20 时 ``d`` → ``1D20``。
 """

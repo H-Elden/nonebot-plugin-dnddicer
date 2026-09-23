@@ -1,7 +1,6 @@
 # ---------------------------------------------------------------------------
-# 本文件移植自 nonebot-dicepp (https://github.com/pear-studio/nonebot-dicepp)
+# 移植自 nonebot-dicepp (https://github.com/pear-studio/nonebot-dicepp)
 # Copyright (c) 2022 pear-studio, MIT License（许可全文见本项目 LICENSE）。
-# Ported from nonebot-dicepp — 逻辑语义与上游一致，仅做 import 适配。
 # ---------------------------------------------------------------------------
 """
 roll_parse_args.py — .r 命令专用解析适配器

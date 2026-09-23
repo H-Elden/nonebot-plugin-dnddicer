@@ -1,7 +1,7 @@
 """角色卡持久化（localstore + 单 JSON 文件 + 进程内缓存）。
 
 存储：``{"schema_version": 1, "data": {"<group_id>:<user_id>": <DNDCharacter model_dump>, ...}}``
-——与 DicePP 一致：每人在每群一张卡（group+QQ 为主键，天然隔离、只能操作自己的卡）。
+——每人在每群一张卡（group+QQ 为主键，天然隔离、只能操作自己的卡）。
 早期 v0 裸字典（无 schema_version 字段）读取时自动按原样使用、首次写入升级 v1
 （版本化机制见 data/schema.py）。
 

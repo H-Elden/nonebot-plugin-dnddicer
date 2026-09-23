@@ -653,8 +653,8 @@ def test_hp_info_long_rest():
 
 
 def test_hp_info_fresh_set_zero_quirk():
-    """对齐 DicePP 边界：全新 HPInfo（hp_cur=0, is_alive=True）不处于正常记录模式，
-    直接设置 0/max 后 get_info 仍落入受损记录模式显示 损失HP:0（DicePP 原版行为）。"""
+    """边界：全新 HPInfo（hp_cur=0, is_alive=True）不处于正常记录模式，
+    直接设置 0/max 后 get_info 仍落入受损记录模式显示 损失HP:0。"""
     from nonebot_plugin_dnddicer.character.models import HPInfo
 
     hp = HPInfo()

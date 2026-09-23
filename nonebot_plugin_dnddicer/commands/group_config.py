@@ -1,6 +1,6 @@
 """群默认骰面命令：``.dset``（设置/查询当前群的默认掷骰表达式）。
 
-对齐 nonebot-dicepp dice_set_command 语义：
+语义：
 - 仅群聊可用（私聊提示不可用）；仅群主/管理员可修改（查询无权限限制）；
 - 无参数 → 查询当前群默认（未设置时回退全局默认 D20）；
 - ``.dset <表达式>`` → 校验并保存（复用 default_dice.format_default_expr_from_input，

@@ -1,29 +1,27 @@
 """DND 属性生成命令：``.dnd`` / ``.dndx``（4D6K3 掷点）。
 
-对齐 nonebot-dicepp ``module/misc/dnd_command.py`` 语义：
-- ``.dnd`` = 一次生成 6 项属性，每项为 4D6K3（掷 4 个 d6、去最低、取 3 个和）；
-- ``.dnd [次数] [原因]``：次数默认 1、上限 10（越界回退 1，与 DicePP 相同）；
+``.dnd`` 语义：
+- 一次生成 6 项属性，每项为 4D6K3（掷 4 个 d6、去最低、取 3 个和）；
+- ``.dnd [次数] [原因]``：次数默认 1、上限 10（越界回退 1）；
   原因截断 50 字符——给次数时跟在次数之后（``.dnd 1 开卡``），不给次数时
-  直接给出（``.dnd 开卡``；2026-09-14 有意 UX 修正：上游仅取第二段，该写法
+  直接给出（``.dnd 开卡``；2026-09-14 有意 UX 修正：早先仅取第二段，
   会把原因静默丢弃）；
 - 反馈：``{昵称} DND人物作成:\n{结果}``（无原因）/ ``{昵称} DND人物作成——{原因}:\n{结果}``
-  （有原因）；结果每行为 ``{六项合计} : {六项降序列表}``（与 DicePP 相同：只掷值、
+  （有原因）；结果每行为 ``{六项合计} : {六项降序列表}``（只掷值、
   不绑定属性名，由玩家自行分配给 力量/敏捷/体质/智力/感知/魅力）；
-- 群聊/私聊均可用（DicePP 群聊与私聊端口同款语义）。
+- 群聊/私聊均可用。
 
-本插件扩展 ``.dndx``（2026-09-21，用户需求；DicePP 无此命令）：
+``.dndx`` 扩展（2026-09-21，用户需求）：
 - 同为 4D6K3，但六项数值**按固定顺序绑定属性名**（力量/敏捷/体质/智力/感知/魅力）
   且**不降序排列**——掷出即定配对，直接可抄进角色卡，省去自行分配一步；
 - 参数（次数/原因）规则与 ``.dnd`` 完全相同（复用 ``parse_dnd_args``）；
 - 命令名 ``dndx`` 经注册表最长前缀匹配，与 ``.dnd`` 互不干扰（``.dndx2`` 亦可）。
 
-设计说明（自研业务层）：
-- DicePP 的 ``.dnd`` 直接用 ``random.randint`` 掷骰（不经 ast_engine）；本项目
-  把随机源接到引擎同款 karma_runtime 注入点（``get_runtime()`` 存在时用其
+设计说明：
+- 掷点随机源接入引擎的 karma_runtime 注入点（``get_runtime()`` 存在时用其
   ``roll(6)``，否则回退 ``random.randint``），使 nonebug 测试可用 SequenceRuntime
   做确定性断言（与 ``.r`` 测试同思路），掷骰语义不变；
-- 「标准购点（27 点）」DicePP/海豹骰均无先例，本期**不做**（另行规划），
-  仅实现 DicePP 对齐的 4D6K3 掷点。
+- 「标准购点（27 点）」本期**不做**（另行规划），仅实现 4D6K3 掷点。
 """
 
 from __future__ import annotations
@@ -37,9 +35,9 @@ from ..character.constants import ABILITY_LIST
 from ..engine.roll.karma_runtime import get_runtime
 from . import base, text
 
-#: 单次 .dnd 最多重复掷组数（与 DicePP MAX_DND_TIMES 一致）
+#: 单次 .dnd 最多重复掷组数
 MAX_DND_TIMES = 10
-#: 原因截断长度（与 DicePP MAX_DND_RESULT_LEN 一致）
+#: 原因截断长度
 MAX_DND_REASON_LEN = 50
 
 _HELP = (
@@ -89,15 +87,15 @@ def generate_ability_scores() -> List[int]:
 
 
 def format_dnd_line(scores: List[int]) -> str:
-    """把一组属性渲染为结果行：``{六项合计} : {六项降序列表}``（DicePP 同款）。"""
+    """把一组属性渲染为结果行：``{六项合计} : {六项降序列表}``。"""
     return f"{sum(scores)} : {sorted(scores, reverse=True)}"
 
 
 def format_dndx_line(scores: List[int]) -> str:
     """把一组属性渲染为绑定属性名的结果行：``{合计} : 力量 18、敏捷 17、…``。
 
-    属性名按 ``ABILITY_LIST`` 固定顺序与掷值一一配对（不排序）——与 DicePP 的
-    ``.dnd`` 相反：那边只出降序数值、由玩家自行分配。
+    属性名按 ``ABILITY_LIST`` 固定顺序与掷值一一配对、不排序（``.dnd`` 则
+    只出降序数值、由玩家自行分配）。
     """
     pairs = "、".join(
         f"{name} {value}" for name, value in zip(ABILITY_LIST, scores)
@@ -108,9 +106,9 @@ def format_dndx_line(scores: List[int]) -> str:
 def parse_dnd_args(rest: str) -> Tuple[int, str]:
     """解析 ``.dnd`` 命令体 → (次数, 原因)。
 
-    对齐 DicePP can_process_msg：首个空白词尝试解析为次数（1..10，越界回退 1），
+    解析规则：首个空白词尝试解析为次数（1..10，越界回退 1），
     其余文本（如果有）为原因并截断 50 字符；首个词不是数字时整段视为原因
-    （2026-09-14 有意 UX 修正：上游仅取第二段，``.dnd 开卡`` 的原因会被静默
+    （2026-09-14 有意 UX 修正：早先仅取第二段，``.dnd 开卡`` 的原因会被静默
     丢弃，而 ``.dnd5 开卡`` 因数字在前反而正常——修正后两种写法行为一致）。
     """
     text = rest.strip()
@@ -129,7 +127,7 @@ def parse_dnd_args(rest: str) -> Tuple[int, str]:
 
 @dnd_matcher.handle()
 async def handle_dnd(bot: Bot, event: MessageEvent) -> None:
-    """处理 .dnd（群聊/私聊均可用，对齐 DicePP 端口语义）。"""
+    """处理 .dnd（群聊/私聊均可用）。"""
     rest = base.get_command_rest(event) or ""
     times, reason = parse_dnd_args(rest)
 

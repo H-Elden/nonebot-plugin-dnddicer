@@ -119,7 +119,7 @@ def test_perform_check_skill_with_proficiency():
         hint, result, value, _ = AbilityService.perform_check(char.ability_info, "隐匿", 0, "")
     finally:
         reset_runtime(token)
-    # 熟练加值 = 2 + (5-1)//4 = 3，双倍熟练（scale=2）提示按 DicePP 风格显示 3*2
+    # 熟练加值 = 2 + (5-1)//4 = 3，双倍熟练（scale=2）提示显示 3*2
     assert "熟练加值:3*2" in hint
     assert "敏捷调整值:2" in hint
     assert "额外加值:+2" in hint

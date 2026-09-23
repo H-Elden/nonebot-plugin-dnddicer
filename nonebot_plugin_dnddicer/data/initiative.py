@@ -1,8 +1,7 @@
 """先攻表/战斗轮状态持久化（localstore + 单 JSON 文件 + 进程内缓存）。
 
 结构：``{"schema_version": 1, "data": {"<group_id(str)>": <InitList model_dump>, ...}}``
-——与 DicePP 一致，每个群一张先攻表（含战斗轮指针），群级隔离；版本化机制见
-data/schema.py。
+——每个群一张先攻表（含战斗轮指针），群级隔离；版本化机制见 data/schema.py。
 
 读写模式与 data/characters.py 相同：内存缓存 + asyncio.Lock + asyncio.to_thread 落盘。
 """

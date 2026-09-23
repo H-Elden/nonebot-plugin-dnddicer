@@ -2,7 +2,7 @@
 
 设计约定（与 commands/base.py 一致）：
 - 命令风格：点号前缀（`.r` / `.rh` / 后续 `.st` / `.hp` / `.init` / `.br` /
-  `.ed` / `.帮助` 等），中英文别名对齐 nonebot-dicepp（DNDDicer 手感基准）；
+  `.ed` / `.帮助` 等），中英文别名并存；
 - 起始符：默认仅英文/中文句号；宿主 COMMAND_START 兼容由配置
   ``dnddicer_use_host_command_starts`` 显式开启（默认关，见 base.py）；
 - 协同：matcher 统一以 ``dnddicer_command_priority``（Config，默认 10）为基准
@@ -34,5 +34,5 @@ from . import initiative  # noqa: F401  # .init/.ri/.先攻 先攻列表
 from . import battle  # noqa: F401  # .br/.ed/.回合/.轮次 战斗轮
 from . import bot  # noqa: F401  # .bot 插件信息与群聊服务开关
 from . import help  # noqa: F401  # .帮助 / .help（须在其它命令之后导入以保持列表顺序）
-from . import roll_parse_args  # noqa: F401  # .r 参数解析（上游迁移）
+from . import roll_parse_args  # noqa: F401  # .r 参数解析（引擎同源）
 from . import text  # noqa: F401  # 反馈文案

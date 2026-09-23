@@ -1,8 +1,6 @@
 # ---------------------------------------------------------------------------
-# 本文件移植自 nonebot-dicepp (https://github.com/pear-studio/nonebot-dicepp)
+# 移植自 nonebot-dicepp (https://github.com/pear-studio/nonebot-dicepp)
 # Copyright (c) 2022 pear-studio, MIT License（许可全文见本项目 LICENSE）。
-# Ported from nonebot-dicepp — 逻辑语义与上游一致，仅做 import/路径适配；
-# 改动记录见移植说明文件头注释。
 # ---------------------------------------------------------------------------
 """SequenceRuntime for deterministic dice rolling.
 
@@ -14,7 +12,7 @@ from typing import Sequence
 
 # 必须与引擎共享同一 canonical 模块，才能共享 Karma runtime 的 ContextVar。
 # 若重新引入另一条包路径，`sys.modules` 会出现两个副本，ContextVar 的读写将
-# 分离，`--dice` 序列控制会失效。（适配：原为 plugins.DicePP.module.roll.karma_runtime）
+# 分离，`--dice` 序列控制会失效。
 from .karma_runtime import set_runtime, reset_runtime
 
 

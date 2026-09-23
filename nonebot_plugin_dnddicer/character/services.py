@@ -1,4 +1,4 @@
-"""DND5e 角色/检定业务服务（自研；语义与提示对齐 nonebot-dicepp character/dnd5e/services.py）。
+"""DND5e 角色/检定业务服务。
 
 - ``AbilityService.initialize``：把「等级/六属性/熟练项/额外加值」校验写入 AbilityInfo；
 - ``AbilityService.perform_check``：按条目把 D20（可优势/劣势）+ 熟练 + 调整 + 加值
@@ -52,7 +52,7 @@ def _normalize_name(name: str) -> str:
 def parse_template_to_dict(input_str: str) -> Dict[str, str]:
     """把角色卡模板文本（``$关键字$ 内容``）拆成 {关键字: 内容} 字典。
 
-    ``$`` 为段落分隔符，内容中不应再出现 ``$``；与 DicePP 同款拆分语义。
+    ``$`` 为段落分隔符，内容中不应再出现 ``$``；未知关键字静默跳过。
     """
     result: Dict[str, str] = {}
     parts = input_str.split("$")
@@ -95,8 +95,8 @@ class AbilityService:
                 raise AssertionError(f"{ABILITY_LIST[index]}属性值{raw}必须为正整数")
             ability[index] = val
 
-        # 熟练项：默认全部不熟练，$熟练$ 声明了哪些条目才熟练（修订：上游
-        # DicePP 默认所有攻击熟练，与 PHB 不符——攻击检定加熟练仅限熟练的
+        # 熟练项：默认全部不熟练，$熟练$ 声明了哪些条目才熟练（修订：不做
+        # 「默认所有攻击熟练」，与 PHB 不符——攻击检定加熟练仅限熟练的
         # 武器/法术攻击；支持 N*名称 多倍熟练与 0*名称 显式关闭）
         check_prof = [0] * len(CHECK_ITEM_LIST)
         for raw in prof_list:
@@ -377,7 +377,7 @@ def gen_template_char(group_id: str = "", user_id: str = "") -> DNDCharacter:
 
 
 class HPService:
-    """HP 相关服务（迁移自 DicePP module/character/dnd5e/services.py HPService）。"""
+    """HP 相关服务（伤害/治疗结算、长休与生命骰）。"""
 
     @staticmethod
     def use_hp_dice(hp_info: HPInfo, num: int, con_mod: int) -> str:

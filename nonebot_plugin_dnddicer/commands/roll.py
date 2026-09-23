@@ -1,6 +1,6 @@
 """掷骰命令：``.r``（普通掷骰）与 ``.rh``（暗骰）。
 
-命令面（第一期，对齐 nonebot-dicepp ``.r`` 的常用语义）：
+命令面：
 - ``.r [表达式] [原因]``：如 ``.r 2d6+3 力量检定``、``.r d20优势+4``；
 - ``.r N#表达式``：连掷 N 次（1≤N≤10，越界回退 1，与 roll_const 一致）；
 - ``.r h 表达式`` / ``.rh 表达式``：暗骰——群内只播报提示，结果私聊掷骰者；
@@ -10,8 +10,8 @@
 - 原因后缀、起始符（默认仅中英文句号；宿主 COMMAND_START 兼容需配置开启，
   见 base.py）与大小写不敏感命令名见 base.py。
 
-暂未实现（第一期范围外，显式提示而非静默）：``exp`` 期望值采样（待上游
-``test_rexp_sampling_optimization`` 随迁一并落地）、``a/n`` 特殊判定模式。
+暂未实现（第一期范围外，显式提示而非静默）：``exp`` 期望值采样、
+``a/n`` 特殊判定模式。
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ from . import text
 from .base import get_command_rest, on_dnd_command, resolve_display_name
 from .roll_parse_args import RollParseArgs, _parse_roll_args
 
-#: 命令说明（供 .帮助 使用；文案对齐 DicePP .r 帮助）
+#: 命令说明（供 .帮助 使用）
 _HELP = (
     "掷骰：.r[掷骰表达式]([掷骰原因])\n"
     "[掷骰表达式]：([轮数]#)[个数]d面数(优/劣势)(k[取点数最大的骰子数])"
@@ -51,7 +51,7 @@ roll_matcher = on_dnd_command("r", _HELP)
 
 
 def _render_roll_result(res_list: List[RollResult], is_show_info: bool) -> str:
-    """渲染最终结果块（非特殊模式；对齐 DicePP process_msg 分支）。"""
+    """渲染最终结果块（非特殊模式）。"""
     if len(res_list) > 1:
         # 多次掷骰：#连掷（模板说明见 text.py）
         exp = res_list[0].get_exp()
@@ -96,7 +96,7 @@ async def _roll_and_render(args: RollParseArgs, group_id: Optional[int] = None) 
 
 
 async def _compose_reply(args: RollParseArgs, nickname: str, final_with_state: str) -> str:
-    """按 DicePP 模板组装含昵称/原因/结果的完整回复文案。
+    """组装含昵称/原因/结果的完整回复文案。
 
     说明：final_with_state 已含 d20 状态文案；模板末段的 ``{state}`` 置空，
     拼接后去除末尾空白（state 为空时不留尾随空格）。
@@ -136,13 +136,13 @@ async def handle_roll(bot: Bot, event: MessageEvent) -> None:
         group_id = getattr(event, "group_id", None)
         final_with_state = await _roll_and_render(args, group_id=group_id)
     except (RollDiceError, RollEngineError) as e:
-        # 语法/引擎错误：直接回显用户可见错误信息（DicePP 同款行为）
+        # 语法/引擎错误：直接回显用户可见错误信息
         await roll_matcher.finish(e.info if isinstance(e, RollDiceError) else e.message)
 
     nickname = await resolve_display_name(bot, event)
     reply = await _compose_reply(args, nickname, final_with_state)
 
-    # 暗骰：群内只播报提示，结果私聊掷骰者（与 DicePP 端口语义一致）
+    # 暗骰：群内只播报提示，结果私聊掷骰者
     if args.is_hidden and isinstance(event, GroupMessageEvent):
         await roll_matcher.send(
             text.TXT_HIDE_GROUP.format(nickname=nickname)

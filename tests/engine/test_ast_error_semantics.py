@@ -258,7 +258,7 @@ class TestHistoricalEdgeRegressions:
         result = exec_roll_exp("1D1+1D1+1D1")
         assert result.get_val() == 3
 
-    # --- 2026-09-22 优势/劣势别名粘连与 K/KL 取点上限（本地有意偏离上游） ---
+    # --- 2026-09-22 优势/劣势别名粘连与 K/KL 取点上限（本地有意修订） ---
 
     def test_sticky_chinese_alias_raises_with_hint(self):
         """优势/劣势 后紧跟数字 → 可读指引（不再粘连成 K120/KL120 静默求值）。"""
@@ -268,7 +268,7 @@ class TestHistoricalEdgeRegressions:
             assert "优势/劣势 后不能直接跟数字" in exc.value.info
 
     def test_keep_count_exceeding_dice_raises(self):
-        """K/KL 取点数超过骰子数量 → 报错（上游为静默全保留并求和）。"""
+        """K/KL 取点数超过骰子数量 → 报错（旧行为为静默全保留并求和）。"""
         for exp in ("2D20KL120", "2D20K120", "1D20KL2"):
             with pytest.raises(RollDiceError) as exc:
                 exec_roll_exp(exp)

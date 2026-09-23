@@ -1,14 +1,14 @@
 # 屠龙骰（DNDDicer / nonebot-plugin-dnddicer）
 
-> 专精 **DND5e / DND5r** 跑团的 [NoneBot2](https://nonebot.dev/) 骰娘插件（OneBot V11 适配器），命令手感对齐 [nonebot-dicepp](https://github.com/pear-studio/nonebot-dicepp)（梨骰）。
+> 专精 **DND5e / DND5r** 跑团的 [NoneBot2](https://nonebot.dev/) 骰娘插件（OneBot V11 适配器），致力于做功能最全面、体验最好的 DND 骰娘。
 >
 > 当前版本：**v0.2.1** · 完整使用手册见 **📖 [使用文档](./docs/index.md)**
 
 ## ✨ 简介
 
-DNDDicer 的目标是填补「NoneBot 商店中缺少 **DND5e/5r 专业 + 现代维护 + 插件形态** 骰娘」的空位：以 DicePP 掷骰引擎与命令手感为基准，做独立的、零配置可加载的 NoneBot 插件，供任何已有机器人从商店安装即用。
+DNDDicer 的目标是填补「NoneBot 商店中缺少 **DND5e/5r 专业 + 现代维护 + 插件形态** 骰娘」的空位：围绕 DND 跑团全流程持续做深做全，致力于提供功能最全面、体验最好的 DND 骰娘，零配置可加载，供任何已有机器人从商店安装即用。
 
-- **掷骰引擎**：移植 nonebot-dicepp 的 AST 表达式引擎（Lark 文法），支持 `2d20kh1`、优势/劣势、爆炸骰、连掷、暗骰等 DicePP 完整语法面；
+- **掷骰引擎**：内置 AST 表达式引擎（Lark 文法），支持 `2d20kh1`、优势/劣势、爆炸骰、连掷、暗骰等完整掷骰语法；
 - **跑团全流程**：掷骰 → `.dnd` 属性生成 → 角色卡与检定/豁免/攻击点命令 → HP 管理（伤害掷骰、抗性/易伤、AOE 多目标结算、长休）→ 先攻列表与战斗轮；
 - **规则范围**：仅 DND5e/5r——专精 DND 定位，不做 COC/d100 体系与 `.mode` 模式切换；
 - **商店合规**：零配置可加载、本地存储走 `nonebot-plugin-localstore`、元数据完整、全程异步。
@@ -57,7 +57,7 @@ plugins = ["nonebot_plugin_dnddicer"]
 
 ## 🎲 用法
 
-> 命令以 `.`（或全角 `。`）开头，中英文别名对齐 DicePP；命令起始符默认仅 `.` / `。`，如需用宿主斜杠 `/` 等起始符触发（如 `/.help`），请设置配置项 `dnddicer_use_host_command_starts=true`。**群聊服务默认关闭（白名单）**：需群主/管理员发送 `.bot on` 开启本群服务；`.bot off` 关闭后本群不再响应命令（`.bot` 本身不受影响）。群聊中使用 `.bot` 需先 @ 本机器人；私聊不受服务开关限制，但可用命令更少——角色卡、检定、HP、先攻等仅限群聊（差异见[快速开始](./docs/guide/quickstart.md)）。
+> 命令以 `.`（或全角 `。`）开头；命令起始符默认仅 `.` / `。`，如需用宿主斜杠 `/` 等起始符触发（如 `/.help`），请设置配置项 `dnddicer_use_host_command_starts=true`。**群聊服务默认关闭（白名单）**：需群主/管理员发送 `.bot on` 开启本群服务；`.bot off` 关闭后本群不再响应命令（`.bot` 本身不受影响）。群聊中使用 `.bot` 需先 @ 本机器人；私聊不受服务开关限制，但可用命令更少——角色卡、检定、HP、先攻等仅限群聊（差异见[快速开始](./docs/guide/quickstart.md)）。
 >
 > **DM 代操作（@ 提及目标）**：多数带目标的命令支持用 **@群成员** 指定目标——直连该成员在本群的角色卡，不受同名 NPC/改名影响，且可与名称混写（`.hp @玩家 -4d6`、`.hp @玩家;地精 -d4`、`.ri+3 @玩家`、`.init del @玩家`、`.回合 @玩家`、`.角色卡 @玩家`、`.力量豁免 @玩家`、`.先攻检定 @玩家` 等）。详见 [命令总览 - @ 提及目标](./docs/guide/overview.md#-提及目标dm-代操作)。
 
@@ -145,6 +145,6 @@ uv run pytest
 ## 🤝 许可与致谢
 
 - 本项目（业务层与工程骨架）以 **MIT License** 发布，见 [LICENSE](./LICENSE)。
-- **掷骰引擎与命令语法移植自 [nonebot-dicepp](https://github.com/pear-studio/nonebot-dicepp)**（Copyright (c) 2022 pear-studio，MIT License）：相关文件头保留上游版权声明与 MIT 许可全文，来源按 MIT 要求在 LICENSE 中注明。
+- **掷骰引擎移植自 [nonebot-dicepp](https://github.com/pear-studio/nonebot-dicepp)**（Copyright (c) 2022 pear-studio，MIT License）：引擎文件头保留上游版权声明，MIT 许可全文见 [LICENSE](./LICENSE)。
 - 规则查询类资料内容**不随插件分发**（版权归原权利方/译者），需要时由使用者自行提供。
 - 本项目与 nonebot-dicepp 无隶属关系，为独立命名的衍生/移植作品。

@@ -1,7 +1,6 @@
 """先攻列表命令：``.init`` / ``.ri`` / ``.先攻``。
 
-迁移自 nonebot-dicepp ``module/initiative/initiative_command.py``（commit
-732ff74）的命令语法与反馈手感，数据落 localstore（data/initiative.py）：
+命令语法与反馈文案见下，数据落 localstore（data/initiative.py）：
 - ``.ri``：投掷先攻入表——``.ri`` 自己、``.ri(+|-|=)调整``、``.ri 表达式 名称``
   （空格分隔）、``.ri20 地精`` 固定值、``.ri 地精/兽人`` 复数同掷、
   ``.ri 3#地精`` 批量（a/b/c 后缀）、名称内可带 优势/劣势/±额外加值
@@ -20,17 +19,17 @@
 @ 落在表达式段（``.ri @小明 布兰克``）或命令前（``@小明 .ri+3``）时提示
 「目标请写在表达式右侧」且不执行（避免静默给发送者自己掷先攻）。
 
-与 DicePP 的差异（已注于各函数）：
-- 不迁移 DicePP 的 get_nickname API 刷新：实体名称为入表时快照（角色名 →
-  群名片/昵称 → QQ 号），离线可用；绑定 QQ 的实体重掷时会替换旧条目；
-- 不迁移 import 子指令（解析 ".xxx 先攻: N" 文本批量导入，格式晦涩、价值低）。
+设计取舍（已注于各函数）：
+- 实体名称为入表时快照（角色名 → 群名片/昵称 → QQ 号），离线可用；
+  绑定 QQ 的实体重掷时会替换旧条目；
+- 不做 import 子指令（解析 ".xxx 先攻: N" 文本批量导入，格式晦涩、价值低）。
 
-NPC 血量联动（2026-09-14，对齐 DicePP npc_health 语义）：
+NPC 血量联动（2026-09-14）：
 - 先攻列表展示 NPC 血量（`.hp 名称 ...` 记录，见 commands/hp.py）；
 - 清空（.init clr / .br）时清理「未设最大值」的 NPC 临时血量；
 - 删除 NPC 条目（.init del）时一并删除其血量记录。
 
-NPC 血量自动回满（2026-09-21，DicePP 所无的有意新增）：
+NPC 血量自动回满（2026-09-21 新增）：
 - NPC 以**新条目**加入先攻表时，若其血量记录未标记跨战斗保持且已设上限，
   自动回满并在回复中给出「沿用上次血量 / 跨战斗保持血量」的写法——同名
   NPC 在新一场战斗中通常视为新个体（如多只「地精」）；
@@ -114,7 +113,7 @@ _SUB_COMMANDS: Tuple[Tuple[str, str, int], ...] = (
 
 
 def _initiative_rule() -> Rule:
-    """命中 .init/.先攻/.ri；.先攻检定 交给角色卡检定点命令（对齐 DicePP）。
+    """命中 .init/.先攻/.ri；.先攻检定 交给角色卡检定点命令。
 
     群聊服务门禁与固定命令一致（未开启服务的群不响应，见 base.group_service_rule）。
     """
@@ -155,8 +154,7 @@ async def resolve_self_name(
 
     统一走 base.resolve_display_name 回退链：角色名 → 群名片 → QQ 昵称 →
     「未知玩家（QQ号）」；先攻检定与 .ri（无显式名称）共用本解析，保证同一
-    玩家的条目名一致；与 DicePP 的差异：不调用 get_nickname API 实时刷新，
-    取入表时快照。
+    玩家的条目名一致；名称为入表时快照，不做实时刷新。
     """
     return await base.resolve_display_name(bot, event, user_id)
 
@@ -164,7 +162,7 @@ async def resolve_self_name(
 def find_valid_entities(name_list: List[str], global_list: List[str]) -> Tuple[List[str], str]:
     """大小写无关的条目名匹配（精确 → 模糊 substring），返回 (有效名列表, 错误文案)。
 
-    移植 DicePP initiative_command.find_valid_entities（含同名残留去重语义）。
+    含同名残留去重语义（同一展示名重复出现时只取首个）。
     """
     result_list: List[str] = []
     feedback: str = ""
@@ -237,19 +235,19 @@ async def add_initiative_entities(
     Args:
         result_dict: 条目名 → (先攻值, 掷骰过程文本)（key 为 "" 时绑定 owner）。
         owner_id: 非空代表这些条目绑定的玩家 QQ（无显式名称的 .ri 本人掷骰）；
-            DicePP 的语义为整个请求一个 owner（NPC 显式命名时传 ""）。
+            语义为整个请求一个 owner（NPC 显式命名时传 ""）。
         group_id: 目标群号。
         entity_owners: 按条目覆盖归属 QQ（@ 提及目标：条目名取角色卡名并与
             该玩家绑定）；缺省 None 时行为与既有完全一致（.先攻检定 调用点
             不受影响）。
 
-    行为（对齐 DicePP add_initiative_entities）：
+    行为：
     - 同先攻值可并存，输出提示让 DM 用 .init first 决定先后；
     - 同名条目重掷：旧条目被替换，并提示"你重复投掷了先攻"；
-    - 绑定 QQ 的玩家重掷：替换该玩家旧条目（DicePP 依赖 get_nickname 改名
-      判重，本插件直接用 owner 判重，效果一致且离线可用）。
-    - 本插件新增：NPC 以新条目入表时按需自动回满血量并给出提示
-      （DicePP 所无，见模块头「NPC 血量自动回满」）。
+    - 绑定 QQ 的玩家重掷：替换该玩家旧条目（以 owner 判重，改名后仍有效、
+      离线可用）。
+    - NPC 以新条目入表时按需自动回满血量并给出提示
+      （见模块头「NPC 血量自动回满」）。
     """
     init_data = await get_init_list(group_id)
     if init_data is None:
@@ -317,7 +315,7 @@ async def add_initiative_entities(
     feedback = ""
     roll_feedback = "\n".join(feedback_list)
     if repeatted:
-        # 注：DicePP 原版此处直接拼接会缺换行，这里补上
+        # 注：提示与掷骰反馈之间补换行，避免与上一条粘连
         feedback += text.TXT_INIT_ENTITY_REPEAT + ("\n" if roll_feedback else "")
     feedback += roll_feedback
     if same_warn:
@@ -368,7 +366,10 @@ async def _auto_refill_npc_health(
 
 
 def _parse_ri_arg(arg_str: str) -> Tuple[str, str]:
-    """把 .ri 的参数拆成 (掷骰表达式, 条目名段)；移植 DicePP 同名单函数语义。"""
+    """把 .ri 的参数拆成 (掷骰表达式, 条目名段)。
+
+    无显式名称时把参数整体当表达式（``.ri+3`` → ``D20+3``；``=`` 前缀为固定值）。
+    """
     exp_str = arg_str.strip()
     name = ""
     if len(exp_str) > 0:
@@ -431,7 +432,7 @@ async def _roll_initiative(
         if not n:
             continue
         final_exp_str = exp_str.lower()
-        # 名称内附带 优势/劣势/±加值（对齐 DicePP；写在 @ 标记之后同样生效）
+        # 名称内附带 优势/劣势/±加值（写在 @ 标记之后同样生效）
         if ("优势" in n and not n.startswith("优势")) or (
             "劣势" in n and not n.startswith("劣势")
         ):
@@ -523,7 +524,7 @@ async def _get_existing(event: GroupMessageEvent) -> InitList:
 
 
 async def cleanup_temp_npc_health(group_id: int | str) -> None:
-    """清空先攻表/新建战斗轮前，删除 NPC 的「临时血量」条目（对齐 DicePP）。
+    """清空先攻表/新建战斗轮前，删除 NPC 的「临时血量」条目。
 
     仅清理先攻表中无主（NPC）、未设置最大值（hp_max==0）且**未标记跨战斗
     保持**的临时血量——多为伤害记录中途留下的条目；已设置最大值的怪物血量
@@ -544,7 +545,7 @@ async def cleanup_temp_npc_health(group_id: int | str) -> None:
                 and not record.persistent
             ):
                 await delete_npc_health(group_id, entity.name)
-        except Exception:  # noqa: BLE001 - 清理失败不阻塞清空流程（对齐 DicePP）
+        except Exception:  # noqa: BLE001 - 清理失败不阻塞清空流程
             pass
 
 
@@ -589,7 +590,7 @@ async def handle_initiative(bot: Bot, event: MessageEvent) -> None:
         for char in await list_characters_by_group(event.group_id):
             if char.hp_info.is_init:
                 hp_map[char.user_id] = char.hp_info
-        # NPC 血量（无主条目按名称匹配，对齐 DicePP）
+        # NPC 血量（无主条目按名称匹配）
         npc_hp_map: Dict[str, HPInfo] = {
             npc.name: npc.hp_info
             for npc in await list_npc_health(event.group_id)
@@ -609,7 +610,7 @@ async def handle_initiative(bot: Bot, event: MessageEvent) -> None:
             init_info=init_info.strip()
         ))
 
-    # ── 清空（先清理 NPC 临时血量：未设最大值的条目，对齐 DicePP）
+    # ── 清空（先清理 NPC 临时血量：未设最大值的条目）
     if mode == "clear":
         await cleanup_temp_npc_health(event.group_id)
         await clear_init_list(event.group_id)
@@ -618,7 +619,7 @@ async def handle_initiative(bot: Bot, event: MessageEvent) -> None:
     init_data = await _get_existing(event)
     entity_names = [entity.name for entity in init_data.entities]
 
-    # ── 删除（NPC 条目一并删除其血量记录，对齐 DicePP）
+    # ── 删除（NPC 条目一并删除其血量记录）
     if mode == "delete":
         raw_list = [n.strip() for n in sub_arg.split("/") if n.strip()]
         # @ 目标按 owner 定位条目（玩家条目仅移除条目，不涉及 NPC 血量）

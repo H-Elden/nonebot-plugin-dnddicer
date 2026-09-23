@@ -1,10 +1,6 @@
 """DND5e 角色数据模型（Pydantic，纯数据与基础展示方法）。
 
-字段与计算语义对齐 nonebot-dicepp（core/data/models/character.py，参考实现）；
 存储/检定等复杂业务见 data/characters.py 与 character/services.py。
-
-一期范围：角色卡记录/查看/状态与检定所需字段；生命骰消耗、伤害/治疗、长休等
-行为逻辑在 T1「HP 管理」模块落地时补充（本模型字段已预留）。
 """
 
 from __future__ import annotations
@@ -30,7 +26,7 @@ from .constants import (
 
 
 class HPInfo(BaseModel):
-    """生命值信息（字段兼容 DicePP；行为逻辑 T1 补全）。"""
+    """生命值信息（当前/最大/临时 HP 与生命骰）。"""
 
     is_init: bool = False
     is_alive: bool = True
@@ -206,11 +202,11 @@ class AbilityInfo(BaseModel):
 
 
 class NPCHealth(BaseModel):
-    """NPC/怪物血量条目（群级、按名称索引；对齐 DicePP npc_health 表）。
+    """NPC/怪物血量条目（群级、按名称索引）。
 
     名称即主键（同一群内 NPC 名唯一），血量复用 HPInfo（与 PC 同款结构）。
     条目在 ``.hp 目标 ...`` 且目标经先攻表解析时按需创建——即 NPC 需先
-    ``.ri`` 入先攻表（或已存在血量记录），与 DicePP 语义一致。
+    ``.ri`` 入先攻表（或已存在血量记录）。
 
     ``persistent``：血量跨战斗保持（``.npc 持久`` 设置）——``.ri`` 再次以
     新条目入先攻表时不自动回满；默认 False 时每次新入表都会回满（同名条目

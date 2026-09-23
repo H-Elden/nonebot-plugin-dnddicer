@@ -1,9 +1,6 @@
 """掷骰命令反馈文案与状态文案逻辑。
 
-默认文案对齐 nonebot-dicepp ``roll_dice_command.py`` 中 ``register_loc_text``
-注册的默认文本（2026-09，DicePP commit 732ff74 / v3.0.0rc23），保证手感一致；
-DicePP 的本地化扩展机制不在本插件范围（不迁移其 loc 体系），文案集中于此便于
-日后对照上游校对。
+反馈文案集中于此，便于统一校对与调整。
 """
 
 from __future__ import annotations
@@ -20,8 +17,8 @@ TXT_HIDE_RESULT_REASON = "{nickname} 为 {reason} 进行的暗骰结果为 {fina
 TXT_HIDE_GROUP = "{nickname} 进行了一次暗骰"
 
 #: 多次掷骰（#连掷）的结果块模板（分两种模式）
-#: 非 s（有过程明细）：去掉 DicePP LOC_ROLL_RESULT_MULTI 原文 "{time}次 {exp}: [{result}]"
-#: 的最外层中括号——result 内部多行（每轮次一行），外层 [] 包裹换行内容难看；
+#: 非 s（有过程明细）：多行展开逐轮结果，不加外层中括号——result 内部每轮次
+#: 一行，外层 [] 包裹换行内容难看；
 #: s（只显数值）：单行紧凑 [v1, v2, ...]（逗号+空格，不换行）
 TXT_MULTI = "{time}次 {exp}:\n{result}"
 TXT_MULTI_SUM = "{time}次 {exp}: [{result}]"
@@ -32,7 +29,7 @@ TXT_D20_FAILURE = "哇哦！大失败!"
 TXT_D20_SUCCESS_SHORT = "大成功"
 TXT_D20_FAILURE_SHORT = "大失败"
 TXT_D20_MULTI = "{time}次 {short}"
-# 唯一 d20、无大成功/大失败时的分档反馈（DicePP 默认全空，即不追加任何文字）
+# 唯一 d20、无大成功/大失败时的分档反馈（默认全空，即不追加任何文字）
 TXT_D20_2 = ""          # 平均出目档 <10%（即骰面约 1~2）
 TXT_D20_3_5 = ""        # <25%
 TXT_D20_6_10 = ""       # <50%
@@ -45,14 +42,14 @@ TXT_EXP_UNIMPLEMENTED = "「期望值计算」(.r exp) 尚未实现，敬请期�
 TXT_SPECIAL_MODE_UNIMPLEMENTED = "该掷骰模式（{mode}）尚未实现，敬请期待。"
 TXT_NOT_IMPLEMENTED = "该功能尚未实现，敬请期待。"
 
-# ── 群默认骰面 .dset（对齐 DicePP dice_set_command 默认文案）───────────────
+# ── 群默认骰面 .dset 文案 ───────────────────────────────────────────────
 TXT_DSET_SUCCESS = "本群默认掷骰表达式已改为{expr}。"
 TXT_DSET_INVALID = "默认掷骰表达式无效：{reason}"
 TXT_DSET_CURRENT = "当前默认掷骰表达式为{expr}。使用 .dset [表达式] 进行修改。"
 TXT_DSET_GROUP_ONLY = "该指令仅在群聊中可用。"
 TXT_DSET_NO_PERMISSION = "仅群主或管理员可以设置群默认骰面。"
 
-# ── .dnd 属性生成（对齐 DicePP misc/dnd_command 默认文案）─────────────────
+# ── .dnd 属性生成文案 ───────────────────────────────────────────────────
 TXT_DND_RES = "{name} DND人物作成——{reason}:\n{result}"
 TXT_DND_RES_NOREASON = "{name} DND人物作成:\n{result}"
 
@@ -75,7 +72,7 @@ TXT_UNKNOWN_ERROR = "骰娘内部发生了错误，请联系管理员反馈。"
 TXT_BOT_HEAD = "屠龙骰（nonebot-plugin-dnddicer）v{version}"
 TXT_BOT_INTRO = (
     "专精 DND5e/5r 跑团的骰娘：掷骰表达式、角色卡与检定/豁免/攻击、"
-    "属性生成、HP 管理、先攻列表、战斗轮、群配置，命令手感对齐 nonebot-dicepp。"
+    "属性生成、HP 管理、先攻列表、战斗轮、群配置。"
 )
 TXT_BOT_STATE_PRIVATE = (
     "私聊不受群聊服务开关限制：掷骰、属性生成等可直接使用，"
@@ -92,18 +89,17 @@ TXT_BOT_BAD_ARG = (
     "（仅限群聊，需群主或管理员权限）。"
 )
 
-# ── DND5e 角色卡 .角色卡 / .状态 / 检定（对齐 DicePP character 默认文案）─────
+# ── DND5e 角色卡 .角色卡 / .状态 / 检定 文案 ─────────────────────────────
 TXT_CHAR_SET = "角色卡已设置"
 TXT_CHAR_MISS = "找不到角色卡"
 TXT_CHAR_DEL = "角色卡已删除"
 # 检定反馈：{name} 角色名/昵称；{check} 检定条目展示名（攻击/豁免原名、
 # 属性/技能/先攻追加「检定」，见 commands/character.py）；{hint} 过程说明；
 # {result} 掷骰过程
-# 注：DicePP 默认注册文本为 "{name} throw {check}"（"throw" 未本地化）；
-# 2026-09-09 验收修订为中文文案
+# 注：2026-09-09 验收起采用中文文案「进行【…】」
 TXT_CHECK_RESULT = "{name}进行【{check}】：\n{hint}\n{result}"
 
-# ── HP 管理 .hp（对齐 DicePP hp_command 默认文案）─────────────────────────
+# ── HP 管理 .hp 文案 ────────────────────────────────────────────────────
 TXT_HP_INFO = "{name}: {hp_info}"
 TXT_HP_INFO_MISS = "找不到{name}的生命值信息"
 #: .hp 指定目标未命中：附 NPC 记录方式的引导（NPC 需先入先攻表，见 commands/hp.py）
@@ -167,7 +163,7 @@ TXT_NPC_PC_TARGET = "「{name}」是玩家角色卡，不是NPC"
 TXT_LONG_REST = "{result}"
 TXT_LONG_REST_MISS = "找不到{name}的角色卡信息"
 
-# ── 先攻列表 .init/.ri/.先攻（对齐 DicePP initiative_command 默认文案）───────
+# ── 先攻列表 .init/.ri/.先攻 文案 ───────────────────────────────────────
 TXT_INIT_ROLL = "{name}的先攻值是 {init_result}"
 TXT_INIT_INFO = "先攻列表如下: \n{init_info}"
 TXT_INIT_INFO_NOT_EXIST = "没有找到先攻列表"
@@ -199,8 +195,8 @@ TXT_INIT_NPC_REFILL_MULTI = (
     ".npc 持久 名称"
 )
 
-# ── 战斗轮 .br/.ed/.回合/.轮次（对齐 DicePP battleroll_command 默认文案）
-# 注：.br 文案去掉 DicePP 原版残留的「BUFF表」字样（BUFF 计时表本期不做）
+# ── 战斗轮 .br/.ed/.回合/.轮次 文案
+# 注：.br 文案不含「BUFF表」字样（BUFF 计时表本期不做）
 TXT_BR_NEW = "已创建新战斗轮。清除先攻表、当前回合。"
 TXT_BR_ROUND = "现在是第{round}轮第{turn}回合，{turn_name}的回合。"
 TXT_BR_ROUND_MOD = "现在变成第{round}轮了。"
@@ -210,8 +206,7 @@ TXT_BR_NO_INIT = "目前先攻列表为空，故不存在回合与轮次。"
 TXT_BR_TURN_END = "{turn_name}的回合结束了。"
 TXT_BR_ROUND_NEW = "新的一轮，现在是第{round}轮。"
 TXT_BR_TURN_NEW = "现在是{turn_name}的回合。"
-# @ 播报：原 DicePP 单模板 "现在是{turn_name}的回合。请玩家{at}开始行动。"
-# 的 {at} 为 CQ 码文本占位；现拆为 前缀/后缀 两段，at 消息段由命令层用
+# @ 播报：拆为 前缀/后缀 两段，两段之间的 @ 消息段由命令层用
 # onebot v11 MessageSegment.at 组装（见 commands/battle.py）
 TXT_BR_TURN_NEW_WITH_AT_PREFIX = "现在是{turn_name}的回合。请玩家"
 TXT_BR_TURN_NEW_WITH_AT_SUFFIX = "开始行动。"
@@ -227,9 +222,9 @@ def _d20_crit_counts(res_list: List[RollResult]) -> Tuple[int, int]:
 
     大成功/大失败只由 d20 产生（DND 规则唯一有该概念的骰面），且只看
     **被保留** 的骰子（kh/dl 丢弃的骰不计：优势掷出 20 与 1 保留 20 →
-    只算大成功）。d100 等其它骰面不产生大成功/大失败（DNDDicer 不做
-    COC/d100 体系，不再沿用上游按 d100 出目 1/100 计数——
-    RollResult.success/fail 字段混计 d20 与 d100，故这里改以 d20_list 为准）。
+    只算大成功）。d100 等其它骰面不产生大成功/大失败（本插件不做
+    COC/d100 体系，也不采用按 d100 出目 1/100 计数——RollResult 的
+    success/fail 字段会混计 d20 与 d100，故这里以 d20_list 为准）。
     """
     success_time = 0
     failure_time = 0
@@ -259,7 +254,7 @@ def format_d20_state_text(success_time: int, failure_time: int, round_count: int
 
 
 def get_roll_state_text(res_list: List[RollResult]) -> str:
-    """计算掷骰结果附带的 d20 状态文案（移植 DicePP get_roll_state_loc_text）。
+    """计算掷骰结果附带的 d20 状态文案。
 
     规则（大成功/大失败判定只认被保留的 d20，见 _d20_crit_counts）：
     - 1 轮且存在唯一 d20 大成功/大失败 → 「好耶！大成功!」/「哇哦！大失败!」

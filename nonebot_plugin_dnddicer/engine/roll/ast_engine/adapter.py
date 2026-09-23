@@ -1,8 +1,6 @@
 # ---------------------------------------------------------------------------
-# 本文件移植自 nonebot-dicepp (https://github.com/pear-studio/nonebot-dicepp)
+# 移植自 nonebot-dicepp (https://github.com/pear-studio/nonebot-dicepp)
 # Copyright (c) 2022 pear-studio, MIT License（许可全文见本项目 LICENSE）。
-# Ported from nonebot-dicepp — 逻辑语义与上游一致，仅做 import/路径适配；
-# 改动记录见移植说明文件头注释。
 # ---------------------------------------------------------------------------
 """
 AST Engine Adapter for Roll Expression Evaluation
@@ -13,8 +11,7 @@ parser/evaluator.
 """
 
 from typing import Optional, Union, Callable, Any, Tuple
-# 适配：上游使用 plugins.DicePP.utils.logger（DicePP 自建日志），本项目插件
-# 统一走 NoneBot 的 loguru logger（nonebot2 必装，二者同源，仅渠道不同）
+# 适配：引擎日志统一走 NoneBot 的 loguru logger（nonebot2 必装，同源实现）
 from nonebot import logger
 from dataclasses import dataclass, field
 

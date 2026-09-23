@@ -3,12 +3,12 @@
 存储隔离：每个用例前清空先攻/NPC 血量/角色卡数据（缓存 + JSON），
 每个用例使用独立群号；掷骰用 SequenceRuntime 固定骰值确保确定性。
 
-语义基准（对齐 DicePP npc_health）：
+语义基准：
 - NPC 血量条目需经先攻表解析创建：先 ``.ri`` 入表，再 ``.hp 名称 ...``；
 - 先攻列表展示 NPC 血量；``.init clr`` / ``.br`` 清理「未设最大值」的临时血量；
 - ``.init del`` 删除 NPC 条目时一并删除其血量记录。
 
-本插件新增语义（2026-09-21，DicePP 所无）：
+本插件新增语义（2026-09-21）：
 - NPC 以新条目入先攻表时，未标记跨战斗保持且已设上限的记录自动回满并提示
   （同名重掷不触发；``.npc 持久`` 标记的记录跳过）。
 """
@@ -81,7 +81,7 @@ async def test_npc_create_via_init_then_view(app: App):
 
 @pytest.mark.asyncio
 async def test_npc_requires_init_entry(app: App):
-    """未入先攻表且无血量记录：.hp 名称 ... → 找不到（对齐 DicePP，先 .ri）。"""
+    """未入先攻表且无血量记录：.hp 名称 ... → 找不到（NPC 需先 .ri 入表）。"""
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
 
     await _expect(
@@ -126,7 +126,7 @@ async def test_npc_damage_and_resistance(app: App):
 
 @pytest.mark.asyncio
 async def test_npc_damage_only_display(app: App):
-    """不设血量直接扣（对齐 DicePP）：显示为「损失HP:N」，多次扣血累加、治疗回补。
+    """不设血量直接扣：显示为「损失HP:N」，多次扣血累加、治疗回补。
 
     .init 与 .hp list 均按 HPInfo 受损记录模式展示（负数扣血量），无需先设 10/10。
     """
@@ -239,7 +239,7 @@ async def test_npc_exact_match_priority(app: App):
 
 @pytest.mark.asyncio
 async def test_npc_list_mixed_with_pc(app: App):
-    """".hp list"：PC 在前、NPC 在后（对齐 DicePP）。"""
+    """".hp list"：PC 在前、NPC 在后。"""
     from nonebot_plugin_dnddicer.commands.character import char_matcher
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
     from nonebot_plugin_dnddicer.commands.initiative import initiative_matcher
@@ -408,7 +408,7 @@ async def test_br_removes_temp_npc_health_only(app: App):
 
 @pytest.mark.asyncio
 async def test_init_del_removes_npc_health(app: App):
-    """.init del 名称：删除 NPC 条目时一并删除其血量记录（对齐 DicePP）。"""
+    """.init del 名称：删除 NPC 条目时一并删除其血量记录。"""
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
     from nonebot_plugin_dnddicer.commands.initiative import initiative_matcher
     from nonebot_plugin_dnddicer.data.npc_health import get_npc_health

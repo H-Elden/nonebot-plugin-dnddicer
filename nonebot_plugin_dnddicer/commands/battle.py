@@ -1,7 +1,6 @@
 """战斗轮命令：``.br`` / ``.回合`` / ``.轮次`` / ``.ed``。
 
-迁移自 nonebot-dicepp ``module/initiative/battleroll_command.py``（commit
-732ff74）：战斗轮不是独立系统，而是**先攻表的"进行中状态机"**——复用
+战斗轮不是独立系统，而是**先攻表的"进行中状态机"**——复用
 data/initiative.py 的 InitList（实体列表 + round/turn 指针），本模块只做
 查看/跳转/推进与播报：
 
@@ -14,8 +13,7 @@ data/initiative.py 的 InitList（实体列表 + round/turn 指针），本模�
 - ``.ed`` / ``.结束``：结束当前回合——播报 + 自动推进下一位；一轮走完自动
   进位播报；轮到绑定 QQ 的玩家时输出 @ 提醒。
 
-与 DicePP 的差异（一期简化）：不迁移 get_nickname API 实时刷新（显示入表时
-快照的名称）；BUFF 计时表不做（上游本版亦未启用）。
+名称显示为入表时快照（不做实时刷新）；BUFF 计时表不做。
 """
 
 from __future__ import annotations
@@ -69,7 +67,7 @@ async def _load_battle(event: GroupMessageEvent) -> InitList:
 def _clamp_round_target(
     init_data: InitList, target_round: int, target_turn: int
 ) -> "tuple[int, int]":
-    """回合/轮次越界修正：溢出进位、退位回绕（移植 DicePP 同段逻辑）。"""
+    """回合/轮次越界修正：溢出进位、退位回绕。"""
     turns_in_round = init_data.turns_in_round
     if turns_in_round > 0:
         if target_turn > turns_in_round:
@@ -111,7 +109,7 @@ async def _finish_battle_lines(
 def _parse_num_mod(arg_str: str) -> "tuple[Optional[int], str]":
     """解析回合/轮次的数值修改参数 → (修改量, 错误文案)。
 
-    DicePP 语义：``+n``/``++``/``+`` 增加，``-n`` 减少，``=n``/裸数字 直接设定。
+    参数语义：``+n``/``++``/``+`` 增加，``-n`` 减少，``=n``/裸数字 直接设定。
     返回 (None, 错误文案) 表示非数字。
     """
     if arg_str.startswith("+") or arg_str.startswith("-"):
@@ -149,7 +147,7 @@ def _find_turn_target(intent: str, names: List[str]) -> "tuple[Optional[str], st
 
 
 async def _handle_turn_round(event: GroupMessageEvent, mode: str) -> None:
-    """处理 .回合/.轮次（mode: "turn" / "round"，语义对齐 DicePP）。"""
+    """处理 .回合/.轮次（mode: "turn" / "round"）。"""
     arg_str = (base.get_command_rest_with_mentions(event) or "").strip()
     init_data = await _load_battle(event)
     if not init_data.entities:
@@ -309,7 +307,7 @@ async def handle_ed(event: MessageEvent) -> None:
         await ed_matcher.finish(text.TXT_GROUP_ONLY)
     init_data = await _load_battle(event)
 
-    # 先把可能越界的存量状态归一（对齐 DicePP）
+    # 先把可能越界的存量状态归一
     round_no, turn = _clamp_round_target(init_data, init_data.round, init_data.turn)
     round_no = max(1, round_no)
     turns_in_round = len(init_data.entities)

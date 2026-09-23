@@ -1,15 +1,15 @@
 """DND5e 角色卡命令：``.角色卡`` / ``.状态`` / 检定类点命令。
 
-对齐 nonebot-dicepp character/dnd5e/char_command 语义：
-- ``.角色卡`` 查看 / ``.角色卡记录 <模板文本>`` / ``.角色卡清除`` / ``.角色卡模板``；
-  （与 DicePP 的差异：不自动改群名片，避免依赖群管理权限）
+命令面：
+- ``.角色卡`` 查看 / ``.角色卡记录 <模板文本>`` / ``.角色卡清除`` / ``.角色卡模板``
+  （不自动改群名片，避免依赖群管理权限）；
 - ``.状态``：查看本角色 HP 与生命骰摘要；
 - 检定类点命令（非固定命令名，按消息模式触发）：
   ``.[次数#][属性/技能/先攻]检定[优势/劣势][±加值]``
   ``.[次数#][属性]豁免[±加值]``
   ``.[次数#][属性]攻击[优势/劣势][±加值]``
   例：``.力量检定`` ``.2#运动检定+1`` ``.智力豁免+d4`` ``.3#敏捷攻击优势+d8`` ``.先攻检定``
-  检定只掷出裸数值（d20+加值），不对 DC 判定——由玩家/DM 自行比较（同 DicePP）。
+  检定只掷出裸数值（d20+加值），不对 DC 判定——由玩家/DM 自行比较。
 
 @ 提及目标（2026-09-22 新增）：
 - ``.角色卡 @玩家`` / ``.角色卡 角色名``：查看**他人**整卡（输出加标题行）；
@@ -102,8 +102,8 @@ def _resolve_check_name(entry: str, kind: str) -> Optional[str]:
 def parse_check_body(body: str) -> Optional[Tuple[int, str, str]]:
     """解析检定命令体 → (次数, 条目全名, 加值修正串)；无效返回 None。
 
-    与 DicePP can_process_msg 等价：以 检定/豁免/攻击 之一切分条目与修正，
-    支持 ``N#`` 次数前缀；修正串可带 优势/劣势 前缀再跟 ±表达式。
+    以 检定/豁免/攻击 之一切分条目与修正，支持 ``N#`` 次数前缀；
+    修正串可带 优势/劣势 前缀再跟 ±表达式。
     """
     m = _CHECK_PATTERN.match(body)
     if not m:
@@ -120,7 +120,7 @@ def parse_check_body(body: str) -> Optional[Tuple[int, str, str]]:
         return None
 
     mod = tail.strip()
-    # 优劣势从修正串中拆出：kind 检定/攻击允许；豁免（DicePP 同规则）也支持
+    # 优劣势从修正串中拆出：kind 检定/攻击允许；豁免同样支持
     return times, name, mod
 
 
@@ -137,7 +137,7 @@ def _check_command_rule() -> Rule:
         body = text[len(matched_start):]
         fixed_name, fixed_rest = base.match_command_name(body)
         if fixed_name is not None:
-            # .先攻检定 属于检定点命令而非 .先攻 列表命令（与 DicePP 语义一致）
+            # .先攻检定 属于检定点命令而非 .先攻 列表命令
             if not (fixed_name == "先攻" and fixed_rest.lstrip().startswith("检定")):
                 return False
         return parse_check_body(body) is not None
@@ -181,7 +181,7 @@ async def handle_character(bot: Bot, event: MessageEvent) -> None:
         except AssertionError as exc:
             await char_matcher.finish(str(exc))
         await save_character(new_char)
-        # 注：DicePP 会同步把群名片改为角色名（依赖群管理权限），本插件不自动改名
+        # 注：不自动改群名片为角色名（避免依赖群管理权限）
         await char_matcher.finish(text.TXT_CHAR_SET)
 
     if rest.startswith("清除"):
@@ -303,7 +303,7 @@ async def handle_check(bot: Bot, event: MessageEvent) -> None:
         if character is None or not character.is_init:
             await check_matcher.finish(text.TXT_CHAR_MISS)
 
-    # 解析临时优劣势（与 DicePP 一致：修正串开头的 优势/劣势）
+    # 解析临时优劣势（修正串开头的 优势/劣势）
     advantage = 0
     if mod_str.startswith("优势"):
         advantage = 1
@@ -355,9 +355,8 @@ async def handle_check(bot: Bot, event: MessageEvent) -> None:
         hint=hint,
         result="\n".join(results),
     )
-    # .先攻检定：掷出后自动加入先攻列表（对齐 DicePP char_command 联动语义：
-    # 掷骰过程行被替换为入表反馈，便于群内直读先攻结果）；@ 目标以该玩家为
-    # owner 入表（与 .ri @玩家 同源逻辑）
+    # .先攻检定：掷出后自动加入先攻列表（掷骰过程行被替换为入表反馈，
+    # 便于群内直读先攻结果）；@ 目标以该玩家为 owner 入表（与 .ri @玩家 同源逻辑）
     if check_name == "先攻" and values:
         from .initiative import add_initiative_entities
 
