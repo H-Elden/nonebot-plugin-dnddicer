@@ -69,6 +69,7 @@ class Step:
     text: str  # 输入原文；`@名字` 会转成真实 at 段
     dice: List[int] = field(default_factory=list)  # 本步消费的骰值（恰好耗尽）
     gate: Literal["real", "bypass"] = "bypass"  # real=走真实群聊服务门禁
+    channel: Literal["group", "private"] = "group"  # private=私聊（答复落「屠龙骰（私聊）」）
 
 
 @dataclass
@@ -127,7 +128,11 @@ def _create_bot_type():
 
     class RecordingBot(Bot):
         async def send(self, event, message, **kwargs):  # type: ignore[override]
-            self.recorder.group(cast.BOT_NAME, _format_message(message))
+            body = _format_message(message)
+            if getattr(event, "message_type", "group") == "private":
+                self.recorder.private(cast.PRIVATE_BOT_NAME, body)
+            else:
+                self.recorder.group(cast.BOT_NAME, body)
             return {"message_id": self.recorder.next_message_id()}
 
         async def call_api(self, api: str, **data):  # type: ignore[override]
@@ -196,7 +201,7 @@ class TimelineRunner:
         message = cast.parse_mentions(step.text)
         # 输入行在分发前记录：onebot v11 入口会剥离「@机器人」段，分发后就看不到了
         self.recorder.group(persona.nickname, _format_message(message))
-        event = self._build_event(persona, message)
+        event = self._build_event(persona, message, step.channel)
 
         runtime = SequenceRuntime(step.dice)
         token = set_runtime(runtime)
@@ -215,22 +220,31 @@ class TimelineRunner:
             )
 
     @staticmethod
-    def _build_event(persona: cast.Persona, message):
+    def _build_event(persona: cast.Persona, message, channel: str = "group"):
         from nonebot.adapters.onebot.v11.event import Sender
 
-        from fake_event import fake_group_message_event_v11
+        from fake_event import fake_group_message_event_v11, fake_private_message_event_v11
 
+        sender = Sender(
+            card=persona.card_name,
+            nickname=persona.qq_nickname,
+            role=persona.role,
+        )
+        if channel == "private":
+            return fake_private_message_event_v11(
+                self_id=cast.BOT_QQ,
+                user_id=persona.qq,
+                message=message,
+                raw_message=str(message),
+                sender=sender,
+            )
         return fake_group_message_event_v11(
             self_id=cast.BOT_QQ,
             user_id=persona.qq,
             group_id=cast.GROUP_ID,
             message=message,
             raw_message=str(message),
-            sender=Sender(
-                card=persona.card_name,
-                nickname=persona.qq_nickname,
-                role=persona.role,
-            ),
+            sender=sender,
             to_me=False,
         )
 

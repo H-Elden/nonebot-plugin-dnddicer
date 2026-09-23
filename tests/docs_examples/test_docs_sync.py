@@ -7,8 +7,8 @@
 - 页面上出现的昵称必须属于「骰娘系 ∪ 示例团名册」（新增人物时要同时更新 cast 与容器名册）；
 - `注：` 行是讲解条，不参与比对。
 
-迁移期的范围控制：旧页面（阿岚时代的示例）尚未重写，不在比对范围内；逐页重写完成一页，
-就把相对路径加进 ``SYNCED_PAGES``。新增场景后先跑
+范围控制：``SYNCED_PAGES`` 现覆盖全部站点页面（逐页重写已收口），新增页面时把相对路径
+登记进去即可。新增场景后先跑
 ``doc/tools/render-docs-examples.py --write-baseline`` 更新基线，再写页面。
 """
 
@@ -26,7 +26,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DOCS_DIR = REPO_ROOT / "docs"
 BASELINE_DIR = Path(__file__).resolve().parent / "baseline"
 
-#: 已按示例团重写、纳入比对的页面（随逐页重写扩充）
+#: 纳入比对的页面（已覆盖全部站点页面；新增页面时在此登记）
 SYNCED_PAGES = [
     "guide/cast.md",
     "guide/quickstart.md",
@@ -38,6 +38,8 @@ SYNCED_PAGES = [
     "guide/hp-rest.md",
     "guide/battle.md",
     "guide/dm-guide.md",
+    "guide/overview.md",
+    "guide/faq.md",
 ]
 
 _OPEN_PATTERN = re.compile(r"^:::\s*chat\s*$")

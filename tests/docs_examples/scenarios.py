@@ -812,6 +812,48 @@ dm_next_battle = Scene(
     ],
 )
 
+# ── 第七幕：散场前的收摊（命令总览 / 群管理与 FAQ） ────────────────────────
+# 战斗间隙：DM 把临时来玩的散客小鹿带进先攻表，并调整本群默认骰面。
+
+overview_name_chain = Scene(
+    id="overview_name_chain",
+    title="名称从哪里来：有卡取角色名、无卡取群名片；DM 指定的条目名按字面使用",
+    steps=[
+        Step("小满", ".rd", dice=[7]),          # 有卡：落款取角色名「洛恩」
+        Step("小鹿", ".rd", dice=[11]),         # 无卡：落款取群名片「小鹿」（QQ 昵称是「鹿角」）
+        Step("白鸦", ".ri+1 小鹿", dice=[9]),    # DM 按名称入表（字面条目，不与玩家绑定）
+        Step("白鸦", ".hp 小鹿 12/12"),
+        Step("白鸦", ".hp 小鹿 -d6+2", dice=[5]),
+    ],
+)
+
+faq_dset = Scene(
+    id="faq_dset",
+    title="群默认骰面：群主设置，任何成员可查询",
+    steps=[
+        Step("白鸦", ".dset 100"),
+        Step("阿茶", ".dset"),
+    ],
+)
+
+faq_default_face = Scene(
+    id="faq_default_face",
+    title="默认骰面生效：省略面数的 d 按本群默认掷",
+    steps=[
+        Step("老猫", ".rd+2", dice=[67]),
+    ],
+)
+
+faq_dset_denied = Scene(
+    id="faq_dset_denied",
+    title="群默认骰面：越权、无效表达式与私聊发出的拒绝提示",
+    steps=[
+        Step("阿茶", ".dset 20"),                       # 普通成员修改
+        Step("白鸦", ".dset 1"),                        # 无效表达式
+        Step("阿茶", ".dset 6", channel="private"),      # 私聊发出（只有群聊可用）
+    ],
+)
+
 #: 时间线末尾：群主关闭本群服务（演示收尾）。
 #: 该场景必须压轴——服务关闭后本群不再响应其他命令；补新场景时请插在它之前。
 quickstart_bot_off = Scene(
@@ -909,5 +951,10 @@ TIMELINE = [
     dm_turn_push,
     dm_dark_roll,
     dm_next_battle,
+    # 第七幕：散场前（命令总览 / 群管理与 FAQ）
+    overview_name_chain,
+    faq_dset,
+    faq_default_face,
+    faq_dset_denied,
     quickstart_bot_off,  # 压轴：服务关闭后本群不再响应其他命令
 ]

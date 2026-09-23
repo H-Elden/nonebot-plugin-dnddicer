@@ -115,11 +115,17 @@ dnddicer_default_face=20
 
 本插件命令以 **`.`（英文句号）或 `。`（中文句号）开头**，如 `.r2d6+3`、`.帮助`、`。角色卡`。
 
-默认**不**兼容宿主的斜杠起始符（`/help` 之类）——因为 `/help`、`/bot` 等常见单词命令容易与宿主其他插件同时命中、互相冲突。若你的机器人没有这类冲突且希望斜杠也能触发，把配置项 `dnddicer_use_host_command_starts` 设为 `true` 即可（此后 `/help` 或 `/.help` 同样有效）；协同与排查的完整说明见[群管理与 FAQ](./faq.md#命令起始符-默认只用句号)。
+默认**不**兼容宿主的斜杠起始符（`/help` 之类）——因为 `/help`、`/bot` 等常见单词命令容易与宿主其他插件同时命中、互相冲突。若你的机器人没有这类冲突且希望斜杠也能触发，把配置项 `dnddicer_use_host_command_starts` 设为 `true` 即可（此后 `/help` 或 `/.help` 同样有效）；协同与排查的完整说明见[群管理与 FAQ](./faq.md#命令起始符-骰主可改)。
 
 ## 数据存在哪
 
 角色卡、HP、先攻、群配置等数据保存在 NoneBot 的 [localstore](https://nonebot.dev/docs/best-practice/data-storing) 数据目录（默认平台数据目录下，可用 `LOCALSTORE_DATA_DIR` 环境变量调整，例如可设为 `data`），全部为本地 JSON 文件，随机器人账号隔离；数据归属与备份、隐私细节见[群管理与 FAQ](./faq.md#数据存储与隐私)。
+
+## 开发与致谢
+
+- 本项目以 MIT License 发布；**掷骰引擎与命令语法移植自 [nonebot-dicepp](https://github.com/pear-studio/nonebot-dicepp)**（Copyright (c) 2022 pear-studio，MIT），业务层为独立实现；
+- 规则查询类资料内容不随插件分发，需要时由使用者自行提供；
+- 发布、配置与开发信息见仓库 README。
 
 ## 下一步
 

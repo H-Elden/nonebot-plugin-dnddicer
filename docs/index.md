@@ -38,7 +38,7 @@ features:
     link: /guide/initiative
     linkText: 先攻列表
   - title: DM 实战指南
-    details: 一次开团的完整流程：整备与入表、公开/隐藏血量、AOE 代结算、回合推进、暗骰与收尾速查
+    details: 一次开团的完整流程：开团前整备与入表、三种伤害结算、回合推进、暗骰与速查表
     link: /guide/dm-guide
     linkText: DM 实战指南
   - title: 群管理与 FAQ

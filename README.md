@@ -15,12 +15,13 @@ DNDDicer 的目标是填补「NoneBot 商店中缺少 **DND5e/5r 专业 + 现代
 
 ## 📖 使用文档
 
-详细用法、输入/输出示例与常见问题见仓库 `docs/` 使用文档：
+详细用法、输入/输出示例与常见问题见仓库 `docs/` 使用文档（手册式分章，含跑团示例）：
 
-- [命令总表与快速开始](./docs/index.md) · [群管理与 FAQ](./docs/guide/faq.md)
-- [掷骰基础](./docs/guide/roll-basics.md) · [掷骰进阶](./docs/guide/roll-advanced.md) · [角色卡与属性](./docs/guide/character-card.md)
-- [检定与豁免](./docs/guide/checks.md) · [HP 与长休](./docs/guide/hp-rest.md)
-- [先攻列表](./docs/guide/initiative.md) · [战斗轮](./docs/guide/battle.md) · [DM 实战指南](./docs/guide/dm-guide.md)
+- 开始：[快速开始](./docs/guide/quickstart.md) · [示例团与人物](./docs/guide/cast.md)
+- 第一章 · 基础操作：[掷骰基础](./docs/guide/roll-basics.md) · [掷骰进阶](./docs/guide/roll-advanced.md) · [先攻列表](./docs/guide/initiative.md)
+- 第二章 · 进阶操作：[角色卡与属性](./docs/guide/character-card.md) · [检定与豁免](./docs/guide/checks.md) · [HP 与长休](./docs/guide/hp-rest.md) · [战斗轮](./docs/guide/battle.md)
+- 第三章 · DM 操作：[DM 实战指南](./docs/guide/dm-guide.md)
+- 参考 · [命令总览](./docs/guide/overview.md) · [群管理与 FAQ](./docs/guide/faq.md)
 
 ## 📦 安装
 
@@ -58,7 +59,7 @@ plugins = ["nonebot_plugin_dnddicer"]
 
 > 命令以 `.`（或全角 `。`）开头，中英文别名对齐 DicePP；命令起始符默认仅 `.` / `。`，如需用宿主斜杠 `/` 等起始符触发（如 `/.help`），请设置配置项 `dnddicer_use_host_command_starts=true`。**群聊服务默认关闭（白名单）**：需群主/管理员发送 `.bot on` 开启本群服务；`.bot off` 关闭后本群不再响应命令（`.bot` 本身不受影响）。群聊中使用 `.bot` 需先 @ 本机器人；私聊不受服务开关限制，可直接使用全部功能。
 >
-> **DM 代操作（@ 提及目标）**：多数带目标的命令支持用 **@群成员** 指定目标——直连该成员在本群的角色卡，不受同名 NPC/改名影响，且可与名称混写（`.hp @玩家 -4d6`、`.hp @玩家;地精 -d4`、`.ri+3 @玩家`、`.init del @玩家`、`.回合 @玩家`、`.角色卡 @玩家`、`.力量豁免 @玩家`、`.先攻检定 @玩家` 等）。详见 [使用文档](./docs/index.md#-提及目标dm-代操作)。
+> **DM 代操作（@ 提及目标）**：多数带目标的命令支持用 **@群成员** 指定目标——直连该成员在本群的角色卡，不受同名 NPC/改名影响，且可与名称混写（`.hp @玩家 -4d6`、`.hp @玩家;地精 -d4`、`.ri+3 @玩家`、`.init del @玩家`、`.回合 @玩家`、`.角色卡 @玩家`、`.力量豁免 @玩家`、`.先攻检定 @玩家` 等）。详见 [命令总览 - @ 提及目标](./docs/guide/overview.md#-提及目标dm-代操作)。
 
 ### 🎲 掷骰（群聊 / 私聊）
 

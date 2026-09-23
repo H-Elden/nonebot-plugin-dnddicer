@@ -34,7 +34,6 @@ export default defineConfig({
         items: [
           { text: '快速开始', link: '/guide/quickstart' },
           { text: '示例团与人物', link: '/guide/cast' },
-          { text: '命令总览', link: '/guide/overview' },
         ],
       },
       {
@@ -60,7 +59,10 @@ export default defineConfig({
       },
       {
         text: '参考',
-        items: [{ text: '群管理与 FAQ', link: '/guide/faq' }],
+        items: [
+          { text: '命令总览', link: '/guide/overview' },
+          { text: '群管理与 FAQ', link: '/guide/faq' },
+        ],
       },
     ],
 
