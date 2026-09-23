@@ -46,8 +46,9 @@ PERSONAS: List[Persona] = [DM, A_CHA, XIAO_MAN, LAO_MAO, A_YAN, XIAO_LU]
 BY_NAME: Dict[str, Persona] = {persona.nickname: persona for persona in PERSONAS}
 
 #: NPC 名册（首战：碎星隘口的哥布林哨站；「向导」用于跨战斗保持血量示例，
-#: 「骷髅」是哨塔里的亡灵守卫，用于承伤特性（易伤）示例）
-NPCS = ["哥布林", "熊地精", "狼", "向导", "骷髅"]
+#: 「骷髅」是哨塔里的亡灵守卫，用于承伤特性（易伤）示例；第二战：石桥桥头的
+#: 「木乃伊」用于隐藏血量与抗性/易伤示例）
+NPCS = ["哥布林", "熊地精", "狼", "向导", "骷髅", "木乃伊"]
 
 # ── 四张角色卡（5r / 2024 玩家手册；`.角色卡记录` 负载，不含命令名）──────────
 CARDS: Dict[str, str] = {

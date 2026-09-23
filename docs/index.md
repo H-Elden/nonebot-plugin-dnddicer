@@ -37,6 +37,10 @@ features:
     details: .ri 掷先攻入表、.init/.先攻 管理条目；.br 开局、.回合/.轮次 推进，轮到玩家自动 @ 提醒
     link: /guide/initiative
     linkText: 先攻列表
+  - title: DM 实战指南
+    details: 一次开团的完整流程：整备与入表、公开/隐藏血量、AOE 代结算、回合推进、暗骰与收尾速查
+    link: /guide/dm-guide
+    linkText: DM 实战指南
   - title: 群管理与 FAQ
     details: .dset 群默认骰面、.bot 群聊服务开关（白名单）、起始符配置与常见问题排查
     link: /guide/faq

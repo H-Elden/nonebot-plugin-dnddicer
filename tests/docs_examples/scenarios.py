@@ -693,6 +693,125 @@ hp_cleanup = Scene(
     ],
 )
 
+# ── 第六幕：石桥桥头（DM 实战指南） ────────────────────────────────────────
+# 第二场遭遇，全部从 DM 视角出牌：战斗前的开表与入表 → 战斗中两种伤害结算 →
+# 推进回合 → 暗骰 → 下一场直接 .br。开局前的「建卡与记卡」示例复用第一幕场景。
+
+dm_prep_miss = Scene(
+    id="dm_prep_miss",
+    title="战斗前的小坑：怪物没入先攻表就记不了血",
+    steps=[
+        # 记血的前提是「已在先攻表里」——入表之前写 .hp 会被挡下
+        Step("白鸦", ".hp 木乃伊 58/58"),
+    ],
+)
+
+dm_prep = Scene(
+    id="dm_prep",
+    title="战斗前：新建战斗轮，玩家掷先攻、DM 把怪物与友军入表",
+    steps=[
+        Step("白鸦", ".br"),
+        Step("白鸦", "请大家开始投掷先攻"),
+        # 玩家掷先攻：推荐 .先攻检定（自动读卡，不用报调整值）
+        Step("阿茶", ".先攻检定", dice=[15]),   # 薇拉 敏捷 +0 → 15
+        Step("小满", ".先攻检定", dice=[12]),   # 洛恩 敏捷 +2 → 14
+        Step("老猫", ".先攻检定", dice=[11]),   # 塔莉 先攻熟练+3 敏捷+4 → 18（与 Boss 同值）
+        Step("阿岩", ".先攻检定", dice=[13]),   # 布鲁姆 敏捷 -1 → 12
+        Step("白鸦", ".ri18 木乃伊"),           # 固定值：Boss 先手
+        Step("白鸦", ".ri+2 2#骷髅", dice=[11, 4]),
+        Step("白鸦", ".ri+1 向导", dice=[8]),   # 随队友军也入表（记血的前提）
+    ],
+)
+
+dm_records = Scene(
+    id="dm_records",
+    title="战斗前：给杂兵记公开血量、给友军挂跨战斗保持",
+    steps=[
+        Step("白鸦", ".hp 骷髅a 13/13"),
+        Step("白鸦", ".hp 骷髅b 13/13"),
+        # 向导 是随队友军：记一条血量、标记持久，跨战斗沿用
+        Step("白鸦", ".hp 向导 22/22"),
+        Step("白鸦", ".npc 持久 向导"),
+    ],
+)
+
+dm_init_first = Scene(
+    id="dm_init_first",
+    title="战斗前：同先攻值用 .init first 定先后，再 .init 展示终表",
+    steps=[
+        Step("白鸦", ".init first 塔莉"),   # 与木乃伊同为 18：提前
+        Step("白鸦", ".init"),
+    ],
+)
+
+dm_player_r = Scene(
+    id="dm_player_r",
+    title="玩家回合（陌生怪物）：.r 掷伤害，DM 按裁定手动扣血",
+    steps=[
+        Step("老猫", ".敏捷攻击", dice=[19]),      # 塔莉 的匕首：命中
+        Step("白鸦", "命中！请掷伤害骰！"),
+        Step("老猫", ".r1d4+4 匕首", dice=[2]),    # 玩家自己掷伤害
+        Step("白鸦", ".hp 木乃伊抗性 -6"),          # DM 手动扣血（抗性命中 → 折半）
+    ],
+)
+
+dm_dm_turn = Scene(
+    id="dm_dm_turn",
+    title="DM 回合：掷怪伤害与扣血一条命令完成",
+    steps=[
+        Step("白鸦", ".hp 向导 -d6+3", dice=[5]),  # 木乃伊一掌拍向导
+    ],
+)
+
+dm_player_hp = Scene(
+    id="dm_player_hp",
+    title="玩家回合（熟悉怪物）：一条 .hp 边掷边扣",
+    steps=[
+        Step("阿岩", ".力量攻击", dice=[16]),        # 布鲁姆 的战锤：命中
+        Step("阿岩", ".hp 骷髅a易伤 -d8+2", dice=[3]),  # 玩家自己掷伤害并扣血
+    ],
+)
+
+dm_aoe = Scene(
+    id="dm_aoe",
+    title="战斗中：一发火球结算三个目标（含代缺席玩家）",
+    steps=[
+        # 小满 临时离席，DM 代他的洛恩结算火球术；木乃伊对火焰易伤
+        Step("白鸦", ".hp 骷髅a;骷髅b;木乃伊易伤 -8d6",
+             dice=[2, 3, 1, 4, 2, 5, 1, 3]),
+    ],
+)
+
+dm_turn_push = Scene(
+    id="dm_turn_push",
+    title="推进：DM 代玩家发 .ed、自己发 .ed，以及跳转与轮次",
+    steps=[
+        Step("白鸦", ".回合"),
+        Step("白鸦", ".ed"),        # 代玩家结束回合
+        Step("白鸦", ".ed"),        # 怪物回合结束，自行推进
+        Step("白鸦", ".回合+3"),     # 快进到布鲁姆
+        Step("白鸦", ".回合 木乃伊"),  # 按名称直接定位
+        Step("白鸦", ".轮次+1"),
+    ],
+)
+
+dm_dark_roll = Scene(
+    id="dm_dark_roll",
+    title="暗骰：DM 掷出玩家看不见的骰子",
+    steps=[
+        Step("白鸦", ".rhd+3 木乃伊潜行", dice=[12]),
+    ],
+)
+
+dm_next_battle = Scene(
+    id="dm_next_battle",
+    title="不用收尾：下一场直接 .br，只记损失的临时记录会顺手清掉",
+    steps=[
+        Step("白鸦", ".br"),
+        Step("白鸦", ".hp list"),
+    ],
+)
+
 #: 时间线末尾：群主关闭本群服务（演示收尾）。
 #: 该场景必须压轴——服务关闭后本群不再响应其他命令；补新场景时请插在它之前。
 quickstart_bot_off = Scene(
@@ -778,5 +897,17 @@ TIMELINE = [
     npc_refill_next,
     battle_cleanup,
     hp_cleanup,
+    # 第六幕：石桥桥头（DM 实战指南）
+    dm_prep_miss,
+    dm_prep,
+    dm_records,
+    dm_init_first,
+    dm_player_r,
+    dm_dm_turn,
+    dm_player_hp,
+    dm_aoe,
+    dm_turn_push,
+    dm_dark_roll,
+    dm_next_battle,
     quickstart_bot_off,  # 压轴：服务关闭后本群不再响应其他命令
 ]

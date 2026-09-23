@@ -55,6 +55,10 @@ export default defineConfig({
         ],
       },
       {
+        text: '第三章 · DM 操作',
+        items: [{ text: 'DM 实战指南', link: '/guide/dm-guide' }],
+      },
+      {
         text: '参考',
         items: [{ text: '群管理与 FAQ', link: '/guide/faq' }],
       },

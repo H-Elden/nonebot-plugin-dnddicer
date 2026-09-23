@@ -37,6 +37,7 @@ SYNCED_PAGES = [
     "guide/checks.md",
     "guide/hp-rest.md",
     "guide/battle.md",
+    "guide/dm-guide.md",
 ]
 
 _OPEN_PATTERN = re.compile(r"^:::\s*chat\s*$")
