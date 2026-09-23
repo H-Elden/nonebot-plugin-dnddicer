@@ -140,9 +140,3 @@ DM 视角的完整流程（代掷、代结算、代推进）见 [DM 实战指南
 3. 建立角色卡开始跑团：[角色卡与属性](./character-card.md)
 
 当 DM 带团时，再看[DM 实战指南](./dm-guide.md)把一场战斗从头跑到尾。
-
-## 开发与致谢
-
-- 本项目以 MIT License 发布；**掷骰引擎与命令语法移植自 [nonebot-dicepp](https://github.com/pear-studio/nonebot-dicepp)**（Copyright (c) 2022 pear-studio，MIT），业务层为独立实现；
-- 规则查询类资料内容不随插件分发，需要时由使用者自行提供；
-- 发布、配置与开发信息见仓库 README。
