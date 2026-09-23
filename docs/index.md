@@ -51,4 +51,4 @@ features:
     linkText: 群管理与 FAQ
 ---
 
-当前版本 **v0.2.1** · 规则范围仅 DND5e/5r · [更新日志](https://github.com/H-Elden/nonebot-plugin-dnddicer/blob/main/CHANGELOG.md)
+当前版本 **v0.2.1** · 规则范围仅 DND5e/5r · [更新日志](/guide/changelog)

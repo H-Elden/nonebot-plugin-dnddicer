@@ -62,6 +62,7 @@ export default defineConfig({
         items: [
           { text: '命令总览', link: '/guide/overview' },
           { text: '群管理与 FAQ', link: '/guide/faq' },
+          { text: '更新日志', link: '/guide/changelog' },
         ],
       },
     ],
