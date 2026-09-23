@@ -46,7 +46,7 @@ PERSONAS: List[Persona] = [DM, A_CHA, XIAO_MAN, LAO_MAO, A_YAN, XIAO_LU]
 BY_NAME: Dict[str, Persona] = {persona.nickname: persona for persona in PERSONAS}
 
 #: NPC 名册（首战：碎星隘口的哥布林哨站；「向导」用于跨战斗保持血量示例）
-NPCS = ["哥布林", "熊地精", "向导"]
+NPCS = ["哥布林", "熊地精", "狼", "向导"]
 
 # ── 四张角色卡（5r / 2024 玩家手册；`.角色卡记录` 负载，不含命令名）──────────
 CARDS: Dict[str, str] = {

@@ -38,8 +38,12 @@ export default defineConfig({
         ],
       },
       {
-        text: '掷骰',
-        items: [{ text: '掷骰语法', link: '/guide/roll-syntax' }],
+        text: '第一章 · 基础操作',
+        items: [
+          { text: '掷骰基础', link: '/guide/roll-basics' },
+          { text: '掷骰进阶', link: '/guide/roll-advanced' },
+          { text: '先攻列表', link: '/guide/initiative' },
+        ],
       },
       {
         text: '角色与检定',
@@ -54,10 +58,7 @@ export default defineConfig({
       },
       {
         text: '战斗',
-        items: [
-          { text: '先攻列表', link: '/guide/initiative' },
-          { text: '战斗轮', link: '/guide/battle' },
-        ],
+        items: [{ text: '战斗轮', link: '/guide/battle' }],
       },
       {
         text: '参考',

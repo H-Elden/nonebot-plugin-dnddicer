@@ -30,6 +30,9 @@ BASELINE_DIR = Path(__file__).resolve().parent / "baseline"
 SYNCED_PAGES = [
     "guide/cast.md",
     "guide/quickstart.md",
+    "guide/roll-basics.md",
+    "guide/roll-advanced.md",
+    "guide/initiative.md",
 ]
 
 _OPEN_PATTERN = re.compile(r"^:::\s*chat\s*$")

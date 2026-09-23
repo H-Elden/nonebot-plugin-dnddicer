@@ -19,8 +19,8 @@ hero:
 features:
   - title: 掷骰表达式
     details: d20 优势/劣势、保留最高、重掷、爆炸骰、连掷、暗骰与原因后缀；仅 d20 播报大成功/大失败
-    link: /guide/roll-syntax
-    linkText: 掷骰语法
+    link: /guide/roll-basics
+    linkText: 掷骰基础
   - title: 角色卡与检定
     details: 用 $…$ 模板建卡；.力量检定 .敏捷豁免 .敏捷攻击 点命令自动代入调整值、熟练与加值，也可用 @ 代掷
     link: /guide/character-card
