@@ -70,6 +70,43 @@ async def test_roll_no_space_after_r(app: App, roll_matcher):
 
 
 @pytest.mark.asyncio
+async def test_roll_constant_multiplication_operand(app: App, roll_matcher):
+    """常量复合子表达式：.rd6+2*2 的说明文字按四则运算给出（[4]+2*2）。
+
+    乘号只作用于相邻常量，不得改写骰块（旧行为曾显示 [4]*2+4，与算式结构、
+    四则运算均不符）。
+    """
+    token = set_runtime(SequenceRuntime([4]))
+    try:
+        event = fake_group_message_event_v11(message=Message(".rd6+2*2"))
+        await _expect_send(app, roll_matcher, event, "test 的掷骰结果为 1D6+2*2=[4]+2*2=8")
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_roll_constant_multiplication_only_adjacent(app: App, roll_matcher):
+    """无括号时乘号只作用于相邻骰子：.rd6+d8*2 → [3]+[5]*2=13。"""
+    token = set_runtime(SequenceRuntime([3, 5]))
+    try:
+        event = fake_group_message_event_v11(message=Message(".rd6+d8*2"))
+        await _expect_send(app, roll_matcher, event, "test 的掷骰结果为 1D6+1D8*2=[3]+[5]*2=13")
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_roll_parenthesized_dice_sum_times_two(app: App, roll_matcher):
+    """括号内整体乘：.r(d6+d8)*2 → ([3]+[5])*2=16（括号保留，语义清晰）。"""
+    token = set_runtime(SequenceRuntime([3, 5]))
+    try:
+        event = fake_group_message_event_v11(message=Message(".r(d6+d8)*2"))
+        await _expect_send(app, roll_matcher, event, "test 的掷骰结果为 (1D6+1D8)*2=([3]+[5])*2=16")
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
 async def test_roll_chinese_fullstop(app: App, roll_matcher):
     """中文句号起始：。r 2d6+3。"""
     token = set_runtime(SequenceRuntime([6, 3]))

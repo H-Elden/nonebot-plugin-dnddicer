@@ -5,6 +5,12 @@
 # 括号。背景：preprocessor 将「expr抗性/易伤」展开为 (expr)/2、(expr)*2，但
 # 括号节点不产生 trace 事件，栈重建 infix 时复合操作数会缺括号（显示
 # 5+2+3/2，与真实计算值语义不一致）。仅渲染层变化，求值语义不变。
+# 本地改动记录（2026-09-23）：常量与一元负号纳入事件流（NumberEvent /
+# UnaryEvent）。背景：NumberNode 此前不产生 trace 事件，渲染栈无从区分
+# 「常量操作数」与「已渲染的事件块」——纯常量子表达式（如 1D6+2*2 中的 2*2）
+# 在 OperationEvent 的兜底分支里挪用了栈中其他层级的骰块，输出「[4]*2+4」
+# 这种与算式结构、四则运算都不符的说明文字。补全事件后，算术事件流与 AST
+# 结构一一对应，栈重建不再需要猜测操作数来源；兜底分支仅在畸形事件流下生效。
 # ---------------------------------------------------------------------------
 """
 Structured Trace Model for Roll Expressions
@@ -16,6 +22,8 @@ consumed by different renderers (text, HTML, etc.).
 Trace Events:
 - DiceRollEvent: Individual dice roll
 - ModifierAppliedEvent: Modifier application
+- NumberEvent: Constant operand (number literal)
+- UnaryEvent: Unary sign applied to the operand on stack top
 - OperationEvent: Arithmetic operation
 - ResultEvent: Final result
 """
@@ -29,6 +37,8 @@ class TraceEventType(Enum):
     """Types of trace events."""
     DICE_ROLL = "dice_roll"
     MODIFIER_APPLIED = "modifier_applied"
+    NUMBER = "number"
+    UNARY = "unary"
     OPERATION = "operation"
     RESULT = "result"
     ERROR = "error"
@@ -67,6 +77,31 @@ class ModifierAppliedEvent(TraceEvent):
     
     def __post_init__(self):
         self.event_type = TraceEventType.MODIFIER_APPLIED
+
+
+@dataclass
+class NumberEvent(TraceEvent):
+    """Event for a constant operand (number literal in the expression).
+
+    2026-09-23 新增：常量此前不进入事件流，渲染栈无从区分它与事件块。
+    """
+    value: Union[int, float] = 0
+
+    def __post_init__(self):
+        self.event_type = TraceEventType.NUMBER
+
+
+@dataclass
+class UnaryEvent(TraceEvent):
+    """Event for a unary sign applied to the operand currently on stack top.
+
+    2026-09-23 新增：一元负号此前不进入事件流，渲染时负号会整个丢失
+    （如 -1D6+3 曾显示 [4]+3，而值为 -1）。渲染层以本事件给栈顶操作数加符号。
+    """
+    operator: str = ""  # "+" / "-"
+
+    def __post_init__(self):
+        self.event_type = TraceEventType.UNARY
 
 
 @dataclass
@@ -203,7 +238,10 @@ class LegacyTextRenderer(TraceRenderer):
         stack: ["[15]"] -> ["[15]", "[4]"] -> ["[15]+[4]"]
 
     Modifier events are inline suffixes to the most recent dice block, so
-    they replace (pop-then-push) the top of the stack.
+    they replace (pop-then-push) the top of the stack.  Constant operands
+    (NumberEvent) and unary signs (UnaryEvent) are pushed/wrapped like any
+    other leaf, so every OperationEvent always consumes its own two
+    operands from the stack.
     """
 
     def render_dice_roll(self, event: DiceRollEvent) -> str:
@@ -364,6 +402,19 @@ class LegacyTextRenderer(TraceRenderer):
         for event in trace.events:
             if isinstance(event, DiceRollEvent):
                 stack.append(self.render_dice_roll(event))
+            elif isinstance(event, NumberEvent):
+                # 常量操作数直接以数值文本入栈（整数不带小数点）
+                stack.append(str(event.value))
+            elif isinstance(event, UnaryEvent):
+                # 一元负号包裹栈顶操作数；复合文本补括号（否则 -a+b 会被
+                # 读成 (-a)+b 之外的语义）
+                if not stack:
+                    stack.append(event.operator)
+                elif event.operator == "-":
+                    top = stack.pop()
+                    stack.append(
+                        f"-{top}" if not _top_level_operators(top) else f"-({top})"
+                    )
             elif isinstance(event, ModifierAppliedEvent):
                 rendered = self.render_modifier(event)
                 if rendered.startswith("\x00REPLACE\x00"):

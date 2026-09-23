@@ -286,18 +286,100 @@ class TestCompoundOperandParentheses:
         assert result.get_info() == "(1+2)*2"
 
     def test_divide_by_parenthesized_sum(self):
-        """12/(1+2) → 求值 4。注：两侧纯常量（无骰子树）时渲染文本受引擎
-        既有「常量子树无 trace 事件」限制（文本错位/被值替换），此处仅断言数值。"""
+        """12/(1+2) → 渲染保留括号：12/(1+2)=4"""
         result = exec_roll_exp_unified("12/(1+2)")
         assert result.get_val() == 4
+        assert result.get_info() == "12/(1+2)"
 
     def test_multiply_by_parenthesized_sum(self):
-        """2*(1+2) → 求值 6。注：渲染文本限制同上例，此处仅断言数值。"""
+        """2*(1+2) → 渲染保留括号：2*(1+2)=6"""
         result = exec_roll_exp_unified("2*(1+2)")
         assert result.get_val() == 6
+        assert result.get_info() == "2*(1+2)"
 
     def test_left_associative_same_precedence_no_parens(self):
         """8/2/2 同级左结合 → 不补多余括号：8/2/2=2"""
         result = exec_roll_exp_unified("8/2/2")
         assert result.get_val() == 2
         assert result.get_info() == "8/2/2"
+
+
+class TestConstantOperandRendering:
+    """常量操作数与一元负号参与渲染：说明文字须与算式结构、四则运算一致。
+
+    2026-09-23 修订：常量此前不产生渲染事件，纯常量子表达式（1D6+2*2 里的
+    2*2）会被错配到其他层级的骰块上（曾显示 [4]*2+4），与四则运算不符。
+    """
+
+    def test_constant_mul_after_plus(self):
+        """1D6+2*2 → [3]+2*2=7（乘号只作用于常量 2*2，不改写骰块）"""
+        result = exec_roll_exp_unified("1D6+2*2", dice_roller=MockDiceRoller([3]))
+        assert result.get_val() == 7
+        assert result.get_info() == "[3]+2*2"
+
+    def test_constant_mul_after_plus_multi_digit(self):
+        """1D6+2*3 → [3]+2*3=9（常量两侧原样展示，不折叠成值）"""
+        result = exec_roll_exp_unified("1D6+2*3", dice_roller=MockDiceRoller([3]))
+        assert result.get_val() == 9
+        assert result.get_info() == "[3]+2*3"
+
+    def test_constant_mul_after_minus(self):
+        """1D6-2*2 → [3]-2*2=-1"""
+        result = exec_roll_exp_unified("1D6-2*2", dice_roller=MockDiceRoller([3]))
+        assert result.get_val() == -1
+        assert result.get_info() == "[3]-2*2"
+
+    def test_constant_mul_between_dice_terms(self):
+        """1D6*2+2*2 → [3]*2+2*2=10"""
+        result = exec_roll_exp_unified("1D6*2+2*2", dice_roller=MockDiceRoller([3]))
+        assert result.get_val() == 10
+        assert result.get_info() == "[3]*2+2*2"
+
+    def test_constant_mul_parenthesized_after_dice(self):
+        """1D6+(2*2) → [3]+2*2=7（冗余括号不显示，运算顺序不变）"""
+        result = exec_roll_exp_unified("1D6+(2*2)", dice_roller=MockDiceRoller([3]))
+        assert result.get_val() == 7
+        assert result.get_info() == "[3]+2*2"
+
+    def test_unary_minus_operand_rendered(self):
+        """1D6*-2 → [3]*(-2)=-6（负号操作数整体显示，不与骰块错位）"""
+        result = exec_roll_exp_unified("1D6*-2", dice_roller=MockDiceRoller([3]))
+        assert result.get_val() == -6
+        assert result.get_info() == "[3]*(-2)"
+
+    def test_unary_minus_before_dice(self):
+        """-1D6+3 → -[3]+3=0"""
+        result = exec_roll_exp_unified("-1D6+3", dice_roller=MockDiceRoller([3]))
+        assert result.get_val() == 0
+        assert result.get_info() == "-[3]+3"
+
+    def test_double_minus_operand_parenthesized(self):
+        """1D6--2 → [3]-(-2)=5（第二个减号为一元负号，渲染带括号防误读）"""
+        result = exec_roll_exp_unified("1D6--2", dice_roller=MockDiceRoller([3]))
+        assert result.get_val() == 5
+        assert result.get_info() == "[3]-(-2)"
+
+    def test_constant_mul_applies_to_adjacent_dice_only(self):
+        """1D6+1D8*2 → [3]+[5]*2=13（*2 只作用于相邻的 d8，不整体翻倍）"""
+        result = exec_roll_exp_unified("1D6+1D8*2", dice_roller=MockDiceRoller([3, 5]))
+        assert result.get_val() == 13
+        assert result.get_info() == "[3]+[5]*2"
+
+    def test_parenthesized_dice_sum_times_two(self):
+        """(1D6+1D8)*2 → ([3]+[5])*2=16（括号内整体乘 2，括号保留）"""
+        result = exec_roll_exp_unified("(1D6+1D8)*2", dice_roller=MockDiceRoller([3, 5]))
+        assert result.get_val() == 16
+        assert result.get_info() == "([3]+[5])*2"
+
+    def test_redundant_parens_around_dice_omitted(self):
+        """1D6+(1D8)*2 与 1D6+(1D8*2) 同义 → [3]+[5]*2=13（冗余括号不显示）"""
+        for exp in ("1D6+(1D8)*2", "1D6+(1D8*2)"):
+            result = exec_roll_exp_unified(exp, dice_roller=MockDiceRoller([3, 5]))
+            assert result.get_val() == 13
+            assert result.get_info() == "[3]+[5]*2"
+
+    def test_constant_after_keep_modifier(self):
+        """2D6K1+2*2 → MAX{[6], [2]}+2*2=10（修饰符骰块与常量各就各位）"""
+        result = exec_roll_exp_unified("2D6K1+2*2", dice_roller=MockDiceRoller([6, 2]))
+        assert result.get_val() == 10
+        assert result.get_info() == "MAX{[6], [2]}+2*2"

@@ -47,6 +47,8 @@ from .trace import (
     EvaluationTrace,
     DiceRollEvent,
     ModifierAppliedEvent,
+    NumberEvent,
+    UnaryEvent,
     OperationEvent,
 )
 
@@ -167,6 +169,8 @@ class Evaluator(ASTVisitor):
                     f"常量大小必须在{DICE_CONSTANT_MIN}至{DICE_CONSTANT_MAX}之间",
                     code=RollErrorCode.RUNTIME_ERROR,
                 )
+            # 常量进入事件流（2026-09-23），供渲染层把操作数与运算符正确配对
+            self._trace.add_event(NumberEvent(event_type=None, value=val))
             return EvalResult(value=val)
         finally:
             self._exit_node()
@@ -424,6 +428,8 @@ class Evaluator(ASTVisitor):
             if node.op == UnaryOp.PLUS:
                 return operand_result
             elif node.op == UnaryOp.MINUS:
+                # 负号进入事件流（2026-09-23），渲染层据此给栈顶操作数加负号
+                self._trace.add_event(UnaryEvent(event_type=None, operator="-"))
                 return EvalResult(
                     value=-operand_result.value,
                     dice_results=operand_result.dice_results,
