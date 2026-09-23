@@ -377,6 +377,16 @@ check_no_card = Scene(
     ],
 )
 
+check_halfling_luck = Scene(
+    id="check_halfling_luck",
+    title="半身人「幸运」：D20 掷出 1 时重掷（手写 r1）",
+    steps=[
+        # 塔莉 是半身人：探路时踩到松动的石板，敏捷豁免掷出 1 → 重掷并采用新结果。
+        # 角色卡不含物种特性，幸运要手写 r1（骰娘不替玩家自动套用）。
+        Step("老猫", ".rdr1+7 敏捷豁免", dice=[1, 14]),
+    ],
+)
+
 # ── 第三幕：碎星隘口遭遇战（先攻列表） ──────────────────────────────────────
 
 battle_open = Scene(
@@ -781,6 +791,17 @@ dm_player_hp = Scene(
     ],
 )
 
+dm_group_save = Scene(
+    id="dm_group_save",
+    title="DM 的省事写法：三只一起过豁免、数出几只顶住",
+    steps=[
+        # 布鲁姆 的驱散亡灵：豁免 DC = 施法者法术豁免 DC（8 + 熟练 3 + 感知 4 = 15）。
+        # 一群小怪的豁免一次掷完，用 cs>= 直接读到「几只顶住」。
+        Step("阿岩", "新回合我用驱散亡灵：骷髅a、骷髅b、木乃伊一起过感知豁免，DC 15"),
+        Step("白鸦", ".r3d20cs>=15", dice=[16, 7, 18]),
+    ],
+)
+
 dm_aoe = Scene(
     id="dm_aoe",
     title="战斗中：一发火球结算三个目标（含代缺席玩家）",
@@ -915,6 +936,7 @@ TIMELINE = [
     check_multi,
     check_mention,
     check_no_card,
+    check_halfling_luck,
     # 第三幕：碎星隘口遭遇战（先攻列表）
     battle_open,
     init_player_roll,
@@ -957,6 +979,7 @@ TIMELINE = [
     dm_player_r,
     dm_dm_turn,
     dm_player_hp,
+    dm_group_save,
     dm_aoe,
     dm_turn_push,
     dm_dark_roll,
