@@ -18,7 +18,7 @@ hero:
 
 features:
   - title: 掷骰表达式
-    details: d20 优势/劣势、保留最高、重掷、爆炸骰、连掷、暗骰与原因后缀；仅 d20 播报大成功/大失败
+    details: D20 优势/劣势、保留最高、重掷、爆炸骰、连掷、暗骰与原因后缀；仅 D20 播报大成功/大失败
     link: /guide/roll-basics
     linkText: 掷骰基础
   - title: 角色卡与属性
