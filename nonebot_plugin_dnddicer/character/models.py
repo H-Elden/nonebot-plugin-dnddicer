@@ -14,12 +14,16 @@ from .constants import (
     CHECK_ITEM_INDEX_DICT,
     CHECK_ITEM_LIST,
     CHAR_INFO_KEY_ABILITY,
+    CHAR_INFO_KEY_CLASS,
     CHAR_INFO_KEY_EXT,
     CHAR_INFO_KEY_HP,
     CHAR_INFO_KEY_HP_DICE,
     CHAR_INFO_KEY_LEVEL,
     CHAR_INFO_KEY_NAME,
     CHAR_INFO_KEY_PROF,
+    CHAR_INFO_KEY_RACE,
+    CHAR_INFO_KEY_SUBCLASS,
+    CHAR_INFO_KEY_WEAPON,
     EXT_ITEM_INDEX_DICT,
     EXT_ITEM_LIST,
 )
@@ -201,6 +205,30 @@ class AbilityInfo(BaseModel):
         return info.strip()
 
 
+class WeaponInfo(BaseModel):
+    """自定义武器/法术项（玩家自行填写，机器人不做规则判断）。
+
+    录入格式与展示格式一致（可复制回 ``$武器$`` 段）：
+    ``名称±命中加值,伤害表达式+类型``，如 ``短剑+6,1d4+4穿刺``；
+    名称尾部 ``x`` 为「不可攻击检定」标记（如 ``火球术x,8d6火焰``）。
+    解析与校验见 ``character/services.py`` 的 ``parse_weapon_item``。
+    """
+
+    name: str                 # 武器/法术名（卡内唯一，命令匹配用）
+    attack_bonus: str = ""    # 命中加值表达式片段（如 "+6"；空 = 不加）
+    damage_expr: str = ""     # 伤害表达式（骰子与常数的加减组合，如 "1d4+4"）
+    damage_type: str = ""     # 伤害类型（规范名，如 "穿刺"；空 = 不提示类型）
+    no_attack: bool = False   # x 标记：不可进行攻击检定（纯伤害法术，如 火球术）
+
+    def get_info(self) -> str:
+        """展示/回写文本，如 ``短剑+6,1d4+4穿刺``、``火球术x,8d6火焰``。"""
+        mark = "x" if self.no_attack else ""
+        text = f"{self.name}{mark}{self.attack_bonus},{self.damage_expr}"
+        if self.damage_type:
+            text += self.damage_type
+        return text
+
+
 class NPCHealth(BaseModel):
     """NPC/怪物血量条目（群级、按名称索引）。
 
@@ -225,8 +253,12 @@ class DNDCharacter(BaseModel):
     group_id: str
     user_id: str
     name: str = ""
+    race: str = ""        # 种族（$种族$；本批次仅记录展示）
+    char_class: str = ""  # 职业（$职业$；12 职业规范名之一，偷袭骰计算依据）
+    subclass: str = ""    # 子职（$子职$；本批次仅记录展示）
     hp_info: HPInfo = Field(default_factory=HPInfo)
     ability_info: AbilityInfo = Field(default_factory=AbilityInfo)
+    weapons: List[WeaponInfo] = Field(default_factory=list)  # 自定义武器/法术项
     is_init: bool = False
 
     def get_char_info(self) -> str:
@@ -234,10 +266,19 @@ class DNDCharacter(BaseModel):
         parts = []
         if self.name:
             parts.append(f"{CHAR_INFO_KEY_NAME} {self.name}")
+        if self.race:
+            parts.append(f"{CHAR_INFO_KEY_RACE} {self.race}")
+        if self.char_class:
+            parts.append(f"{CHAR_INFO_KEY_CLASS} {self.char_class}")
+        if self.subclass:
+            parts.append(f"{CHAR_INFO_KEY_SUBCLASS} {self.subclass}")
         hp_part = self.hp_info.get_char_info()
         if hp_part:
             parts.append(hp_part)
         ability_part = self.ability_info.get_char_info()
         if ability_part:
             parts.append(ability_part)
+        if self.weapons:
+            weapon_str = "/".join(weapon.get_info() for weapon in self.weapons)
+            parts.append(f"{CHAR_INFO_KEY_WEAPON} {weapon_str}")
         return "\n".join(parts)

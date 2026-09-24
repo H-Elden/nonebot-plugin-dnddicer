@@ -11,7 +11,8 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Literal, Optional, Tuple
+import re
+from typing import Dict, Iterable, List, Literal, Optional, Tuple
 
 from ..engine.roll.ast_engine.adapter import exec_roll_exp_unified
 from ..engine.roll.roll_utils import RollDiceError
@@ -23,6 +24,7 @@ from .constants import (
     ATTACK_LIST,
     ATTACK_PARENT_DICT,
     CHAR_INFO_KEY_ABILITY,
+    CHAR_INFO_KEY_CLASS,
     CHAR_INFO_KEY_EXT,
     CHAR_INFO_KEY_HP,
     CHAR_INFO_KEY_HP_DICE,
@@ -30,8 +32,15 @@ from .constants import (
     CHAR_INFO_KEY_LIST,
     CHAR_INFO_KEY_NAME,
     CHAR_INFO_KEY_PROF,
+    CHAR_INFO_KEY_RACE,
+    CHAR_INFO_KEY_SUBCLASS,
+    CHAR_INFO_KEY_WEAPON,
     CHECK_ITEM_INDEX_DICT,
     CHECK_ITEM_LIST,
+    CLASS_LIST,
+    CLASS_SYNONYM_DICT,
+    DAMAGE_TYPE_LIST,
+    DAMAGE_TYPE_SYNONYM_DICT,
     EXT_ITEM_INDEX_DICT,
     EXT_ITEM_LIST,
     SAVING_ALL_KEY,
@@ -40,8 +49,13 @@ from .constants import (
     SKILL_LIST,
     SKILL_PARENT_DICT,
     SKILL_SYNONYM_DICT,
+    SNEAK_ATTACK_CLASS,
+    WEAPON_MAX_COUNT,
+    WEAPON_NAME_FORBIDDEN_CHARS,
+    WEAPON_NAME_FORBIDDEN_WORDS,
+    WEAPON_NAME_MAX_LEN,
 )
-from .models import AbilityInfo, DNDCharacter, HPInfo
+from .models import AbilityInfo, DNDCharacter, HPInfo, WeaponInfo
 
 
 def _normalize_name(name: str) -> str:
@@ -64,6 +78,186 @@ def parse_template_to_dict(input_str: str) -> Dict[str, str]:
         if content and content not in CHAR_INFO_KEY_LIST:
             result[key] = content
     return result
+
+
+# ── 自定义武器项 / 职业 / 偷袭骰（2026-09-24 新增）────────────────────────
+
+#: 伤害表达式允许的形态：骰子项与常数项以 +- 连接（重击/副手后缀对表达式做
+#: 确定性重写，禁用乘除与括号以免歧义；首项可带符号）
+_WEAPON_DAMAGE_ITEM_RE = re.compile(r"^[+-]?(\d*[dD]\d+|\d+)([+-](\d*[dD]\d+|\d+))*$")
+
+#: 命中加值 / 伤害临时加值片段允许的形态（必须以符号开头，随后为骰子/常数项以 +- 连接）
+WEAPON_BONUS_RE = re.compile(r"^[+-](\d*[dD]\d+|\d+)([+-](\d*[dD]\d+|\d+))*$")
+
+#: 兼职判定用分隔符号（复合写法直接提示「暂不支持兼职」）
+_CLASS_MULTI_SEPARATORS = ("/", "、", "+", ",", "，", "兼")
+
+
+def normalize_class_name(text: str) -> str:
+    """把职业段文本归一为 12 职业规范名；不支持兼职（复合写法报错）。"""
+    value = text.strip()
+    name = CLASS_SYNONYM_DICT.get(value, value)
+    if name in CLASS_LIST:
+        return name
+    if any(sep in value for sep in _CLASS_MULTI_SEPARATORS):
+        raise AssertionError("当前版本暂不支持兼职，请填写单一职业名（如 游荡者）")
+    raise AssertionError(f"职业无效: {value}，可用职业: {'/'.join(CLASS_LIST)}")
+
+
+def normalize_damage_type(text: str) -> str:
+    """伤害类型归一（别名 → 规范名）；未知类型返回空串（视为未填写）。"""
+    if text in DAMAGE_TYPE_SYNONYM_DICT:
+        return DAMAGE_TYPE_SYNONYM_DICT[text]
+    return text if text in DAMAGE_TYPE_LIST else ""
+
+
+def _validate_weapon_name(name: str) -> None:
+    """武器名基础校验（解析与 .设置武器 共用；失败抛 AssertionError）。"""
+    if not name:
+        raise AssertionError("武器名称不能为空")
+    if len(name) > WEAPON_NAME_MAX_LEN:
+        raise AssertionError(f"武器名称过长（≤{WEAPON_NAME_MAX_LEN} 字）: {name}")
+    for ch in WEAPON_NAME_FORBIDDEN_CHARS:
+        if ch in name:
+            raise AssertionError(f"武器名称不能包含符号「{ch}」: {name}")
+    for word in WEAPON_NAME_FORBIDDEN_WORDS:
+        if word in name:
+            raise AssertionError(f"武器名称不能包含「{word}」字样: {name}")
+    if name in CHECK_ITEM_LIST:
+        raise AssertionError(f"武器名称不能与检定条目重名: {name}")
+
+
+def validate_weapon_name(name: str, reserved_names: Iterable[str] = ()) -> None:
+    """武器名完整校验（含插件命令名保留字；供解析与 .设置武器 共用）。"""
+    _validate_weapon_name(name)
+    lowered = {item.lower() for item in reserved_names}
+    if name.lower() in lowered:
+        raise AssertionError(f"武器名称不能与插件命令重名: {name}")
+
+
+def parse_weapon_item(item: str, reserved_names: Iterable[str] = ()) -> WeaponInfo:
+    """解析自定义武器项：``名称±命中加值,伤害表达式+类型``。
+
+    例：``短剑+6,1d4+4穿刺``——名称段以首个 ± 切出命中加值（名称本身禁含
+    ±）；伤害段尾部可带 13 种伤害类型之一（含「斩击→挥砍」容错），剩余为
+    伤害表达式（骰子与常数的加减组合）。校验失败抛 AssertionError（消息面向用户）。
+
+    兼容性（2026-09-24 补强）：逗号前后空格任意（``长剑+8, 1d8+5挥砍``）、
+    全角逗号（``长剑+8，1d8+5挥砍``）、表达式与加值内部空白（``1d8 + 5``、
+    ``+ 6``）均按等价处理。名称尾部可写 **x 标记**表示「不可进行攻击检定」
+    （如 ``火球术x,8d6火焰``，纯伤害法术专用；x 仅在无命中加值时识别，
+    且前一个字符须为非 ASCII 字母数字——英文武器名如 ``Box`` 不会误判）。
+    """
+    raw = item.strip()
+    normalized = raw.replace("，", ",")
+    if not normalized or "," not in normalized:
+        raise AssertionError(f"武器条目不完整: {raw}（示例：短剑+6,1d4+4穿刺）")
+    name_part, _, damage_part = normalized.partition(",")
+    name_part, damage_part = name_part.strip(), damage_part.strip()
+    if not name_part or not damage_part:
+        raise AssertionError(f"武器条目不完整: {raw}（示例：短剑+6,1d4+4穿刺）")
+
+    match = re.search(r"[+-]", name_part)
+    if match:
+        name = name_part[: match.start()].strip()
+        bonus = re.sub(r"\s+", "", name_part[match.start():])
+    else:
+        name, bonus = name_part, ""
+
+    # x 标记：名称最后一个字符为 x/X 且前一个字符非 ASCII 字母数字时视为
+    # 「不可攻击检定」标记（中文名尾缀场景），并从名称中摘除
+    no_attack = False
+    if (
+        len(name) > 1
+        and name[-1] in ("x", "X")
+        and not (name[-2].isascii() and name[-2].isalnum())
+    ):
+        if bonus:
+            raise AssertionError(
+                f"武器条目写法无效: {raw}（x 标记表示不可攻击检定，不要再写命中加值）"
+            )
+        no_attack = True
+        name = name[:-1].strip()
+
+    validate_weapon_name(name, reserved_names)
+    # 注：命中加值与伤害表达式都用正则做静态校验（不调用引擎试掷）——试掷会
+    # 真实消耗一次随机数、拖累文档取证与复现（表达式形态本就限定为加减组合）
+    if bonus and not WEAPON_BONUS_RE.match(bonus):
+        raise AssertionError(
+            f"武器命中加值无效: {name}{bonus}（仅支持骰子与常数的加减组合，如 +6）"
+        )
+
+    damage_part = re.sub(r"\s+", "", damage_part)
+    damage_type = ""
+    damage_expr = damage_part
+    for type_name in sorted(
+        (*DAMAGE_TYPE_LIST, *DAMAGE_TYPE_SYNONYM_DICT), key=len, reverse=True
+    ):
+        if damage_part.endswith(type_name) and len(damage_part) > len(type_name):
+            damage_expr = damage_part[: -len(type_name)].strip()
+            damage_type = normalize_damage_type(type_name)
+            break
+    if not _WEAPON_DAMAGE_ITEM_RE.match(damage_expr):
+        raise AssertionError(
+            f"武器伤害表达式无效: {damage_expr}（仅支持骰子与常数的加减组合，如 1d4+4）"
+        )
+    return WeaponInfo(
+        name=name,
+        attack_bonus=bonus,
+        damage_expr=damage_expr,
+        damage_type=damage_type,
+        no_attack=no_attack,
+    )
+
+
+def parse_weapon_list(content: str, reserved_names: Iterable[str] = ()) -> List[WeaponInfo]:
+    """解析 ``$武器$`` 段全文（``/`` 分隔多项；名称卡内唯一、数量 ≤ 上限）。"""
+    items = [item for item in content.split("/") if item.strip()]
+    if len(items) > WEAPON_MAX_COUNT:
+        raise AssertionError(f"武器数量最多 {WEAPON_MAX_COUNT} 件")
+    weapons: List[WeaponInfo] = []
+    seen: set[str] = set()
+    for item in items:
+        weapon = parse_weapon_item(item, reserved_names)
+        if weapon.name in seen:
+            raise AssertionError(f"武器名称重复: {weapon.name}")
+        seen.add(weapon.name)
+        weapons.append(weapon)
+    return weapons
+
+
+def get_sneak_attack_dice(level: int, char_class: str) -> int:
+    """游荡者偷袭骰数量（颗 d6）：ceil(等级 / 2)，封顶 10；非游荡者返回 0。
+
+    对应 5e/2024 游荡者特性表（1 级 1d6、3 级 2d6、……、19 级 10d6）。
+    当前版本不支持兼职，等级取角色卡整体等级（简化偏差见设计文档记录）。
+    """
+    if char_class != SNEAK_ATTACK_CLASS or level <= 0:
+        return 0
+    return min(10, (level + 1) // 2)
+
+
+def apply_critical_to_damage(expr: str) -> str:
+    """重击：伤害表达式中所有骰子项骰数 ×2（固定加值只加一次、保持不变）。
+
+    如 ``1d4+4`` → ``2d4+4``、``2d6+1d4+3`` → ``4d6+2d4+3``、``d6`` → ``2d6``。
+    """
+    def _double(matched: "re.Match[str]") -> str:
+        count = int(matched.group(1)) if matched.group(1) else 1
+        return f"{count * 2}{matched.group(2)}"
+
+    return re.sub(r"(\d*)([dD]\d+)", _double, expr)
+
+
+def strip_damage_constants(expr: str) -> str:
+    """副手：剔除伤害表达式中所有常数项（保留骰子项）；无骰子时返回空串。
+
+    如 ``1d4+4`` → ``1d4``、``2d6+1d4+3`` → ``2d6+1d4``；纯常数（如 ``1``）→ ""。
+    """
+    dice_items = re.findall(r"[+-]?\d*[dD]\d+", expr)
+    if not dice_items:
+        return ""
+    return dice_items[0].lstrip("+") + "".join(dice_items[1:])
 
 
 class AbilityService:
@@ -269,17 +463,29 @@ class CharacterService:
     """角色卡解析服务。"""
 
     @staticmethod
-    def parse(input_str: str, group_id: str, user_id: str) -> DNDCharacter:
+    def parse(
+        input_str: str,
+        group_id: str,
+        user_id: str,
+        reserved_names: Iterable[str] = (),
+    ) -> DNDCharacter:
         """把 ``.角色卡记录`` 的模板文本解析为角色；失败抛 AssertionError。
 
         模板格式（.角色卡模板 可查看示例）：
         $姓名$ 伊丽莎白
+        $种族$ 半精灵
+        $职业$ 游荡者
+        $子职$ 刺客
         $等级$ 5
         $生命值$ 5/10(4)
         $生命骰$ 4/10 D6
         $属性$ 10/11/12/15/12/8
         $熟练$ 力量/2*隐匿/奥秘
         $额外加值$ 运动:优势/隐匿:优势+2/游说:-2
+        $武器$ 短剑+6,1d4+4穿刺/长弓+5,1d8+3穿刺
+
+        ``reserved_names`` 为保留名集合（插件固定命令名），武器名不得与之
+        冲突（由命令层传入；缺省不检查，供纯函数调用与单测）。
         """
         hp_info = HPInfo()
         ability_info = AbilityInfo()
@@ -350,12 +556,24 @@ class CharacterService:
 
         AbilityService.initialize(ability_info, level_str, ability_values, prof_list, ext_dict)
 
+        # ── 种族/职业/子职/武器（可选段；职业与武器名有校验）──
+        char_class = ""
+        char_class_str = data.get(CHAR_INFO_KEY_CLASS, "").strip()
+        if char_class_str:
+            char_class = normalize_class_name(char_class_str)
+        weapon_str = data.get(CHAR_INFO_KEY_WEAPON, "").strip()
+        weapons = parse_weapon_list(weapon_str, reserved_names) if weapon_str else []
+
         return DNDCharacter(
             group_id=group_id,
             user_id=user_id,
             name=data.get(CHAR_INFO_KEY_NAME, ""),
+            race=data.get(CHAR_INFO_KEY_RACE, "").strip(),
+            char_class=char_class,
+            subclass=data.get(CHAR_INFO_KEY_SUBCLASS, "").strip(),
             hp_info=hp_info,
             ability_info=ability_info,
+            weapons=weapons,
             is_init=True,
         )
 
@@ -363,6 +581,9 @@ class CharacterService:
 def gen_template_char(group_id: str = "", user_id: str = "") -> DNDCharacter:
     """生成一张示例角色卡（供 .角色卡模板 输出展示）。"""
     character = DNDCharacter(group_id=group_id, user_id=user_id, name="张三", is_init=True)
+    character.race = "半精灵"
+    character.char_class = "游荡者"  # 示例职业取游荡者（可用偷袭后缀）
+    character.subclass = "刺客"
     character.hp_info.initialize(hp_cur=20, hp_max=30, hp_temp=5, hp_dice_type=8, hp_dice_num=3, hp_dice_max=4)
     character.ability_info.is_init = True
     character.ability_info.level = 4
@@ -373,6 +594,10 @@ def gen_template_char(group_id: str = "", user_id: str = "") -> DNDCharacter:
     character.ability_info.check_adv[EXT_ITEM_INDEX_DICT["隐匿"]] = 1
     character.ability_info.check_ext[EXT_ITEM_INDEX_DICT[SAVING_ALL_KEY]] = "+2"
     character.ability_info.check_ext[EXT_ITEM_INDEX_DICT["敏捷攻击"]] = "+1d4"
+    # 示例武器与卡自洽：命中 +4 = 敏捷调整 +2 + 熟练 +2（4 级）；伤害 1d4+2（敏捷调整）
+    character.weapons = [
+        WeaponInfo(name="短剑", attack_bonus="+4", damage_expr="1d4+2", damage_type="穿刺"),
+    ]
     return character
 
 

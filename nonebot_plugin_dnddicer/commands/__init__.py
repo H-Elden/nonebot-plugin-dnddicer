@@ -26,6 +26,7 @@
 from . import base  # noqa: F401  # 基础设施（注册表/起始符/解析）
 from . import roll  # noqa: F401  # .r / .rh 掷骰命令（模块顶层注册 matcher）
 from . import character  # noqa: F401  # .角色卡/.状态 + 检定/豁免/攻击 点命令
+from . import weapon  # noqa: F401  # .X攻击/.X命中 自定义武器攻击检定（模式匹配）
 from . import dnd  # noqa: F401  # .dnd 属性生成
 from . import group_config  # noqa: F401  # .dset 群默认骰面
 from . import hp  # noqa: F401  # .hp / .长休 HP 管理

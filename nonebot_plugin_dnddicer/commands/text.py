@@ -99,6 +99,46 @@ TXT_CHAR_DEL = "角色卡已删除"
 # 注：2026-09-09 验收起采用中文文案「进行【…】」
 TXT_CHECK_RESULT = "{name}进行【{check}】：\n{hint}\n{result}"
 
+# ── 自定义武器：攻击检定（.X攻击 / .X命中，2026-09-24 新增）───────────────
+# 机器人不做命中判断（不判 AC）；d20 出目 20/1 用 DND 术语提示（天然20 → 重击
+# 引导、天然1 → 必失），不使用 .r 的「大成功/大失败」文案
+TXT_WEAPON_ATTACK = "{name}进行【{check}】：\n{hint}\n{result}"
+TXT_WEAPON_NOT_FOUND = "未找到武器「{name}」。可用 .设置武器 查看已有武器或添加新武器。"
+#: 天然 20/1 提示：单独一行（不加括号，2026-09-24 用户要求）
+TXT_WEAPON_NAT20 = "天然20：重击！伤害用 .{weapon}重击伤害 结算"
+TXT_WEAPON_NAT1 = "天然1：必失"
+TXT_WEAPON_BAD_MOD = "攻击掷骰表达式无效: {mod}（{reason}）"
+#: x 标记（不可攻击检定）的武器被用于攻击命令时的提示
+TXT_WEAPON_NO_ATTACK = "【{weapon}】不可进行攻击检定！"
+
+# ── 自定义武器：伤害（.X伤害，2026-09-24 新增）─────────────────────────────
+# {type} 为空时自然读作「造成了 8 点伤害」；{note} 为后缀标注（重击/副手/偷袭）
+TXT_WEAPON_DAMAGE = "{name}用【{weapon}】造成了 {total} 点{type}伤害{note}：\n{result}"
+TXT_WEAPON_DAMAGE_TAIL = (
+    "伤害命令不支持的写法: {tail}（用法：.武器名[副手/重击/偷袭]伤害[±加值]，可 @玩家）"
+)
+TXT_WEAPON_OFFHAND_NO_DICE = (
+    "「{weapon}」的伤害没有骰子，副手后缀不适用（副手攻击不加任何加值）。"
+)
+TXT_WEAPON_SNEAK_NO_CLASS = (
+    "「{weapon}」的偷袭后缀需要职业为游荡者：请先在角色卡设置职业（12 职业名之一）"
+)
+TXT_WEAPON_SNEAK_NOT_ROGUE = "当前职业「{char_class}」没有偷袭特性，偷袭后缀不适用"
+
+# ── 自定义武器：管理命令（.设置武器 / .删除武器，2026-09-24 新增）──────
+TXT_WEAPON_SET = "已设置武器：{names}（当前共 {count} 件）\n{items}"
+TXT_WEAPON_LIST = (
+    "当前武器（{count} 件）：\n{items}\n"
+    "用法：.设置武器 短剑+6,1d4+4穿刺（多项用 / 分隔）；删除用 .删除武器 名称"
+)
+TXT_WEAPON_LIST_EMPTY = (
+    "还没有设置武器。用法：.设置武器 短剑+6,1d4+4穿刺（多项用 / 分隔）"
+)
+TXT_WEAPON_DEL = "已删除武器: {deleted}"
+TXT_WEAPON_DEL_PARTIAL = "已删除武器: {deleted}；未找到: {missing}"
+TXT_WEAPON_DEL_MISS = "未找到武器: {missing}（可用 .设置武器 查看当前武器）"
+TXT_WEAPON_DEL_USAGE = "用法：.删除武器 名称（多个用 / 分隔）"
+
 # ── HP 管理 .hp 文案 ────────────────────────────────────────────────────
 TXT_HP_INFO = "{name}: {hp_info}"
 TXT_HP_INFO_MISS = "找不到{name}的生命值信息"
@@ -281,3 +321,32 @@ def get_roll_state_text(res_list: List[RollResult]) -> str:
         return TXT_D20_19
 
     return ""
+
+
+def format_nat_attack_state(res_list: List[RollResult], weapon_name: str) -> str:
+    """武器攻击检定的天然 20/1 提示（DND 术语；只认被保留的 d20）。
+
+    - 单轮：天然 20 → 重击引导（``.X重击伤害``）；天然 1 → 必失；
+    - 多轮：聚合为「N次天然20、M次天然1」（只列存在的项）。
+
+    与 ``get_roll_state_text``（大成功/大失败，用于 .r 与检定点）并存、互不干扰。
+    """
+    nat20 = nat1 = 0
+    for res in res_list:
+        for val in res.d20_list:
+            if val == 20:
+                nat20 += 1
+            elif val == 1:
+                nat1 += 1
+    if not nat20 and not nat1:
+        return ""
+    if len(res_list) == 1:
+        if nat20:
+            return TXT_WEAPON_NAT20.format(weapon=weapon_name)
+        return TXT_WEAPON_NAT1
+    parts: List[str] = []
+    if nat20:
+        parts.append(f"{nat20}次天然20")
+    if nat1:
+        parts.append(f"{nat1}次天然1")
+    return "、".join(parts)

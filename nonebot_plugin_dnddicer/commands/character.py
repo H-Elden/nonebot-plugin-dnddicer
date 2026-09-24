@@ -49,6 +49,8 @@ _HELP = (
     "DND5e 角色卡\n"
     "用法：.角色卡模板 / .角色卡记录 <模板内容> / .角色卡 / .角色卡清除\n"
     "查看他人：.角色卡 @玩家 或 .角色卡 角色名（任何人可查看；记录/清除仅限本人）\n"
+    "自定义武器写在卡上（$武器$ 段，或用 .设置武器 维护）：.刺剑攻击 / .刺剑伤害 直接调用；\n"
+    "职业段（$职业$）供偷袭骰自动计算（游荡者）。\n"
     "每人在每个群中拥有一张角色卡；.角色卡 查看当前卡（$…$ 文本可直接复制再次记录以保存多张）。"
 )
 char_matcher = base.on_dnd_command("角色卡", _HELP)
@@ -70,7 +72,9 @@ def _gen_template_feedback() -> str:
         "\n\n——提示（记录时请仅复制上方模板段并修改）——\n"
         "属性段六个数值依次对应: 力量/敏捷/体质/智力/感知/魅力\n"
         "额外加值段键 = 六属性/技能/豁免/攻击条目, 另有作用于全部的全局键: 豁免 与 攻击\n"
-        "额外加值取值 = 可选 优势/劣势 前缀 + ±掷骰表达式, 如: 隐匿:优势+2"
+        "额外加值取值 = 可选 优势/劣势 前缀 + ±掷骰表达式, 如: 隐匿:优势+2\n"
+        "职业段填 12 职业名之一（如 游荡者），游荡者的偷袭后缀会按等级自动附加偷袭骰\n"
+        "武器段格式 = 名称+命中加值,伤害表达式+类型（多项用 / 分隔），如 短剑+4,1d4+2穿刺"
     )
     return gen_template_char().get_char_info() + tips
 
@@ -177,7 +181,12 @@ async def handle_character(bot: Bot, event: MessageEvent) -> None:
     if rest.startswith("记录"):
         content = rest[2:].strip()
         try:
-            new_char = CharacterService.parse(content, str(event.group_id), str(event.user_id))
+            new_char = CharacterService.parse(
+                content,
+                str(event.group_id),
+                str(event.user_id),
+                reserved_names=tuple(base.get_registered_commands()),
+            )
         except AssertionError as exc:
             await char_matcher.finish(str(exc))
         await save_character(new_char)
@@ -257,19 +266,6 @@ async def handle_state(bot: Bot, event: MessageEvent) -> None:
     await state_matcher.finish(feedback)
 
 
-def _split_target_mention(mod_str: str) -> Tuple[Optional[str], str]:
-    """拆出检定修正串中的 @ 目标：返回 (目标QQ, 剩余修正串)。
-
-    @ 可写在表达式右侧任意位置（``@玩家`` / ``优势 @玩家`` / ``+2 @玩家``）：
-    取首个标记作为目标、移除全部标记，其余修饰（优劣势/±加值）照常解析。
-    无标记返回 (None, 原串)——既有行为完全不变。
-    """
-    mentions = onebot_v11.iter_mentions(mod_str)
-    if not mentions:
-        return None, mod_str
-    return mentions[0], onebot_v11.strip_mentions(mod_str).strip()
-
-
 @check_matcher.handle()
 async def handle_check(bot: Bot, event: MessageEvent) -> None:
     """处理检定/豁免/攻击点命令（rule 已确保命中且参数可解析）。"""
@@ -291,7 +287,7 @@ async def handle_check(bot: Bot, event: MessageEvent) -> None:
     times, check_name, mod_str = parsed
 
     # 表达式右侧的 @ 目标（.力量豁免 @玩家 / .2#敏捷攻击优势 @玩家）
-    target_qq, mod_str = _split_target_mention(mod_str)
+    target_qq, mod_str = base.split_target_mention(mod_str)
     if target_qq is not None:
         character = await get_character(event.group_id, target_qq)
         if character is None or not character.is_init:

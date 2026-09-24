@@ -18,7 +18,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Optional, Sequence, Union
+from typing import Optional, Sequence, Tuple, Union
 
 from nonebot import get_driver, logger
 from nonebot.adapters import Bot, Event
@@ -226,6 +226,20 @@ def join_lines(parts: Sequence[Union[str, Message]]) -> Union[str, Message]:
             message += "\n"
         message += part
     return message
+
+
+def split_target_mention(mod_str: str) -> Tuple[Optional[str], str]:
+    """拆出修正串中的 @ 目标：返回 (目标QQ, 剩余修正串)。
+
+    @ 可写在表达式右侧任意位置（``@玩家`` / ``优势 @玩家`` / ``+2 @玩家``）：
+    取首个标记作为目标、移除全部标记，其余修饰（优劣势/±加值）照常解析。
+    无标记返回 (None, 原串)——既有行为完全不变。检定类命令（.角色卡 族与
+    武器攻击/伤害）共用。
+    """
+    mentions = onebot_v11.iter_mentions(mod_str)
+    if not mentions:
+        return None, mod_str
+    return mentions[0], onebot_v11.strip_mentions(mod_str).strip()
 
 
 async def resolve_display_name(
