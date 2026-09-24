@@ -1,6 +1,6 @@
 """DND5e 角色卡/检定业务包。
 
-- ``constants``：六属性/18 技能/豁免/攻击词汇表与统一检定条目索引；
+- ``constants``：六属性/18 技能/豁免词汇表与统一检定条目索引；
 - ``models``：AbilityInfo / HPInfo / DNDCharacter（每人在每群一张卡）；
 - ``services``：模板解析（CharacterService.parse）、属性初始化与检定
   （AbilityService.initialize / perform_check）。

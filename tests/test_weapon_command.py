@@ -560,17 +560,39 @@ async def test_weapon_attack_private_denied(app: App):
     await _expect(app, weapon_matcher, event, "该指令仅在群聊中可用。")
 
 
-def test_weapon_attack_let_check_commands_take_over():
-    """让位：检定点可解析的条目（属性+攻击）不被武器命令接管。"""
+def test_attribute_attack_commands_retired():
+    """属性攻击检定点已退役（2026-09-24）：.力量攻击 一类按武器命令路径解析。"""
+    from nonebot_plugin_dnddicer.commands.character import parse_check_body
     from nonebot_plugin_dnddicer.commands.weapon import parse_weapon_attack_body
 
-    assert parse_weapon_attack_body("力量攻击") is None
-    assert parse_weapon_attack_body("敏捷攻击优势") is None
+    # 检定点不再解析属性攻击（退役）
+    assert parse_check_body("力量攻击") is None
+    assert parse_check_body("3#敏捷攻击优势") is None
+    # 归武器命令：解析为「武器名 力量」的攻击（卡上无此武器 → 落默认未找到提示）
+    assert parse_weapon_attack_body("力量攻击") == (1, "力量", "")
+    assert parse_weapon_attack_body("敏捷命中") == (1, "敏捷", "")
+    assert parse_weapon_attack_body("2#敏捷攻击优势") == (2, "敏捷", "优势")
+    # 常规武器命令行为不变
     assert parse_weapon_attack_body("短剑攻击") == (1, "短剑", "")
     assert parse_weapon_attack_body("2#短剑攻击优势+2") == (2, "短剑", "优势+2")
     assert parse_weapon_attack_body("火焰箭命中") == (1, "火焰箭", "")
     # 不含「攻击/命中」→ 攻击解析不接管（伤害命令由伤害解析处理）
     assert parse_weapon_attack_body("短剑伤害") is None
+
+
+@pytest.mark.asyncio
+async def test_attribute_attack_retired_falls_back(app: App):
+    """退役后 .敏捷攻击 走武器命令：有卡无该武器 → 默认未找到提示；无卡 → 找不到角色卡。"""
+    from nonebot_plugin_dnddicer.commands.weapon import weapon_matcher
+
+    await _record(app)
+    await _expect(
+        app, weapon_matcher, _event(".敏捷攻击"),
+        "未找到武器「敏捷」。可用 .设置武器 查看已有武器或添加新武器。",
+    )
+    await _expect(
+        app, weapon_matcher, _event(".2#力量攻击", user_id=20099), "找不到角色卡"
+    )
 
 
 # ── 命令层：伤害（.X伤害）与后缀 ───────────────────────────────────────

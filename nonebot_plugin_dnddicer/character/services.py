@@ -20,9 +20,6 @@ from ..engine.roll.result import RollResult
 from .constants import (
     ABILITY_LIST,
     ABILITY_NUM,
-    ATTACK_ALL_KEY,
-    ATTACK_LIST,
-    ATTACK_PARENT_DICT,
     CHAR_INFO_KEY_ABILITY,
     CHAR_INFO_KEY_CLASS,
     CHAR_INFO_KEY_EXT,
@@ -289,9 +286,9 @@ class AbilityService:
                 raise AssertionError(f"{ABILITY_LIST[index]}属性值{raw}必须为正整数")
             ability[index] = val
 
-        # 熟练项：默认全部不熟练，$熟练$ 声明了哪些条目才熟练（修订：不做
-        # 「默认所有攻击熟练」，与 PHB 不符——攻击检定加熟练仅限熟练的
-        # 武器/法术攻击；支持 N*名称 多倍熟练与 0*名称 显式关闭）
+        # 熟练项：默认全部不熟练，$熟练$ 声明了哪些条目才熟练（支持 N*名称
+        # 多倍熟练与 0*名称 显式关闭；攻击熟练不存在——攻击检定走武器项、
+        # 命中加值由用户自填，见 commands/weapon.py）
         check_prof = [0] * len(CHECK_ITEM_LIST)
         for raw in prof_list:
             scale = 1
@@ -350,11 +347,11 @@ class AbilityService:
         advantage: int,
         mod_str: str,
     ) -> Tuple[str, str, int, RollResult]:
-        """执行一次条目检定（属性/技能/豁免/攻击通用）。
+        """执行一次条目检定（属性/技能/豁免通用）。
 
         Args:
             ability_info: 已初始化的属性信息。
-            check_name: 条目名（可为同义词），如 力量/运动/敏捷豁免/力量攻击/先攻。
+            check_name: 条目名（可为同义词），如 力量/运动/敏捷豁免/先攻。
             advantage: 本次检定的临时优劣势（1/-1/0）。
             mod_str: 本次检定的临时加值表达式片段（如 "+d4"；"优势+2" 由调用方拆好）。
 
@@ -375,7 +372,6 @@ class AbilityService:
 
         is_skill = name in SKILL_LIST
         is_saving = name in SAVING_LIST
-        is_attack = name in ATTACK_LIST
 
         hint_parts: List[str] = []
         check_index = CHECK_ITEM_INDEX_DICT[name]
@@ -384,8 +380,6 @@ class AbilityService:
             parent_name = SKILL_PARENT_DICT[name]
         elif is_saving:
             parent_name = SAVING_PARENT_DICT[name]
-        elif is_attack:
-            parent_name = ATTACK_PARENT_DICT[name]
 
         # 熟练加值
         scale = ability_info.check_prof[check_index]
@@ -397,7 +391,7 @@ class AbilityService:
         else:
             hint_parts.append(f"熟练加值:{ability_info.get_prof_bonus()}*{scale}")
 
-        # 属性调整值（技能/豁免/攻击取父属性）
+        # 属性调整值（技能/豁免取父属性）
         if parent_name:
             parent_index = ABILITY_LIST.index(parent_name)
             modifier = ability_info.get_modifier(parent_index)
@@ -406,15 +400,13 @@ class AbilityService:
             modifier = ability_info.get_modifier(check_index)
             hint_parts.append(f"{ABILITY_LIST[check_index]}调整值:{modifier}")
 
-        # 额外加值（条目自身 + 父属性 + 全局豁免/攻击）
+        # 额外加值（条目自身 + 父属性 + 全局豁免）
         ext_str = ability_info.check_ext[check_index]
         if parent_name:
             parent_index = ABILITY_LIST.index(parent_name)
             ext_str += ability_info.check_ext[EXT_ITEM_INDEX_DICT[ABILITY_LIST[parent_index]]]
         if is_saving:
             ext_str += ability_info.check_ext[EXT_ITEM_INDEX_DICT[SAVING_ALL_KEY]]
-        if is_attack:
-            ext_str += ability_info.check_ext[EXT_ITEM_INDEX_DICT[ATTACK_ALL_KEY]]
         if ext_str:
             hint_parts.append(f"额外加值:{ext_str}")
         if mod_str:
@@ -588,12 +580,11 @@ def gen_template_char(group_id: str = "", user_id: str = "") -> DNDCharacter:
     character.ability_info.is_init = True
     character.ability_info.level = 4
     character.ability_info.ability = [10, 15, 12, 13, 8, 11]
-    for name in ("敏捷攻击", "敏捷豁免", "体操"):
+    for name in ("敏捷豁免", "体操"):
         character.ability_info.check_prof[CHECK_ITEM_INDEX_DICT[name]] = 1
     character.ability_info.check_prof[CHECK_ITEM_INDEX_DICT["隐匿"]] = 2
     character.ability_info.check_adv[EXT_ITEM_INDEX_DICT["隐匿"]] = 1
     character.ability_info.check_ext[EXT_ITEM_INDEX_DICT[SAVING_ALL_KEY]] = "+2"
-    character.ability_info.check_ext[EXT_ITEM_INDEX_DICT["敏捷攻击"]] = "+1d4"
     # 示例武器与卡自洽：命中 +4 = 敏捷调整 +2 + 熟练 +2（4 级）；伤害 1d4+2（敏捷调整）
     character.weapons = [
         WeaponInfo(name="短剑", attack_bonus="+4", damage_expr="1d4+2", damage_type="穿刺"),

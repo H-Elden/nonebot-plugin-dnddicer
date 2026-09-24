@@ -72,7 +72,7 @@ async def test_char_template(app: App):
     expected = _gen_template_feedback()
     assert "$" not in expected.split("——提示")[1], "提示说明文字不得含 $ 字符"
     assert expected.endswith(
-        "额外加值段键 = 六属性/技能/豁免/攻击条目, 另有作用于全部的全局键: 豁免 与 攻击\n"
+        "额外加值段键 = 六属性/技能/豁免条目, 另有作用于全部豁免的全局键: 豁免\n"
         "额外加值取值 = 可选 优势/劣势 前缀 + ±掷骰表达式, 如: 隐匿:优势+2\n"
         "职业段填 12 职业名之一（如 游荡者），游荡者的偷袭后缀会按等级自动附加偷袭骰\n"
         "武器段格式 = 名称+命中加值,伤害表达式+类型（多项用 / 分隔），如 短剑+4,1d4+2穿刺"
@@ -158,8 +158,8 @@ async def test_check_strength_full_feedback(app: App):
 
 
 @pytest.mark.asyncio
-async def test_check_saving_and_attack_display_name(app: App):
-    """.体质豁免/.敏捷攻击 → 展示名用原名（不含「检定」后缀）。"""
+async def test_check_saving_display_name(app: App):
+    """.体质豁免 → 展示名用原名（不含「检定」后缀）。"""
     from nonebot_plugin_dnddicer.commands.character import char_matcher, check_matcher
 
     await _expect(app, char_matcher, _event(_RECORD, user_id=10009), "角色卡已设置")
@@ -172,19 +172,6 @@ async def test_check_saving_and_attack_display_name(app: App):
             "伊丽莎白进行【体质豁免】：\n"
             "无熟练加值 体质调整值:1\n"
             "1D20+1=[9]+1=10"
-        )
-        await _expect(app, check_matcher, event, expected)
-    finally:
-        reset_runtime(token)
-
-    # 伊丽莎白 敏捷14 → 调整+2；攻击默认不熟练，无熟练加值
-    token = set_runtime(SequenceRuntime([3]))
-    try:
-        event = _event(".敏捷攻击", user_id=10009)
-        expected = (
-            "伊丽莎白进行【敏捷攻击】：\n"
-            "无熟练加值 敏捷调整值:2\n"
-            "1D20+2=[3]+2=5"
         )
         await _expect(app, check_matcher, event, expected)
     finally:
@@ -226,26 +213,6 @@ async def test_check_critical_success_and_failure(app: App):
             "伊丽莎白进行【力量检定】：\n"
             "熟练加值:3 力量调整值:2\n"
             "1D20+2+3=[1]+2+3=6 哇哦！大失败!"
-        )
-        await _expect(app, check_matcher, event, expected)
-    finally:
-        reset_runtime(token)
-
-
-@pytest.mark.asyncio
-async def test_attack_critical_failure(app: App):
-    """.敏捷攻击 掷自然 1 → 播报大失败（攻击自然 1 必失误，与自然 20 对偶）。"""
-    from nonebot_plugin_dnddicer.commands.character import char_matcher, check_matcher
-
-    await _expect(app, char_matcher, _event(_RECORD, user_id=10011), "角色卡已设置")
-
-    token = set_runtime(SequenceRuntime([1]))
-    try:
-        event = _event(".敏捷攻击", user_id=10011)
-        expected = (
-            "伊丽莎白进行【敏捷攻击】：\n"
-            "无熟练加值 敏捷调整值:2\n"
-            "1D20+2=[1]+2=3 哇哦！大失败!"
         )
         await _expect(app, check_matcher, event, expected)
     finally:
@@ -365,7 +332,7 @@ async def test_state_mention_target(app: App):
 
 @pytest.mark.asyncio
 async def test_check_mention_target(app: App):
-    """.力量豁免 @玩家 / .2#敏捷攻击优势 @玩家 → 用目标角色卡代掷。"""
+    """.力量豁免 @玩家 / .敏捷豁免优势 @玩家 → 用目标角色卡代掷。"""
     from nonebot_plugin_dnddicer.commands.character import char_matcher, check_matcher
 
     await _expect(app, char_matcher, _event(_RECORD, user_id=31013), "角色卡已设置")
@@ -385,20 +352,20 @@ async def test_check_mention_target(app: App):
     try:
         await _expect(
             app, check_matcher,
-            _mention_event(".敏捷攻击优势 ", MessageSegment.at(31013)),
-            "伊丽莎白进行【敏捷攻击】：\n无熟练加值 敏捷调整值:2\n"
+            _mention_event(".敏捷豁免优势 ", MessageSegment.at(31013)),
+            "伊丽莎白进行【敏捷豁免】：\n无熟练加值 敏捷调整值:2\n"
             "2D20K1+2=MAX{[9], [7]}+2=11",
         )
     finally:
         reset_runtime(token)
 
-    # 连掷：.2#敏捷攻击 @玩家 → 两次代掷
+    # 连掷：.2#敏捷豁免 @玩家 → 两次代掷
     token = set_runtime(SequenceRuntime([3, 4]))
     try:
         await _expect(
             app, check_matcher,
-            _mention_event(".2#敏捷攻击 ", MessageSegment.at(31013)),
-            "伊丽莎白进行【2次敏捷攻击】：\n无熟练加值 敏捷调整值:2\n"
+            _mention_event(".2#敏捷豁免 ", MessageSegment.at(31013)),
+            "伊丽莎白进行【2次敏捷豁免】：\n无熟练加值 敏捷调整值:2\n"
             "1D20+2=[3]+2=5\n1D20+2=[4]+2=6",
         )
     finally:

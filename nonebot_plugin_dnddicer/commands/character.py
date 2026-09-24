@@ -6,16 +6,17 @@
 - ``.状态``：查看本角色 HP 与生命骰摘要；
 - 检定类点命令（非固定命令名，按消息模式触发）：
   ``.[次数#][属性/技能/先攻]检定[优势/劣势][±加值]``
-  ``.[次数#][属性]豁免[±加值]``
-  ``.[次数#][属性]攻击[优势/劣势][±加值]``
-  例：``.力量检定`` ``.2#运动检定+1`` ``.智力豁免+d4`` ``.3#敏捷攻击优势+d8`` ``.先攻检定``
+  ``.[次数#][属性]豁免[优势/劣势][±加值]``
+  例：``.力量检定`` ``.2#运动检定+1`` ``.智力豁免+d4`` ``.3#敏捷豁免优势+d8`` ``.先攻检定``
   检定只掷出裸数值（d20+加值），不对 DC 判定——由玩家/DM 自行比较。
+  属性攻击检定点已退役（2026-09-24）：攻击检定统一走角色卡 ``$武器$`` 项，
+  见 ``commands/weapon.py``。
 
 @ 提及目标（2026-09-22 新增）：
 - ``.角色卡 @玩家`` / ``.角色卡 角色名``：查看**他人**整卡（输出加标题行）；
   查看对任何人开放（群内信息共享），而记录/清除仍仅限本人（写入目标恒为发送者）；
 - ``.状态 @玩家``：查看他人 HP 与生命骰摘要（加角色名前缀）；
-- 检定类点命令表达式**右侧**的 @ 为目标：``.力量豁免 @玩家`` ``.3#敏捷攻击优势+d8 @玩家``
+- 检定类点命令表达式**右侧**的 @ 为目标：``.力量豁免 @玩家`` ``.3#敏捷豁免优势+d8 @玩家``
   ——用目标角色的属性/熟练/加值代掷，``.先攻检定 @玩家`` 以该玩家为 owner 入先攻表。
 """
 
@@ -32,7 +33,6 @@ from nonebot.rule import Rule
 
 from ..character.constants import (
     ABILITY_LIST,
-    ATTACK_LIST,
     CHECK_ITEM_INDEX_DICT,
     CHECK_ITEM_LIST,
     SAVING_LIST,
@@ -71,7 +71,7 @@ def _gen_template_feedback() -> str:
     tips = (
         "\n\n——提示（记录时请仅复制上方模板段并修改）——\n"
         "属性段六个数值依次对应: 力量/敏捷/体质/智力/感知/魅力\n"
-        "额外加值段键 = 六属性/技能/豁免/攻击条目, 另有作用于全部的全局键: 豁免 与 攻击\n"
+        "额外加值段键 = 六属性/技能/豁免条目, 另有作用于全部豁免的全局键: 豁免\n"
         "额外加值取值 = 可选 优势/劣势 前缀 + ±掷骰表达式, 如: 隐匿:优势+2\n"
         "职业段填 12 职业名之一（如 游荡者），游荡者的偷袭后缀会按等级自动附加偷袭骰\n"
         "武器段格式 = 名称+命中加值,伤害表达式+类型（多项用 / 分隔），如 短剑+4,1d4+2穿刺"
@@ -83,30 +83,32 @@ def _gen_template_feedback() -> str:
 # 检定类点命令（模式匹配，非固定命令名）
 # =========================================================================
 
-#: 消息体模式：([1-9]#)? 条目 (检定|豁免|攻击) 剩余(优劣势/加值)
-_CHECK_PATTERN = re.compile(r"^([1-9]#)?(.+?)(检定|豁免|攻击)(.*)$")
+#: 消息体模式：([1-9]#)? 条目 (检定|豁免) 剩余(优劣势/加值)
+_CHECK_PATTERN = re.compile(r"^([1-9]#)?(.+?)(检定|豁免)(.*)$")
 
 
 def _resolve_check_name(entry: str, kind: str) -> Optional[str]:
     """把消息中的条目段解析为正式检定条目名。
 
     - kind=检定：entry 可为属性/技能/先攻（含同义词）；
-    - kind=豁免/攻击：entry 为属性名，拼出 力量豁免 等全名。
+    - kind=豁免：entry 为属性名，拼出 力量豁免 等全名。
+
+    属性攻击条目已退役（2026-09-24）：攻击检定统一走角色卡武器项
+    （``.武器名攻击``，见 commands/weapon.py），此处不再解析。
     """
     if kind == "检定":
         name = SKILL_SYNONYM_DICT.get(entry, entry)
         return name if name in CHECK_ITEM_LIST else None
-    full = f"{entry}{kind}"
-    # 豁免/攻击条目输入仅接受属性名（同义表不含豁免，宽容处理常见全名输入）
+    # 豁免条目输入仅接受属性名（同义表不含豁免，宽容处理常见全名输入）
     if entry in ABILITY_LIST:
-        return full
+        return f"{entry}{kind}"
     return None
 
 
 def parse_check_body(body: str) -> Optional[Tuple[int, str, str]]:
     """解析检定命令体 → (次数, 条目全名, 加值修正串)；无效返回 None。
 
-    以 检定/豁免/攻击 之一切分条目与修正，支持 ``N#`` 次数前缀；
+    以 检定/豁免 之一切分条目与修正，支持 ``N#`` 次数前缀；
     修正串可带 优势/劣势 前缀再跟 ±表达式。
     """
     m = _CHECK_PATTERN.match(body)
@@ -124,7 +126,7 @@ def parse_check_body(body: str) -> Optional[Tuple[int, str, str]]:
         return None
 
     mod = tail.strip()
-    # 优劣势从修正串中拆出：kind 检定/攻击允许；豁免同样支持
+    # 优劣势从修正串中拆出：检定/豁免均支持
     return times, name, mod
 
 
@@ -268,7 +270,7 @@ async def handle_state(bot: Bot, event: MessageEvent) -> None:
 
 @check_matcher.handle()
 async def handle_check(bot: Bot, event: MessageEvent) -> None:
-    """处理检定/豁免/攻击点命令（rule 已确保命中且参数可解析）。"""
+    """处理检定/豁免点命令（rule 已确保命中且参数可解析）。"""
     if not isinstance(event, GroupMessageEvent):
         await check_matcher.finish(text.TXT_GROUP_ONLY)
 
@@ -286,7 +288,7 @@ async def handle_check(bot: Bot, event: MessageEvent) -> None:
         return
     times, check_name, mod_str = parsed
 
-    # 表达式右侧的 @ 目标（.力量豁免 @玩家 / .2#敏捷攻击优势 @玩家）
+    # 表达式右侧的 @ 目标（.力量豁免 @玩家 / .2#敏捷豁免优势 @玩家）
     target_qq, mod_str = base.split_target_mention(mod_str)
     if target_qq is not None:
         character = await get_character(event.group_id, target_qq)
@@ -333,8 +335,8 @@ async def handle_check(bot: Bot, event: MessageEvent) -> None:
         )
     else:
         name = await base.resolve_display_name(bot, event, char_name=character.name)
-    # 展示名：攻击/豁免用原名（敏捷攻击/敏捷豁免），属性/技能/先攻追加「检定」
-    if check_name in ATTACK_LIST or check_name in SAVING_LIST:
+    # 展示名：豁免用原名（力量豁免），属性/技能/先攻追加「检定」
+    if check_name in SAVING_LIST:
         display_item = check_name
     else:
         display_item = f"{check_name}检定"

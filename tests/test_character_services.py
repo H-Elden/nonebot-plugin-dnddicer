@@ -47,39 +47,45 @@ def test_parse_character():
     assert ai.ability == [15, 14, 13, 12, 10, 8]
     # 熟练加值 = 2 + (5-1)//4 = 3
     assert ai.get_prof_bonus() == 3
-    # 力量熟练(1)、隐匿 2*、奥秘 1；攻击默认全部不熟练
+    # 力量熟练(1)、隐匿 2*、奥秘 1
     from nonebot_plugin_dnddicer.character.constants import CHECK_ITEM_INDEX_DICT
 
     assert ai.check_prof[CHECK_ITEM_INDEX_DICT["力量"]] == 1
     assert ai.check_prof[CHECK_ITEM_INDEX_DICT["隐匿"]] == 2
     assert ai.check_prof[CHECK_ITEM_INDEX_DICT["奥秘"]] == 1
-    assert ai.check_prof[CHECK_ITEM_INDEX_DICT["力量攻击"]] == 0
+    # 攻击检定点已退役（2026-09-24）：条目表不再含力量攻击 等
+    assert "力量攻击" not in CHECK_ITEM_INDEX_DICT
     # hp
     assert char.hp_info.hp_cur == 20 and char.hp_info.hp_max == 30
     assert char.hp_info.hp_temp == 5
     assert char.hp_info.hp_dice_type == 8
 
 
-def test_parse_character_attack_prof_explicit():
-    """攻击熟练仅在 $熟练$ 显式声明时生效。"""
+def test_parse_character_attack_entries_rejected():
+    """攻击条目退役（2026-09-24）：$熟练$ 的 力量攻击 → 按无效条目拒收。"""
+    with pytest.raises(AssertionError, match="无效的检定条目"):
+        CharacterService.parse(
+            "$等级$ 5\n$属性$ 15/14/13/12/10/8\n$熟练$ 力量攻击", "g", "u"
+        )
+
+
+def test_parse_character_attack_ext_rejected():
+    """攻击条目退役：$额外加值$ 的 力量攻击 / 全局 攻击 键均按无效条目拒收。"""
+    for ext in ("力量攻击:+1", "攻击:优势"):
+        with pytest.raises(AssertionError, match="为无效条目"):
+            CharacterService.parse(
+                f"$等级$ 5\n$属性$ 15/14/13/12/10/8\n$额外加值$ {ext}", "g", "u"
+            )
+
+
+def test_parse_character_prof_zero_disables():
+    """0*隐匿 显式关闭 → 不熟练（0* 语义保留）。"""
     char = CharacterService.parse(
-        "$等级$ 5\n$属性$ 15/14/13/12/10/8\n$熟练$ 力量攻击", "g", "u"
+        "$等级$ 5\n$属性$ 15/14/13/12/10/8\n$熟练$ 0*隐匿", "g", "u"
     )
     from nonebot_plugin_dnddicer.character.constants import CHECK_ITEM_INDEX_DICT
 
-    assert char.ability_info.check_prof[CHECK_ITEM_INDEX_DICT["力量攻击"]] == 1
-    # 未声明的其他攻击保持不熟练
-    assert char.ability_info.check_prof[CHECK_ITEM_INDEX_DICT["敏捷攻击"]] == 0
-
-
-def test_parse_character_attack_prof_zero_disables():
-    """0*力量攻击 显式关闭 → 不熟练（0* 语义保留）。"""
-    char = CharacterService.parse(
-        "$等级$ 5\n$属性$ 15/14/13/12/10/8\n$熟练$ 0*力量攻击", "g", "u"
-    )
-    from nonebot_plugin_dnddicer.character.constants import CHECK_ITEM_INDEX_DICT
-
-    assert char.ability_info.check_prof[CHECK_ITEM_INDEX_DICT["力量攻击"]] == 0
+    assert char.ability_info.check_prof[CHECK_ITEM_INDEX_DICT["隐匿"]] == 0
 
 
 def test_parse_character_missing_level_fails():

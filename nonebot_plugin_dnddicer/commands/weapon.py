@@ -19,8 +19,9 @@
 匹配与让位：
 
 - 固定命令（``match_command_name`` 命中，如 ``.角色卡攻击``）让位、不接管；
-- 检定点可解析的条目（如 ``.力量攻击``）让位——武器名经录入校验不得与
-  检定条目重名，两者天然互斥，不依赖 matcher 注册顺序。
+- 属性攻击检定点已退役（2026-09-24）：``.力量攻击`` 一类输入不再有检定点语义，
+  按武器命令处理、落回「未找到武器」的默认提示（武器名经录入校验不得与检定
+  条目重名，两者天然互斥）。
 
 武器名对照发送者（或 @ 目标）当前角色卡的武器列表；查无该武器给出引导提示。
 """
@@ -51,7 +52,6 @@ from ..engine.roll.roll_utils import RollDiceError
 from ..engine.roll.result import RollResult
 from ..platform import onebot_v11
 from . import base, text
-from .character import parse_check_body
 
 #: 攻击命令体模式：([1-9]#)? 武器名 (攻击|命中) 剩余(优劣势/加值/@)
 _WEAPON_ATTACK_PATTERN = re.compile(r"^([1-9]#)?(.+?)(攻击|命中)(.*)$")
@@ -69,9 +69,6 @@ def parse_weapon_attack_body(body: str) -> Optional[Tuple[int, str, str]]:
         return None
     time_part, name_part, _kind, tail = matched.groups()
     if not name_part.strip():
-        return None
-    # 检定点（属性/技能条目）优先：解析成功则让位，避免与 .力量攻击 等冲突
-    if parse_check_body(body) is not None:
         return None
     times = int(time_part[:-1]) if time_part else 1
     return times, name_part.strip(), tail.strip()

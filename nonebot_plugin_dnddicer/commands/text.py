@@ -71,8 +71,8 @@ TXT_UNKNOWN_ERROR = "骰娘内部发生了错误，请联系管理员反馈。"
 # 私聊不受群聊服务开关限制
 TXT_BOT_HEAD = "屠龙骰（nonebot-plugin-dnddicer）v{version}"
 TXT_BOT_INTRO = (
-    "专精 DND5e/5r 跑团的骰娘：掷骰表达式、角色卡与检定/豁免/攻击、"
-    "属性生成、HP 管理、先攻列表、战斗轮、群配置。"
+    "专精 DND5e/5r 跑团的骰娘：掷骰表达式、角色卡与检定/豁免、"
+    "自定义武器与攻击、属性生成、HP 管理、先攻列表、战斗轮、群配置。"
 )
 TXT_BOT_STATE_PRIVATE = (
     "私聊不受群聊服务开关限制：掷骰、属性生成等可直接使用，"
@@ -93,7 +93,7 @@ TXT_BOT_BAD_ARG = (
 TXT_CHAR_SET = "角色卡已设置"
 TXT_CHAR_MISS = "找不到角色卡"
 TXT_CHAR_DEL = "角色卡已删除"
-# 检定反馈：{name} 角色名/昵称；{check} 检定条目展示名（攻击/豁免原名、
+# 检定反馈：{name} 角色名/昵称；{check} 检定条目展示名（豁免原名、
 # 属性/技能/先攻追加「检定」，见 commands/character.py）；{hint} 过程说明；
 # {result} 掷骰过程
 # 注：2026-09-09 验收起采用中文文案「进行【…】」
