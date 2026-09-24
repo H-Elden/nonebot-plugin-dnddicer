@@ -19,7 +19,7 @@ DNDDicer 的目标是填补「NoneBot 商店中缺少 **DND5e/5r 专业 + 现代
 
 - 开始：[快速开始](./docs/guide/quickstart.md) · [示例团与人物](./docs/guide/cast.md)
 - 第一章 · 基础操作：[掷骰基础](./docs/guide/roll-basics.md) · [掷骰进阶](./docs/guide/roll-advanced.md) · [先攻列表](./docs/guide/initiative.md)
-- 第二章 · 进阶操作：[角色卡与属性](./docs/guide/character-card.md) · [检定与豁免](./docs/guide/checks.md) · [HP 与长休](./docs/guide/hp-rest.md) · [战斗轮](./docs/guide/battle.md)
+- 第二章 · 进阶操作：[角色卡与属性](./docs/guide/character-card.md) · [检定与豁免](./docs/guide/checks.md) · [武器与攻击](./docs/guide/weapons.md) · [HP 与长休](./docs/guide/hp-rest.md) · [战斗轮](./docs/guide/battle.md)
 - 第三章 · DM 操作：[DM 实战指南](./docs/guide/dm-guide.md)
 - 参考 · [命令总览](./docs/guide/overview.md) · [群管理与 FAQ](./docs/guide/faq.md)
 
@@ -79,6 +79,20 @@ plugins = ["nonebot_plugin_dnddicer"]
 | `.力量检定` / `.察觉检定+1` 等 | 属性/技能/先攻检定点命令，自动代入调整值/熟练/加值（`2#` 连掷、`+d4` 等可追加；表达式右侧可加 `@玩家` 代掷） |
 | `.体质豁免` / `.敏捷攻击优势` 等 | 豁免/攻击点命令（原名直配，优势/劣势后缀；同样支持尾部 `@玩家`） |
 | `.先攻检定` / `.先攻检定 @玩家` | 掷先攻并自动写入本群先攻列表（@ 形式代不在场的玩家掷） |
+
+### 🗡️ 武器与攻击（群聊）
+
+角色卡通过 `$武器$` 段自定义武器/法术项：`名称+命中加值,伤害表达式+类型`，如 `长剑+8,1d8+5挥砍`；名称尾加 `x` 表示不可攻击检定，如 `火球术x,8d6火焰`。
+
+骰娘只忠实执行、不判 AC、不自动补属性：
+
+| 命令 | 说明 |
+| --- | --- |
+| `.刺剑攻击` / `.刺剑命中` | 用卡上该武器的命中加值掷攻击检定（`优势`/`劣势`、`N#` 连掷、`±` 临时加值、`@玩家` 代掷；天然 20 提示重击） |
+| `.刺剑伤害` | 掷该武器伤害并报出类型；后缀 `副手`（不加任何加值）/ `重击`（骰数翻倍）/ `偷袭`（游荡者按等级自动附加偷袭骰）可组合，尾部可加 `±` 临时加值（如升环 `.火球术伤害+1d6`） |
+| `.设置武器` / `.删除武器` | 维护卡上武器（同名覆盖 / 删除，多个用 `/` 分隔；`.设置武器` 无参数列出当前武器） |
+
+详见 [武器与攻击](./docs/guide/weapons.md)。
 
 ### 🎯 属性生成（群聊 / 私聊）
 

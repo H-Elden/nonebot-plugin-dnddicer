@@ -49,6 +49,7 @@ export default defineConfig({
         items: [
           { text: '角色卡与属性', link: '/guide/character-card' },
           { text: '检定与豁免', link: '/guide/checks' },
+          { text: '武器与攻击', link: '/guide/weapons' },
           { text: 'HP 与长休', link: '/guide/hp-rest' },
           { text: '战斗轮', link: '/guide/battle' },
         ],

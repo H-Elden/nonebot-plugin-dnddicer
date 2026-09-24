@@ -387,6 +387,87 @@ check_halfling_luck = Scene(
     ],
 )
 
+# ── 武器与攻击（自定义武器项：攻击检定 / 伤害与后缀）──────────────────────
+
+weapon_attack_basics = Scene(
+    id="weapon_attack_basics",
+    title="武器攻击检定：.X攻击 与 .X命中（同义）",
+    steps=[
+        Step("老猫", ".刺剑攻击", dice=[15]),
+        Step("小满", ".火焰箭命中", dice=[18]),
+    ],
+)
+
+weapon_attack_adv = Scene(
+    id="weapon_attack_adv",
+    title="攻击的优劣势与批量：夹击取优、两刀连掷",
+    steps=[
+        Step("老猫", ".刺剑攻击优势", dice=[6, 17]),
+        Step("老猫", ".2#刺剑攻击", dice=[9, 14]),
+    ],
+)
+
+weapon_attack_nat20 = Scene(
+    id="weapon_attack_nat20",
+    title="天然 20：重击提示（引导用 .X重击伤害 结算）",
+    steps=[
+        Step("老猫", ".刺剑攻击", dice=[20]),
+    ],
+)
+
+weapon_damage_basic = Scene(
+    id="weapon_damage_basic",
+    title="伤害与伤害类型：.X伤害",
+    steps=[
+        Step("老猫", ".刺剑伤害", dice=[6]),
+        Step("小满", ".火焰箭伤害", dice=[9, 4]),
+    ],
+)
+
+weapon_damage_suffix = Scene(
+    id="weapon_damage_suffix",
+    title="伤害后缀：重击 / 偷袭 / 副手（塔莉 5 级游荡者 → 3d6 偷袭）",
+    steps=[
+        Step("老猫", ".刺剑重击伤害", dice=[5, 3]),
+        Step("老猫", ".刺剑偷袭伤害", dice=[6, 2, 5, 1]),
+        Step("老猫", ".匕首副手伤害", dice=[3]),
+        Step("老猫", ".刺剑重击偷袭伤害", dice=[4, 4, 1, 3, 2, 6, 5, 2]),
+    ],
+)
+
+weapon_spell_variants = Scene(
+    id="weapon_spell_variants",
+    title="纯伤害法术（x 标记）与升环两种写法",
+    steps=[
+        # 火球术只能造成伤害、没有攻击检定：名称尾部 x 表示「不可攻击检定」；
+        # 升环两种办法——预设多条（四环火球术 9d6）或临时加值（.火球术伤害+1d6）
+        Step("小满", ".设置武器 火球术x,8d6火焰/四环火球术x,9d6火焰"),
+        Step("小满", ".火球术命中"),
+        Step("小满", ".四环火球术伤害", dice=[6, 5, 4, 3, 2, 1, 6, 6, 5]),
+        Step("小满", ".火球术伤害+1d6", dice=[6, 5, 4, 3, 2, 1, 6, 6, 5]),
+        Step("小满", ".删除武器 火球术/四环火球术"),
+    ],
+)
+
+weapon_sneak_reject = Scene(
+    id="weapon_sneak_reject",
+    title="偷袭后缀的职业校验：非游荡者给出提示",
+    steps=[
+        Step("阿岩", ".战锤偷袭伤害"),
+    ],
+)
+
+weapon_manage = Scene(
+    id="weapon_manage",
+    title="武器管理：.设置武器 列表 / 新增 / .删除武器",
+    steps=[
+        Step("老猫", ".设置武器"),
+        Step("老猫", ".设置武器 手弩+7,1d6+4穿刺"),
+        Step("老猫", ".手弩攻击", dice=[12]),
+        Step("老猫", ".删除武器 手弩"),
+    ],
+)
+
 # ── 第三幕：碎星隘口遭遇战（先攻列表） ──────────────────────────────────────
 
 battle_open = Scene(
@@ -937,6 +1018,15 @@ TIMELINE = [
     check_mention,
     check_no_card,
     check_halfling_luck,
+    # 武器与攻击（自定义武器项：攻击检定 / 伤害与后缀 / 管理命令）
+    weapon_attack_basics,
+    weapon_attack_adv,
+    weapon_attack_nat20,
+    weapon_damage_basic,
+    weapon_damage_suffix,
+    weapon_spell_variants,
+    weapon_sneak_reject,
+    weapon_manage,
     # 第三幕：碎星隘口遭遇战（先攻列表）
     battle_open,
     init_player_roll,
