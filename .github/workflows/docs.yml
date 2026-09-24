@@ -6,6 +6,12 @@
 #
 # 首次使用：仓库 Settings → Pages → Source 选「GitHub Actions」。
 # 未启用前本工作流会自动跳过（保持绿色），启用后无需再改任何配置。
+#
+# 注意（tag 部署被拒时查这里）：启用 Pages 后 GitHub 会自动建 `github-pages` 环境，
+# 其「Deployment branches and tags」默认只允许默认分支部署——tag 推送会在 deploy 步
+# 被拒（annotations 提示 not allowed due to environment protection rules）。
+# 解法：Settings → Environments → github-pages → 放行标签（选 Selected branches and
+# tags 加一条 Tag 规则 `v*`，并保留分支 main 供手动预览；或直接选 All branches and tags）。
 name: docs
 
 on:
