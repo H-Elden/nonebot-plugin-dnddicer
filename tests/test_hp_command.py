@@ -669,12 +669,21 @@ def test_hp_info_fresh_set_zero_quirk():
 # =========================================================================
 
 
-def _record_with_hp(name: str, user_id: int, hp: str = "20/30"):
-    """返回带 $生命值$ 的角色卡记录命令文本（姓名唯一用于目标匹配）。"""
-    return (
-        f".角色卡记录 $姓名$ {name}\n$等级$ 1\n$生命值$ {hp}\n"
-        "$属性$ 10/10/10/10/10/10"
-    )
+def _record_with_hp(name: str, user_id: int, hp: str = "20/30", weapons: str = ""):
+    """返回带 $生命值$（可选 $武器$ 段）的角色卡记录命令文本。
+
+    ``weapons`` 非空时附加 ``$武器$`` 段（「名称+加值,伤害+类型」格式），
+    供 .hp 伤害位置的武器写法用例使用；``user_id`` 仅用于调用方辨识卡主。
+    """
+    segments = [
+        f".角色卡记录 $姓名$ {name}",
+        "$等级$ 1",
+        f"$生命值$ {hp}",
+        "$属性$ 10/10/10/10/10/10",
+    ]
+    if weapons:
+        segments.append(f"$武器$ {weapons}")
+    return "\n".join(segments)
 
 
 @pytest.mark.asyncio
@@ -1016,4 +1025,339 @@ async def test_hp_bot_mention_keeps_self_semantics(app: App):
         app, hp_matcher,
         _mention_event(MessageSegment.at(1), " .hp 20/30", user_id=23017),
         "test: HP=20/30\n当前HP:20/30",
+    )
+
+
+# =========================================================================
+# .hp 伤害位置的武器写法（-武器名[副手/重击/偷袭]伤害[±加值]，2026-09-24 新增）
+# =========================================================================
+
+
+@pytest.mark.asyncio
+async def test_hp_weapon_damage_basic(app: App):
+    """.hp 爱丽丝 -短剑伤害 → 用发送者卡上武器项结算（同 .短剑伤害 语义）。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    await _expect(
+        app, char_matcher,
+        _event(
+            _record_with_hp("爱丽丝", 22011, hp="40/40", weapons="短剑+6,1d4+4穿刺"),
+            user_id=22011,
+        ),
+        "角色卡已设置",
+    )
+
+    token = set_runtime(SequenceRuntime([4]))  # 1d4=4 → 4+4=8
+    try:
+        await _expect(
+            app, hp_matcher,
+            _event(".hp 爱丽丝 -短剑伤害", user_id=22011),
+            "爱丽丝用【短剑】造成了 8 点穿刺伤害：\n"
+            "爱丽丝: 当前HP减少[4]+4=8\nHP:40/40 -> HP:32/40",
+        )
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_hp_weapon_damage_suffixes(app: App):
+    """.hp 伤害位置的重击 / 副手 / ±临时加值：后缀语义与 .X伤害 一致。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    await _expect(
+        app, char_matcher,
+        _event(
+            _record_with_hp("爱丽丝", 22014, hp="40/40", weapons="短剑+6,1d4+4穿刺"),
+            user_id=22014,
+        ),
+        "角色卡已设置",
+    )
+
+    # 重击：所有骰数 ×2（1d4+4 → 2d4+4），固定加值只加一次
+    token = set_runtime(SequenceRuntime([2, 1]))
+    try:
+        await _expect(
+            app, hp_matcher,
+            _event(".hp 爱丽丝 -短剑重击伤害", user_id=22014),
+            "爱丽丝用【短剑】造成了 7 点穿刺伤害（重击）：\n"
+            "爱丽丝: 当前HP减少[2+1]+4=7\nHP:40/40 -> HP:33/40",
+        )
+    finally:
+        reset_runtime(token)
+
+    # 副手：剔除全部常数项（1d4+4 → 1d4）
+    token = set_runtime(SequenceRuntime([3]))
+    try:
+        await _expect(
+            app, hp_matcher,
+            _event(".hp 爱丽丝 -短剑副手伤害", user_id=22014),
+            "爱丽丝用【短剑】造成了 3 点穿刺伤害（副手：不加任何加值）：\n"
+            "爱丽丝: 当前HP减少[3]=3\nHP:33/40 -> HP:30/40",
+        )
+    finally:
+        reset_runtime(token)
+
+    # ±临时加值：并入伤害表达式一起掷
+    token = set_runtime(SequenceRuntime([4, 2]))
+    try:
+        await _expect(
+            app, hp_matcher,
+            _event(".hp 爱丽丝 -短剑伤害+1d4", user_id=22014),
+            "爱丽丝用【短剑】造成了 10 点穿刺伤害：\n"
+            "爱丽丝: 当前HP减少[4]+4+[2]=10\nHP:30/40 -> HP:20/40",
+        )
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_hp_weapon_damage_sneak_rogue(app: App):
+    """游荡者卡上的 .hp 偷袭写法：按等级自动附加偷袭骰（与 .X伤害 同源）。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    await _expect(
+        app, char_matcher,
+        _event(
+            ".角色卡记录 $姓名$ 爱丽丝\n$职业$ 游荡者\n$等级$ 5\n"
+            "$生命值$ 40/40\n$属性$ 10/10/10/10/10/10\n"
+            "$武器$ 短剑+6,1d4+4穿刺",
+            user_id=22015,
+        ),
+        "角色卡已设置",
+    )
+
+    token = set_runtime(SequenceRuntime([4, 1, 2, 3]))  # 1d4=4；偷袭 3d6=1+2+3
+    try:
+        await _expect(
+            app, hp_matcher,
+            _event(".hp 爱丽丝 -短剑偷袭伤害", user_id=22015),
+            "爱丽丝用【短剑】造成了 14 点穿刺伤害（含偷袭3D6）：\n"
+            "爱丽丝: 当前HP减少[4]+4+[1+2+3]=14\nHP:40/40 -> HP:26/40",
+        )
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_hp_weapon_attack_written_as_damage(app: App):
+    """.hp 伤害位置写「攻击/命中」→ 引导改用「武器名伤害」（不掷骰、不结算）。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    await _expect(
+        app, char_matcher,
+        _event(
+            _record_with_hp("爱丽丝", 22016, hp="40/40", weapons="短剑+6,1d4+4穿刺"),
+            user_id=22016,
+        ),
+        "角色卡已设置",
+    )
+
+    await _expect(
+        app, hp_matcher, _event(".hp 爱丽丝 -短剑攻击", user_id=22016),
+        "「短剑攻击」是攻击检定而非伤害掷骰，请用「短剑伤害」！",
+    )
+    await _expect(
+        app, hp_matcher, _event(".hp 爱丽丝易伤 -短剑命中", user_id=22016),
+        "「短剑命中」是攻击检定而非伤害掷骰，请用「短剑伤害」！",
+    )
+
+    # 两次误写均未结算 HP
+    await _expect(
+        app, hp_matcher, _event(".hp", user_id=22016),
+        "爱丽丝: HP:40/40",
+    )
+
+
+@pytest.mark.asyncio
+async def test_hp_weapon_damage_errors(app: App):
+    """武器伤害写法三类引导：发送者无卡 / 卡上无此武器 / 尾部非法 / 偷袭不合规。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    await _expect(
+        app, char_matcher,
+        _event(
+            _record_with_hp("爱丽丝", 22018, hp="40/40", weapons="短剑+6,1d4+4穿刺"),
+            user_id=22018,
+        ),
+        "角色卡已设置",
+    )
+
+    # 发送者本人无卡（无括号时武器项取发自发送者，22099 未建卡）
+    await _expect(
+        app, hp_matcher, _event(".hp 爱丽丝 -短剑伤害", user_id=22099),
+        "找不到角色卡：武器伤害写法读取发送者本人角色卡上的 $武器$ 项，"
+        "请先 .角色卡记录 建卡（武器可用 .设置武器 登记），"
+        "或改用普通掷骰表达式（如 -1d8+2）",
+    )
+    # 卡上无此武器
+    await _expect(
+        app, hp_matcher, _event(".hp 爱丽丝 -长枪伤害", user_id=22018),
+        "未找到武器「长枪」。可用 .设置武器 查看已有武器或添加新武器。",
+    )
+    # 尾部非法（优势不是伤害写法的一部分）
+    await _expect(
+        app, hp_matcher, _event(".hp 爱丽丝 -短剑伤害优势", user_id=22018),
+        "武器伤害写法无效: 短剑伤害优势（用法：-武器名[副手/重击/偷袭]伤害[±加值]，"
+        "如 -战锤重击伤害+1d4）",
+    )
+    # 偷袭后缀需要职业为游荡者（本卡未填职业）
+    await _expect(
+        app, hp_matcher, _event(".hp 爱丽丝 -短剑偷袭伤害", user_id=22018),
+        "「短剑」的偷袭后缀需要职业为游荡者：请先在角色卡设置职业（12 职业名之一）",
+    )
+
+
+@pytest.mark.asyncio
+async def test_hp_weapon_damage_factor_header(app: App):
+    """表头数字口径：单目标用实际结算值（含抗性/易伤折算）。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    await _expect(
+        app, char_matcher,
+        _event(
+            _record_with_hp("爱丽丝", 22021, hp="40/40", weapons="短剑+6,1d4+4穿刺"),
+            user_id=22021,
+        ),
+        "角色卡已设置",
+    )
+
+    # 易伤：1d4+4=6 → 表头与目标行都报 12
+    token = set_runtime(SequenceRuntime([2]))
+    try:
+        await _expect(
+            app, hp_matcher,
+            _event(".hp 爱丽丝易伤 -短剑伤害", user_id=22021),
+            "爱丽丝用【短剑】造成了 12 点穿刺伤害：\n"
+            "爱丽丝: 当前HP减少[2]+4=6（易伤加倍→12）\nHP:40/40 -> HP:28/40",
+        )
+    finally:
+        reset_runtime(token)
+
+    # 抗性：1d4+4=7 → 3（向下取整、最少 1）
+    token = set_runtime(SequenceRuntime([3]))
+    try:
+        await _expect(
+            app, hp_matcher,
+            _event(".hp 爱丽丝抗性 -短剑伤害", user_id=22021),
+            "爱丽丝用【短剑】造成了 3 点穿刺伤害：\n"
+            "爱丽丝: 当前HP减少[3]+4=7（抗性减半→3）\nHP:28/40 -> HP:25/40",
+        )
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_hp_weapon_damage_aoe_header_raw(app: App):
+    """AOE（多目标）：表头用掷出的原始值，各目标折算在各自行里。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    await _expect(
+        app, char_matcher,
+        _event(
+            _record_with_hp("爱丽丝", 22022, hp="40/40", weapons="短剑+6,1d4+4穿刺"),
+            user_id=22022,
+        ),
+        "角色卡已设置",
+    )
+    await _expect(
+        app, char_matcher,
+        _event(_record_with_hp("莎白", 22023, hp="30/30"), user_id=22023),
+        "角色卡已设置",
+    )
+
+    token = set_runtime(SequenceRuntime([4]))  # 1d4+4=8（原始值）；莎白易伤 → 16
+    try:
+        await _expect(
+            app, hp_matcher,
+            _event(".hp 爱丽丝;莎白易伤 -短剑伤害", user_id=22022),
+            "爱丽丝用【短剑】造成了 8 点穿刺伤害：\n"
+            "爱丽丝: 当前HP减少[4]+4=8; HP:40/40 -> HP:32/40\n"
+            "莎白: 当前HP减少[4]+4=8（易伤加倍→16）; HP:30/30 -> HP:14/30",
+        )
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_hp_weapon_damage_source_parentheses(app: App):
+    """括号来源：角色名（模糊匹配）/ @玩家；发送者本人无卡也能代发。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    await _expect(
+        app, char_matcher,
+        _event(_record_with_hp("爱丽丝", 22024, hp="40/40"), user_id=22024),
+        "角色卡已设置",
+    )
+    await _expect(
+        app, char_matcher,
+        _event(
+            _record_with_hp("布鲁姆", 22025, weapons="短剑+6,1d4+4穿刺"),
+            user_id=22025,
+        ),
+        "角色卡已设置",
+    )
+
+    # 角色名来源（DM 22000 无卡）：武器项取来源者卡上
+    token = set_runtime(SequenceRuntime([4]))
+    try:
+        await _expect(
+            app, hp_matcher,
+            _event(".hp 爱丽丝 -短剑伤害（布鲁姆）", user_id=22000),
+            "布鲁姆用【短剑】造成了 8 点穿刺伤害：\n"
+            "爱丽丝: 当前HP减少[4]+4=8\nHP:40/40 -> HP:32/40",
+        )
+    finally:
+        reset_runtime(token)
+
+    # 名称模糊匹配（写名字的一部分即可）
+    token = set_runtime(SequenceRuntime([1]))
+    try:
+        await _expect(
+            app, hp_matcher,
+            _event(".hp 爱丽丝 -短剑伤害（布鲁）", user_id=22000),
+            "布鲁姆用【短剑】造成了 5 点穿刺伤害：\n"
+            "爱丽丝: 当前HP减少[1]+4=5\nHP:32/40 -> HP:27/40",
+        )
+    finally:
+        reset_runtime(token)
+
+    # @ 形式等价（中英文括号与括号前空格皆可）
+    token = set_runtime(SequenceRuntime([2]))
+    try:
+        await _expect(
+            app, hp_matcher,
+            _mention_event(
+                ".hp 爱丽丝 -短剑伤害 （", MessageSegment.at(22025), "）",
+                user_id=22000,
+            ),
+            "布鲁姆用【短剑】造成了 6 点穿刺伤害：\n"
+            "爱丽丝: 当前HP减少[2]+4=6\nHP:27/40 -> HP:21/40",
+        )
+    finally:
+        reset_runtime(token)
+
+    # 括号里的名字找不到角色卡
+    await _expect(
+        app, hp_matcher,
+        _event(".hp 爱丽丝 -短剑伤害（不存在的人）", user_id=22000),
+        "找不到角色卡「不存在的人」：括号中请填玩家角色名（或直接 @玩家）",
+    )
+
+    # @ 到无卡成员 → 真 @ 段引导建卡
+    await _expect(
+        app, hp_matcher,
+        _mention_event(
+            ".hp 爱丽丝 -短剑伤害（", MessageSegment.at(39991), "）",
+            user_id=22000,
+        ),
+        Message(MessageSegment.at("39991"))
+        + " 还没有在本群建立角色卡（可用 .角色卡记录 建卡后再试）",
     )

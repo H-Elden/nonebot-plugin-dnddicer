@@ -74,6 +74,22 @@ def parse_weapon_attack_body(body: str) -> Optional[Tuple[int, str, str]]:
     return times, name_part.strip(), tail.strip()
 
 
+def parse_weapon_attack_entry(body: str) -> Optional[Tuple[str, str]]:
+    """识别「[N#]武器名(攻击|命中)…」形态 → (武器名, 关键词)；否则 None。
+
+    供 ``.hp`` 伤害位置上的误用引导（攻击检定不是伤害掷骰，应改用
+    「武器名伤害」，见 commands/hp.py）；与 parse_weapon_attack_body 共用
+    同一模式，区别只在返回内容。
+    """
+    matched = _WEAPON_ATTACK_PATTERN.match(body)
+    if not matched:
+        return None
+    _time_part, name_part, kind, _tail = matched.groups()
+    if not name_part.strip():
+        return None
+    return name_part.strip(), kind
+
+
 def parse_weapon_damage_body(body: str) -> Optional[Tuple[str, List[str], str]]:
     """解析武器伤害命令体 → (武器名, 后缀列表, 剩余文本)；无效返回 None。
 
@@ -151,12 +167,67 @@ def find_weapon(character: DNDCharacter, name: str) -> Optional[WeaponInfo]:
     return find_weapon_in(character.weapons, name)
 
 
+def build_damage_expression(
+    weapon: WeaponInfo,
+    suffixes: List[str],
+    level: int,
+    char_class: str,
+    tail: str = "",
+) -> Tuple[str, Optional[str], int]:
+    """按后缀（副手 / 重击 / 偷袭）把武器伤害项变换为最终掷骰表达式。
+
+    2026-09-24 起由 ``.X伤害`` 与 ``.hp`` 的伤害位置共用，保证两处语义一致
+    （临时加值并入表达式、参与后缀变换：重击时同样翻倍、副手时同样剔常数）。
+
+    Returns:
+        (表达式, 错误文案, 偷袭骰数)：错误文案非 None 时表达式不可用，
+        由调用方直接回复给用户；偷袭骰数供 ``.X伤害`` 的读数标注使用。
+    """
+    expression = weapon.damage_expr + tail
+    if "副手" in suffixes:
+        expression = strip_damage_constants(expression)
+        if not expression:
+            return "", text.TXT_WEAPON_OFFHAND_NO_DICE.format(weapon=weapon.name), 0
+
+    sneak_dice = 0
+    if "偷袭" in suffixes:
+        sneak_dice = get_sneak_attack_dice(level, char_class)
+        if sneak_dice <= 0:
+            error = (
+                text.TXT_WEAPON_SNEAK_NO_CLASS.format(weapon=weapon.name)
+                if not char_class
+                else text.TXT_WEAPON_SNEAK_NOT_ROGUE.format(char_class=char_class)
+            )
+            return "", error, 0
+        expression += f"+{sneak_dice}d6"
+
+    if "重击" in suffixes:
+        expression = apply_critical_to_damage(expression)
+    return expression, None, sneak_dice
+
+
 def _format_weapon_lines(weapons: List[WeaponInfo]) -> str:
     """武器列表的编号多行展示（.设置武器 反馈用，2026-09-24 用户要求格式化）。"""
     return "\n".join(
         f"{index}. {weapon.get_info()}"
         for index, weapon in enumerate(weapons, start=1)
     )
+
+
+def build_damage_note(suffixes: List[str], sneak_dice: int, is_crit: bool) -> str:
+    """伤害后缀的读数标注（如「（重击）」「（含偷袭3D6）」）；无后缀返回空串。
+
+    由 ``.X伤害`` 与 ``.hp`` 武器伤害写法的表头共用（偷袭骰重击时同样翻倍）。
+    """
+    note_parts: List[str] = []
+    if "副手" in suffixes:
+        note_parts.append("副手：不加任何加值")
+    if is_crit:
+        note_parts.append("重击")
+    if "偷袭" in suffixes:
+        actual_dice = sneak_dice * (2 if is_crit else 1)
+        note_parts.append(f"含偷袭{actual_dice}D6")
+    return f"（{'，'.join(note_parts)}）" if note_parts else ""
 
 
 async def _load_target_character(
@@ -277,32 +348,12 @@ async def _handle_damage(
     is_crit = "重击" in suffixes
     is_sneak = "偷袭" in suffixes
 
-    # 临时加值并入伤害表达式、参与后缀变换（重击时同样翻倍、副手时同样剔常数）
-    expression = weapon.damage_expr + mod_str
-    if is_off_hand:
-        expression = strip_damage_constants(expression)
-        if not expression:
-            await weapon_matcher.finish(
-                text.TXT_WEAPON_OFFHAND_NO_DICE.format(weapon=weapon.name)
-            )
-
-    sneak_dice = 0
-    if is_sneak:
-        sneak_dice = get_sneak_attack_dice(
-            character.ability_info.level, character.char_class
-        )
-        if sneak_dice <= 0:
-            if not character.char_class:
-                await weapon_matcher.finish(
-                    text.TXT_WEAPON_SNEAK_NO_CLASS.format(weapon=weapon.name)
-                )
-            await weapon_matcher.finish(
-                text.TXT_WEAPON_SNEAK_NOT_ROGUE.format(char_class=character.char_class)
-            )
-        expression += f"+{sneak_dice}d6"
-
-    if is_crit:
-        expression = apply_critical_to_damage(expression)
+    # 后缀变换与 .hp 的伤害位置共用同一实现（临时加值并入表达式、参与后缀变换）
+    expression, error, sneak_dice = build_damage_expression(
+        weapon, suffixes, character.ability_info.level, character.char_class, mod_str
+    )
+    if error:
+        await weapon_matcher.finish(error)
 
     try:
         roll_result = exec_roll_exp_unified(expression)
@@ -312,15 +363,7 @@ async def _handle_damage(
         )
     total = roll_result.get_val()
 
-    note_parts: List[str] = []
-    if is_off_hand:
-        note_parts.append("副手：不加任何加值")
-    if is_crit:
-        note_parts.append("重击")
-    if is_sneak:
-        actual_dice = sneak_dice * (2 if is_crit else 1)
-        note_parts.append(f"含偷袭{actual_dice}D6")
-    note = f"（{'，'.join(note_parts)}）" if note_parts else ""
+    note = build_damage_note(suffixes, sneak_dice, is_crit)
 
     name = await base.resolve_display_name(
         bot, event, target_qq, char_name=character.name

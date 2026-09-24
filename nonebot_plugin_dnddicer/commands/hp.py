@@ -8,6 +8,15 @@ commands/initiative.py。
 DM 掷伤害扩展：目标名后可带 抗性/易伤 后缀（伤害减半/加倍，仅对 - 生效），
 目标以 ;（半角/全角）分隔可一次对多个目标结算 AOE；伤害表达式只掷骰一次。
 
+伤害位置的武器写法（2026-09-24 新增）：``-`` 后除普通表达式外，支持与
+``.X伤害`` 同款的 ``武器名[副手/重击/偷袭]伤害[±加值]``（如
+``.hp 骷髅a易伤 -战锤重击伤害+1d4``）——武器项默认取**发送者本人**的角色卡，
+尾部括号可指定来源（``-战锤伤害（布鲁姆）`` / ``-战锤伤害（@阿岩）``，
+角色名支持模糊匹配），回复与 ``.X伤害`` 同款（表头「用【武器】造成了 N 点X伤害」
+＋各目标的 HP 结算行）；后缀变换与临时加值语义与 ``.X伤害`` 完全一致（共用
+commands/weapon.py 的 build_damage_expression）；写成 ``-武器名攻击/命中``
+（攻击检定）时引导改用「武器名伤害」。
+
 @ 提及目标（2026-09-22 新增）：``.hp @玩家 -4d6`` 直连该玩家在本群的角色卡
 （不走名称模糊搜索），可查看（``.hp @玩家``）、设置/治疗、抗性/易伤后缀与
 AOE 混写（``.hp @玩家;地精 -d4``）；提及者无卡时以真 @ 消息段引导建卡。
@@ -23,12 +32,12 @@ AOE 混写（``.hp @玩家;地精 -d4``）；提及者无卡时以真 @ 消息�
 from __future__ import annotations
 
 import re
-from typing import List, Optional, Tuple, Union
+from typing import List, NamedTuple, Optional, Tuple, Union
 
 from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, Message, MessageEvent
 
 from ..character.models import DNDCharacter, HPInfo
-from ..character.services import HPService
+from ..character.services import HPService, WEAPON_BONUS_RE
 from ..data.characters import (
     get_character,
     list_characters_by_group,
@@ -47,6 +56,13 @@ from ..engine.roll.result import RollResult
 from ..engine.roll.roll_utils import RollDiceError
 from ..platform import onebot_v11
 from . import base, text
+from .weapon import (
+    build_damage_expression,
+    build_damage_note,
+    find_weapon,
+    parse_weapon_attack_entry,
+    parse_weapon_damage_body,
+)
 
 # =========================================================================
 # .hp 命令
@@ -64,6 +80,10 @@ _HELP = (
     ".hp +(10) -> 将自己的临时生命值增加10\n"
     ".hp +20/10 -> 先将最大HP增加10, 再将当前HP增加20\n"
     ".hp 队友A -4d6 -> 对队友A造成4d6点伤害\n"
+    ".hp 队友A -战锤伤害 -> 用发送者角色卡上「战锤」的伤害项结算"
+    "（同 .战锤伤害 写法: 支持 副手/重击/偷袭 后缀与 ±加值）\n"
+    ".hp 队友A -战锤伤害（布鲁姆） -> 括号指定武器来源"
+    "（角色名或 @玩家; 不填即发送者本人）\n"
     "指定@玩家: .hp @玩家 -4d6 -> 对 @ 的玩家角色卡结算 (需该玩家已在本群建卡)\n"
     "  @ 也可与名称混写: .hp @玩家;地精 -d4 (AOE); 查看: .hp @玩家 / .hp @玩家 @玩家2\n"
     "NPC/怪物: 先 .ri 名称 加入先攻表后, 可用 .hp 名称 10/10 记录其血量"
@@ -272,6 +292,122 @@ def _parse_hp_args(arg_str: str) -> Tuple[
 
 
 # =========================================================================
+# 伤害位置的武器写法（-武器名[副手/重击/偷袭]伤害[±加值]（来源））
+# 2026-09-24 新增；09-25 追加来源括号与「.X伤害 同款表头」
+# =========================================================================
+
+#: 伤害位置尾部的来源括号：`（布鲁姆）` / `(@阿岩)`（中英文括号、括号前后空格皆可）
+_HP_SOURCE_PATTERN = re.compile(
+    r"^(?P<body>.*?)\s*[（(]\s*(?P<source>[^（）()]*?)\s*[）)]$"
+)
+
+
+class _WeaponDamageExpr(NamedTuple):
+    """`.hp` 武器伤害写法的解析结果（表头信息 + 掷骰表达式）。"""
+
+    expression: str   # 最终掷骰表达式（含后缀变换与临时加值）
+    weapon_name: str  # 武器名（表头用）
+    damage_type: str  # 伤害类型（可为空）
+    note: str         # 后缀读数标注（如「（重击）」；无后缀为 ""）
+    owner_qq: str     # 武器来源者 QQ（表头落款）
+    owner_name: str   # 武器来源者角色名（表头落款首选）
+
+
+def _split_weapon_source(expr_text: str) -> Tuple[str, str]:
+    """拆出伤害位置尾部的来源括号 → (表达式文本, 来源文本)。
+
+    例：``战锤伤害（布鲁姆）`` → ``("战锤伤害", "布鲁姆")``；无括号来源时
+    来源为空串。括号只在整体可解析为武器伤害写法时才生效（见
+    _resolve_hp_damage_expression），不会与临时 HP 的 ``(10)`` 写法相混。
+    """
+    matched = _HP_SOURCE_PATTERN.match(expr_text)
+    if matched and matched.group("source"):
+        return matched.group("body").strip(), matched.group("source").strip()
+    return expr_text, ""
+
+
+async def _resolve_weapon_owner(
+    event: GroupMessageEvent, source_str: str
+) -> Tuple[str, DNDCharacter]:
+    """解析武器来源角色卡：括号指定（@玩家 / 角色名模糊匹配）或发送者本人。
+
+    失败时直接回复引导并结束命令（无卡引导 / 歧义列表 / 找不到角色卡）。
+    """
+    if not source_str:
+        character = await get_character(event.group_id, event.user_id)
+        if character is None or not character.is_init:
+            await hp_matcher.finish(text.TXT_HP_WEAPON_NO_CHAR)
+        return str(event.user_id), character
+
+    source_qq = onebot_v11.parse_mention_token(source_str)
+    if source_qq is not None:
+        character = await get_character(event.group_id, source_qq)
+        if character is None or not character.is_init:
+            await hp_matcher.finish(
+                onebot_v11.at_reply(source_qq, text.TXT_MENTION_NO_CHAR)
+            )
+        return source_qq, character
+
+    source_key, target_id = await search_target(source_str, event.group_id)
+    if source_key == "pc":
+        character = await get_character(event.group_id, target_id)
+        if character is not None and character.is_init:
+            return target_id, character
+    elif source_key == "multiple":
+        await hp_matcher.finish(
+            text.TXT_HP_INFO_MULTI.format(name_list=target_id.split("/"))
+        )
+    await hp_matcher.finish(text.TXT_HP_WEAPON_SOURCE_MISS.format(name=source_str))
+
+
+async def _resolve_hp_damage_expression(
+    event: GroupMessageEvent, expr_text: str
+) -> Optional[_WeaponDamageExpr]:
+    """解析伤害位置上的武器写法；非武器写法返回 None。
+
+    ``.hp 骷髅a易伤 -战锤重击伤害+1d4`` 与 ``.战锤伤害`` 同一套语义
+    （后缀变换、±临时加值，见 commands/weapon.py 的 build_damage_expression）；
+    武器项默认取**发送者本人**角色卡，用尾部括号可指定来源
+    （``-战锤伤害（布鲁姆）`` / ``-战锤伤害（@阿岩）``，角色名支持模糊匹配）。
+    武器写法出错时直接回复引导并结束命令，而写成 ``-武器名攻击/命中``
+    （攻击检定）时引导改用「武器名伤害」。
+    """
+    body, source_str = _split_weapon_source(expr_text)
+    attack_entry = parse_weapon_attack_entry(body)
+    if attack_entry is not None:
+        name, kind = attack_entry
+        await hp_matcher.finish(
+            text.TXT_HP_WEAPON_ATTACK_ONLY.format(entry=f"{name}{kind}", weapon=name)
+        )
+
+    damage_entry = parse_weapon_damage_body(body)
+    if damage_entry is None:
+        return None
+    name, suffixes, tail = damage_entry
+    if tail and not WEAPON_BONUS_RE.match(tail):
+        await hp_matcher.finish(text.TXT_HP_WEAPON_TAIL_BAD.format(expr=expr_text))
+
+    owner_qq, character = await _resolve_weapon_owner(event, source_str)
+    weapon = find_weapon(character, name)
+    if weapon is None:
+        await hp_matcher.finish(text.TXT_WEAPON_NOT_FOUND.format(name=name))
+
+    expression, error, sneak_dice = build_damage_expression(
+        weapon, suffixes, character.ability_info.level, character.char_class, tail
+    )
+    if error:
+        await hp_matcher.finish(error)
+    return _WeaponDamageExpr(
+        expression=expression,
+        weapon_name=weapon.name,
+        damage_type=weapon.damage_type,
+        note=build_damage_note(suffixes, sneak_dice, "重击" in suffixes),
+        owner_qq=owner_qq,
+        owner_name=character.name,
+    )
+
+
+# =========================================================================
 # 处理器
 # =========================================================================
 
@@ -449,12 +585,37 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
         target_list = [("pc", str(event.user_id), 1.0)]
 
     # 解析调整表达式（arg_str 已剥离目标前缀与操作符）
+    # 伤害位置的武器写法（-武器名[副手/重击/偷袭]伤害[±加值]（来源））先解析为表达式
+    weapon_damage: Optional[_WeaponDamageExpr] = None
+    if cmd_type == "-":
+        weapon_damage = await _resolve_hp_damage_expression(event, arg_str)
+        if weapon_damage is not None:
+            arg_str = weapon_damage.expression
     hp_cur, hp_max, hp_temp, error = _parse_hp_args(arg_str)
     if error:
         await hp_matcher.finish(text.TXT_HP_MOD_ERR.format(error=error))
 
     # 应用调整
     feedback = ""
+    # 武器伤害写法的表头（与 .X伤害 回复同款：掷伤与扣血一条命令）——单目标用
+    # 实际结算值（含抗性/易伤折算），多目标用掷出的原始值（折算逐目标显示）
+    if weapon_damage is not None and hp_cur is not None:
+        raw_total = hp_cur.get_val()
+        total = (
+            HPService.apply_damage_factor(raw_total, target_list[0][2])
+            if len(target_list) == 1
+            else max(0, raw_total)
+        )
+        owner_name = await base.resolve_display_name(
+            bot, event, weapon_damage.owner_qq, char_name=weapon_damage.owner_name
+        )
+        feedback += text.TXT_HP_WEAPON_DAMAGE_HEAD.format(
+            name=owner_name,
+            weapon=weapon_damage.weapon_name,
+            total=total,
+            type=weapon_damage.damage_type,
+            note=weapon_damage.note,
+        ) + "\n"
     for source_key, target_id, damage_factor in target_list:
         if source_key == "npc":
             # NPC/怪物：血量条目按需创建（目标经先攻表/已有记录解析而来）

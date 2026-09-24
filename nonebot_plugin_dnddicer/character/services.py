@@ -633,6 +633,22 @@ class HPService:
         return mod_info
 
     @staticmethod
+    def apply_damage_factor(value: int, damage_factor: float = 1.0) -> int:
+        """按承伤因子折算伤害：抗性减半（向下取整、最少 1）、易伤加倍、全额原样。
+
+        伤害最低为 0（表达式算出负值按 0 计，避免负伤害变回血）。口径与
+        ``process_roll_result`` 的伤害结算一致，供「.hp 武器伤害写法」的表头等复用。
+        """
+        damage = max(0, value)
+        if damage == 0:
+            return 0
+        if damage_factor == 0.5:
+            return max(1, int(damage // 2))
+        if damage_factor == 2.0:
+            return int(damage) * 2
+        return damage
+
+    @staticmethod
     def process_roll_result(
         hp_info: HPInfo,
         cmd_type: Literal["=", "+", "-"],
@@ -718,15 +734,15 @@ class HPService:
                     hp_info.take_damage(hp_info.hp_cur - hp_info.hp_max)
             if hp_cur_mod_result:
                 # 伤害最低为 0：负值（如 -d12-2 掷出 1）按 0 计，避免负伤害变回血
-                damage = max(0, hp_cur_mod_result.get_val())
+                damage = HPService.apply_damage_factor(
+                    hp_cur_mod_result.get_val(), damage_factor
+                )
                 damage_suffix = ""
                 if damage == 0:
                     damage_suffix = "（伤害最低为0）"
                 elif damage_factor == 0.5:
-                    damage = max(1, int(damage // 2))
                     damage_suffix = f"（抗性减半→{damage}）"
                 elif damage_factor == 2.0:
-                    damage = int(damage) * 2
                     damage_suffix = f"（易伤加倍→{damage}）"
                 hp_info.take_damage(damage)
                 if mod_info:
