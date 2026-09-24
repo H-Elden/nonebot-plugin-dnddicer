@@ -26,7 +26,7 @@ features:
     link: /guide/character-card
     linkText: 角色卡与属性
   - title: 检定与豁免
-    details: .力量检定 .敏捷豁免 .敏捷攻击 自动代入调整值、熟练与卡上加值，也可用 @ 代掷
+    details: .力量检定 .敏捷豁免 .隐匿检定 自动代入调整值、熟练与卡上加值，也可用 @ 代掷
     link: /guide/checks
     linkText: 检定与豁免
   - title: HP 与长休
