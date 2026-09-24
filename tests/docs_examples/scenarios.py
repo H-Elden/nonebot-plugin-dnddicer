@@ -874,10 +874,30 @@ dm_dm_turn = Scene(
 
 dm_player_hp = Scene(
     id="dm_player_hp",
-    title="玩家回合（熟悉怪物）：一条 .hp 边掷边扣",
+    title="玩家回合（熟悉怪物）：一条 .hp 边掷边扣（伤害位置直接写武器项）",
     steps=[
         Step("阿岩", ".战锤攻击", dice=[16]),        # 布鲁姆 的战锤：命中
-        Step("阿岩", ".hp 骷髅a易伤 -d8+2", dice=[3]),  # 玩家自己掷伤害并扣血
+        Step("阿岩", ".hp 骷髅a易伤 -战锤伤害", dice=[3]),  # 用卡上武器项掷伤并扣血
+    ],
+)
+
+hp_weapon_redirect = Scene(
+    id="hp_weapon_redirect",
+    title="伤害位置写「攻击 / 命中」会被引导改用「伤害」",
+    steps=[
+        Step("阿岩", ".hp 骷髅a易伤 -战锤攻击"),
+        Step("阿岩", ".hp 骷髅a -战锤命中"),
+    ],
+)
+
+hp_weapon_source = Scene(
+    id="hp_weapon_source",
+    title="DM 代发武器伤害：括号指定来源（角色名 / @玩家）",
+    steps=[
+        # 小满 去接水了：DM 代他用 火焰箭 结算这一发（目标易伤 → 加倍）
+        Step("白鸦", ".hp 骷髅b易伤 -火焰箭伤害（洛恩）", dice=[1, 1]),
+        # 括号里也可以直接 @玩家（与写角色名等价）
+        Step("白鸦", ".hp 骷髅b -匕首伤害（@小满）", dice=[1]),
     ],
 )
 
@@ -1079,6 +1099,8 @@ TIMELINE = [
     dm_player_r,
     dm_dm_turn,
     dm_player_hp,
+    hp_weapon_redirect,
+    hp_weapon_source,
     dm_group_save,
     dm_aoe,
     dm_turn_push,
