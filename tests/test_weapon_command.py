@@ -113,7 +113,7 @@ def test_parse_weapon_item_multi_dice_and_dice_bonus():
         ("短剑+6", "武器条目不完整"),
         ("短剑+6,", "武器条目不完整"),
         ("+6,1d4+4", "武器名称不能为空"),
-        ("一二三四五六七八九十一二三四五六七+1,1d6", "武器名称过长"),
+        ("一二三四五六七八九十一二三四五六七八九十甲+1,1d6", "武器名称过长"),
         ("猛虎攻击+5,1d6", "不能包含「攻击」字样"),
         ("命中匕首+1,1d4", "不能包含「命中」字样"),
         ("力量+5,1d6", "不能与检定条目重名"),
@@ -145,8 +145,8 @@ def test_parse_weapon_list_duplicate():
 
 
 def test_parse_weapon_list_limit():
-    content = "/".join(f"武器{i}+1,1d6" for i in range(11))
-    with pytest.raises(AssertionError, match="武器数量最多 10 件"):
+    content = "/".join(f"武器{i}+1,1d6" for i in range(21))
+    with pytest.raises(AssertionError, match="武器数量最多 20 件"):
         parse_weapon_list(content)
 
 
@@ -885,13 +885,12 @@ async def test_set_weapon_multi_and_limit(app: App):
         "1. 短剑+6,1d4+4穿刺\n2. 火焰箭,2d10火焰\n3. 长弓+5,1d8+3穿刺\n4. 木棍+2,1d6钝击",
     )
 
-    # 上限 10 件：现有 4 件 + 新 7 件 = 11 件 → 报错
+    # 上限 20 件：现有 4 件 + 新 17 件 = 21 件 → 报错
+    extra = "/".join(f"甲{i}+1,1d6" for i in range(1, 18))
     await _expect(
         app, set_weapon_matcher,
-        _event(
-            ".设置武器 甲1+1,1d6/甲2+1,1d6/甲3+1,1d6/甲4+1,1d6/甲5+1,1d6/甲6+1,1d6/甲7+1,1d6"
-        ),
-        "武器数量最多 10 件",
+        _event(f".设置武器 {extra}"),
+        "武器数量最多 20 件",
     )
 
 
