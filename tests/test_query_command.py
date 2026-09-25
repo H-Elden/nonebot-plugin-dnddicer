@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import urllib.parse
 from typing import Optional
 
 import pytest
@@ -238,6 +239,30 @@ async def test_too_many_keywords(app: App, enabled_query):
         event,
         text.TXT_QUERY_TOO_MANY_KEYWORDS.format(max=query_cmd.MAX_KEYWORDS),
     )
+
+
+@pytest.mark.asyncio
+async def test_multi_keyword_passed_through(app: App, enabled_query):
+    """多关键词原样透传：`|`=或、空格=且（语义由服务端定义，插件不改写关键词）。
+
+    实测（2026-09-25，服务端 parseSearchKeywords）：空格分隔为多个关键词组
+    （「且」，每组都要命中）、组内 `|` 为「或」、引号可把几个词连成一个短语。
+    插件侧只做「最多 5 组」的截流，其余原样交给服务端——本用例锁定这一点。
+    """
+    transport = _install(
+        FakeTransport(_routes([make_result(1, "三环", PAGE_SPELLS_2024)]))
+    )
+    for keyword in ("火焰|闪电", "火焰 伤害", "火焰 伤害 闪电"):
+        await _expect(
+            app,
+            query_cmd.query_matcher,
+            _group_event(f".查询 {keyword}"),
+            _expected_list(keyword, [("三环", "玩家手册2024")]),
+        )
+        expected_param = urllib.parse.urlencode({"keyword": keyword})
+        assert any(expected_param in url for url in transport.calls), (
+            f"关键词未原样透传：{expected_param}"
+        )
 
 
 # ── 候选列表 ────────────────────────────────────────────────────────────
