@@ -81,12 +81,38 @@ def _fake_renderer(png: bytes = _PNG_1PX, calls: Optional[list] = None):
 
 @pytest.fixture(autouse=True)
 def _clean_query_state():
-    """每个用例前后清理候选记录、数据源注入与渲染器（用例互不影响）。"""
+    """每个用例前后清空候选记录、按处设置、数据源注入与渲染器（互不影响）。"""
+    _reset_query_settings()
     default_store.reset()
     yield
     default_store.reset()
     query_cmd.set_source(None)
     render.reset_renderer()
+    _reset_query_settings()
+
+
+def _reset_query_settings() -> None:
+    """清空按处设置（缓存 + JSON）——回到「默认文字」。"""
+    from nonebot_plugin_dnddicer.data import get_data_file
+    from nonebot_plugin_dnddicer.data import query_settings as _qs
+
+    _qs._cache = None
+    path = get_data_file("query_settings.json")
+    if path.exists():
+        path.write_text("{}", encoding="utf-8")
+
+
+async def _enable_image_here(event) -> None:
+    """把该事件所在处预设为图片显示（等价于先发一次 .查询图片 on）。"""
+    from nonebot_plugin_dnddicer.data import query_settings as _qs
+
+    group_id = getattr(event, "group_id", None)
+    key = (
+        _qs.group_key(group_id)
+        if group_id is not None
+        else _qs.private_key(event.user_id)
+    )
+    await _qs.set_image_enabled(key, True)
 
 
 @pytest.fixture
@@ -569,9 +595,10 @@ async def test_image_mode_off_still_sends_text(app: App, enabled_query):
 
 @pytest.mark.asyncio
 async def test_image_mode_sends_rendered_card(app: App, enabled_query, image_mode):
-    """开关开 + 渲染器可用：词条以图片发送，标题取条目头名称。"""
+    """开关开 + 本处开启 + 渲染器可用：词条以图片发送，标题取条目头名称。"""
     calls: list = []
     render.set_renderer(_fake_renderer(calls=calls))
+    await _enable_image_here(_group_event("1"))
     _setup_entry()
     # 候选列表仍为文字（候选列表不出图）
     await _expect(
@@ -597,6 +624,7 @@ async def test_image_mode_falls_back_when_title_missing(app: App, enabled_query,
     """条目头未命中（叙述页片段）：卡片标题退用关键词。"""
     calls: list = []
     render.set_renderer(_fake_renderer(calls=calls))
+    await _enable_image_here(_group_event("1"))
     _install(FakeTransport(_routes([], [make_result(5, "优势与劣势", PAGE_NARRATIVE)])))
     await _expect(
         app,
@@ -617,6 +645,7 @@ async def test_image_render_error_falls_back_to_text(app: App, enabled_query, im
         raise RuntimeError("渲染失败")
 
     render.set_renderer(_boom)
+    await _enable_image_here(_group_event("1"))
     _setup_entry()
     await _expect(
         app,
@@ -642,8 +671,9 @@ async def test_image_render_error_falls_back_to_text(app: App, enabled_query, im
 
 @pytest.mark.asyncio
 async def test_image_dependency_missing_hint_once(app: App, enabled_query, image_mode, monkeypatch):
-    """开关开但依赖缺失：回退文字 + 首次附一行提示（第二次不再附）。"""
+    """本处已开图片但依赖缺失：回退文字 + 首次附一行提示（第二次不再附）。"""
     monkeypatch.setattr(render, "render_available", lambda: False)
+    await _enable_image_here(_group_event("1"))
     _setup_entry()
     await _expect(
         app,
@@ -679,8 +709,9 @@ async def test_image_dependency_missing_hint_once(app: App, enabled_query, image
 
 @pytest.mark.asyncio
 async def test_image_mode_off_no_hint_when_dependency_missing(app: App, enabled_query, monkeypatch):
-    """开关关闭时不检查依赖、也不附提示（默认装机零打扰）。"""
+    """骰主总开关关闭时不检查依赖、也不附提示（默认装机零打扰）。"""
     monkeypatch.setattr(render, "render_available", lambda: False)
+    await _enable_image_here(_group_event("1"))  # 存量设置也不生效
     _setup_entry()
     await _expect(
         app,
@@ -709,6 +740,7 @@ async def test_image_mode_skips_empty_body(app: App, enabled_query, image_mode):
     """正文为空（页面无可显示内容）：不出空白图，走文字侧的「无正文」提示。"""
     calls: list = []
     render.set_renderer(_fake_renderer(calls=calls))
+    await _enable_image_here(_group_event("1"))
     _install(FakeTransport(_routes([make_result(1, "空页", "\n\n")])))
     await _expect(
         app,
@@ -725,6 +757,236 @@ async def test_image_mode_skips_empty_body(app: App, enabled_query, image_mode):
         ),
     )
     assert calls == []
+
+
+# ── 按处开关命令 .查询图片（无权限限制，群/私聊各自生效）────────────────
+
+
+@pytest.mark.asyncio
+async def test_image_setting_view_default_text(app: App, enabled_query, image_mode):
+    """无参数：默认（未设置）回报当前为文字，并给开启引导。"""
+    await _expect(
+        app,
+        query_cmd.image_matcher,
+        _group_event(".查询图片"),
+        text.TXT_QUERY_IMAGE_STATE_OFF.format(where="本群"),
+    )
+
+
+@pytest.mark.asyncio
+async def test_image_setting_on_then_query_sends_image(app: App, enabled_query, image_mode):
+    """开启：成功提示 + 落盘生效——随后查询词条即出图。"""
+    render.set_renderer(_fake_renderer())
+    _setup_entry()
+    await _expect(
+        app,
+        query_cmd.image_matcher,
+        _group_event(".查询图片 on"),
+        text.TXT_QUERY_IMAGE_ON.format(where="本群"),
+    )
+    await _expect(
+        app,
+        query_cmd.query_matcher,
+        _group_event(".查询 镜影术"),
+        _expected_list("镜影术", [("二环", "玩家手册2024")]),
+    )
+    await _expect_image(app, query_cmd.selection_matcher, _group_event("1"), _PNG_1PX)
+
+
+@pytest.mark.asyncio
+async def test_image_setting_off_back_to_text(app: App, enabled_query, image_mode):
+    """关闭：成功提示 + 词条回到文字（逐字与默认一致）。"""
+    render.set_renderer(_fake_renderer())
+    await _enable_image_here(_group_event("1"))
+    _setup_entry()
+    await _expect(
+        app,
+        query_cmd.image_matcher,
+        _group_event(".查询图片 off"),
+        text.TXT_QUERY_IMAGE_OFF.format(where="本群"),
+    )
+    await _expect(
+        app,
+        query_cmd.query_matcher,
+        _group_event(".查询 镜影术"),
+        _expected_list("镜影术", [("二环", "玩家手册2024")]),
+    )
+    entry_body = (
+        "二环 幻术\n"
+        "施法时间：1 动作\n"
+        "距离：自身\n"
+        "成分：V、S\n"
+        "持续时间：1 分钟\n"
+        "三个镜像出现在你周围，用于迷惑攻击者。"
+    )
+    await _expect(
+        app,
+        query_cmd.selection_matcher,
+        _group_event("1"),
+        _expected_entry("二环", "玩家手册2024", entry_body),
+    )
+
+
+@pytest.mark.asyncio
+async def test_image_setting_rejected_when_master_off(app: App, enabled_query):
+    """骰主未开启图片模式：开启被拒（报错），设置不写入、仍以文字显示。"""
+    await _expect(
+        app,
+        query_cmd.image_matcher,
+        _group_event(".查询图片 on"),
+        text.TXT_QUERY_IMAGE_DISABLED,
+    )
+    # 未写入：查看当前仍是文字
+    await _expect(
+        app,
+        query_cmd.image_matcher,
+        _group_event(".查询图片"),
+        text.TXT_QUERY_IMAGE_STATE_OFF.format(where="本群"),
+    )
+    # 随后查询走文字（渲染器若被调用说明设置泄漏）
+    calls: list = []
+    render.set_renderer(_fake_renderer(calls=calls))
+    _setup_entry()
+    await _expect(
+        app,
+        query_cmd.query_matcher,
+        _group_event(".查询 镜影术"),
+        _expected_list("镜影术", [("二环", "玩家手册2024")]),
+    )
+    entry_body = (
+        "二环 幻术\n"
+        "施法时间：1 动作\n"
+        "距离：自身\n"
+        "成分：V、S\n"
+        "持续时间：1 分钟\n"
+        "三个镜像出现在你周围，用于迷惑攻击者。"
+    )
+    await _expect(
+        app,
+        query_cmd.selection_matcher,
+        _group_event("1"),
+        _expected_entry("二环", "玩家手册2024", entry_body),
+    )
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_image_setting_rejected_when_dependency_missing(
+    app: App, enabled_query, image_mode, monkeypatch
+):
+    """总开关已开但渲染依赖未就绪：开启同样被拒，仍以文字显示。"""
+    monkeypatch.setattr(render, "render_available", lambda: False)
+    await _expect(
+        app,
+        query_cmd.image_matcher,
+        _group_event(".查询图片 on"),
+        text.TXT_QUERY_IMAGE_NOT_READY,
+    )
+    await _expect(
+        app,
+        query_cmd.image_matcher,
+        _group_event(".查询图片"),
+        text.TXT_QUERY_IMAGE_STATE_OFF.format(where="本群"),
+    )
+
+
+@pytest.mark.asyncio
+async def test_image_setting_pending_when_master_turned_off(
+    app: App, enabled_query, monkeypatch
+):
+    """存量设置：曾开启、骰主后来关掉总开关 → 查看显示「已设为图片但当前不可用」。"""
+    await _enable_image_here(_group_event("1"))
+    await _expect(
+        app,
+        query_cmd.image_matcher,
+        _group_event(".查询图片"),
+        text.TXT_QUERY_IMAGE_STATE_PENDING.format(where="本群"),
+    )
+
+
+@pytest.mark.asyncio
+async def test_image_setting_scoped_per_group(app: App, enabled_query, image_mode):
+    """按群隔离：A 群开启不影响 B 群（B 仍为文字）。"""
+    render.set_renderer(_fake_renderer())
+    _setup_entry()
+    await _expect(
+        app,
+        query_cmd.image_matcher,
+        _group_event(".查询图片 on", group_id=_G),
+        text.TXT_QUERY_IMAGE_ON.format(where="本群"),
+    )
+    await _expect(
+        app,
+        query_cmd.image_matcher,
+        _group_event(".查询图片", group_id=_G + 1),
+        text.TXT_QUERY_IMAGE_STATE_OFF.format(where="本群"),
+    )
+
+
+@pytest.mark.asyncio
+async def test_image_setting_private_scoped_per_user(app: App, enabled_query, image_mode):
+    """私聊隔离：按用户各自生效，措辞用「你」；群与私聊也互不影响。"""
+    render.set_renderer(_fake_renderer())
+    _setup_entry()
+    private_event = fake_private_message_event_v11(message=Message(".查询图片 on"))
+    await _expect(
+        app,
+        query_cmd.image_matcher,
+        private_event,
+        text.TXT_QUERY_IMAGE_ON.format(where="你"),
+    )
+    # 同一用户私聊已开启 → 私聊查询出图
+    await _expect(
+        app,
+        query_cmd.query_matcher,
+        fake_private_message_event_v11(message=Message(".查询 镜影术")),
+        _expected_list("镜影术", [("二环", "玩家手册2024")]),
+    )
+    await _expect_image(
+        app,
+        query_cmd.selection_matcher,
+        fake_private_message_event_v11(message=Message("1")),
+        _PNG_1PX,
+    )
+    # 群聊不受该私聊设置影响
+    await _expect(
+        app,
+        query_cmd.image_matcher,
+        _group_event(".查询图片"),
+        text.TXT_QUERY_IMAGE_STATE_OFF.format(where="本群"),
+    )
+
+
+@pytest.mark.asyncio
+async def test_image_setting_alias_and_bad_arg(app: App, enabled_query, image_mode):
+    """别名 .qimg 等价；无效参数给用法提示。"""
+    render.set_renderer(_fake_renderer())
+    await _expect(
+        app,
+        query_cmd.image_matcher,
+        _group_event(".qimg on"),
+        text.TXT_QUERY_IMAGE_ON.format(where="本群"),
+    )
+    await _expect(
+        app,
+        query_cmd.image_matcher,
+        _group_event(".查询图片 图片"),
+        text.TXT_QUERY_IMAGE_BAD_ARG.format(
+            arg="图片", usage=text.TXT_QUERY_IMAGE_USAGE
+        ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_image_setting_does_not_shadow_query(app: App, enabled_query, image_mode):
+    """命令名不互吃：.查询图片 不被 .查询 抢走，.查询 图片 仍是关键词检索。"""
+    _install(FakeTransport(_routes([make_result(1, "图片", PAGE_SPELLS_2024)])))
+    await _expect(
+        app,
+        query_cmd.query_matcher,
+        _group_event(".查询 图片"),
+        _expected_list("图片", [("图片", "玩家手册2024")]),
+    )
 
 
 # ── 门禁（真实服务开关，不旁路）──────────────────────────────────────────

@@ -95,6 +95,12 @@ def ensure_available() -> bool:
     return True
 
 
+def reset_availability() -> None:
+    """清空可用性判定缓存（测试清理用；下次调用时按当前配置重判）。"""
+    global _ready
+    _ready = None
+
+
 def _get_env():
     """构建（并缓存）Jinja2 模板环境。仅在可用时调用。"""
     global _env

@@ -169,6 +169,107 @@ def test_find_entry_head_variants():
 
 
 # =========================================================================
+# 按处设置：图片显示开关（data/query_settings.py）
+# =========================================================================
+
+
+@pytest.fixture
+def clean_query_settings():
+    """清空按处设置（缓存 + JSON）——回到「默认文字」。"""
+    from nonebot_plugin_dnddicer.data import get_data_file
+    from nonebot_plugin_dnddicer.data import query_settings as _qs
+
+    def _clear():
+        _qs._cache = None
+        path = get_data_file("query_settings.json")
+        if path.exists():
+            path.write_text("{}", encoding="utf-8")
+
+    _clear()
+    yield
+    _clear()
+
+
+@pytest.mark.asyncio
+async def test_image_setting_defaults_off(clean_query_settings):
+    """默认关闭：任何处（群/私聊）初始都是文字。"""
+    from nonebot_plugin_dnddicer.data import query_settings as _qs
+
+    assert await _qs.is_image_enabled(_qs.group_key(123)) is False
+    assert await _qs.is_image_enabled(_qs.private_key(456)) is False
+
+
+@pytest.mark.asyncio
+async def test_image_setting_roundtrip_and_persist(clean_query_settings):
+    """开启→关闭往返；写入落盘（清缓存后重读仍生效）。"""
+    from nonebot_plugin_dnddicer.data import query_settings as _qs
+
+    key = _qs.group_key(123)
+    await _qs.set_image_enabled(key, True)
+    assert await _qs.is_image_enabled(key) is True
+
+    _qs._cache = None  # 模拟进程重启：从磁盘重读
+    assert await _qs.is_image_enabled(key) is True
+
+    await _qs.set_image_enabled(key, False)
+    _qs._cache = None
+    assert await _qs.is_image_enabled(key) is False
+
+
+@pytest.mark.asyncio
+async def test_image_setting_scoped(clean_query_settings):
+    """按处隔离：群 A / 群 B / 私聊用户 A / 私聊用户 B 互不影响。"""
+    from nonebot_plugin_dnddicer.data import query_settings as _qs
+
+    group_a, group_b = _qs.group_key(1), _qs.group_key(2)
+    user_a, user_b = _qs.private_key(100), _qs.private_key(200)
+    await _qs.set_image_enabled(group_a, True)
+
+    assert await _qs.is_image_enabled(group_a) is True
+    assert await _qs.is_image_enabled(group_b) is False
+    assert await _qs.is_image_enabled(user_a) is False
+    assert await _qs.is_image_enabled(user_b) is False
+
+    await _qs.set_image_enabled(user_a, True)
+    _qs._cache = None
+    assert await _qs.is_image_enabled(user_a) is True
+    assert await _qs.is_image_enabled(group_b) is False
+
+
+@pytest.mark.asyncio
+async def test_image_setting_repeated_write_is_noop(clean_query_settings):
+    """重复设置同一状态不报错、结果稳定（不重复落盘）。"""
+    from nonebot_plugin_dnddicer.data import query_settings as _qs
+
+    key = _qs.group_key(9)
+    await _qs.set_image_enabled(key, True)
+    await _qs.set_image_enabled(key, True)
+    _qs._cache = None
+    assert await _qs.is_image_enabled(key) is True
+    # 关闭两次同样稳定
+    await _qs.set_image_enabled(key, False)
+    await _qs.set_image_enabled(key, False)
+    _qs._cache = None
+    assert await _qs.is_image_enabled(key) is False
+
+
+@pytest.mark.asyncio
+async def test_image_setting_tolerates_broken_storage(clean_query_settings):
+    """存量数据损坏/结构非法：按空处理（不阻塞命令）。"""
+    from nonebot_plugin_dnddicer.data import get_data_file
+    from nonebot_plugin_dnddicer.data import query_settings as _qs
+
+    path = get_data_file("query_settings.json")
+    path.write_text("{ 这不是合法 JSON", encoding="utf-8")
+    _qs._cache = None
+    assert await _qs.is_image_enabled(_qs.group_key(1)) is False
+
+    path.write_text('{"schema_version": 1, "data": {"image_enabled": "非法"}}', encoding="utf-8")
+    _qs._cache = None
+    assert await _qs.is_image_enabled(_qs.group_key(1)) is False
+
+
+# =========================================================================
 # 数据源：检索、排序、缓存
 # =========================================================================
 

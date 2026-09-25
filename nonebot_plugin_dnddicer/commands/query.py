@@ -8,9 +8,11 @@
   其余消息一律不拦截，避免与其他插件抢数字回复；
 - 内容只用于当次回复与短时内存缓存，不落盘；输出统一标注来源（《5e不全书》）；
 - 长内容按 20 行分段发送，最多 3 段（超出截断并提示），避免刷屏；
-- 图片模式（``dnddicer_query_image_enabled``，默认关）开启且装了可选依赖时，
-  词条正文以图片卡片返回（候选列表与各类提示仍为文字）；渲染失败或依赖缺失
-  一律回退文字，查询不丢；
+- 图片模式分两级开关（2026-09-25）：骰主总开关（``dnddicer_query_image_enabled``，
+  默认关）决定**能不能用**图片，各处（群按群、私聊按用户）再用 ``.查询图片``
+  决定**本处用不用**——默认文字、需主动开启；开启请求在骰主未配置（总开关关或
+  渲染依赖未装）时被拒（报错且不写入，仍以文字显示）；渲染异常或依赖失效则回退
+  文字，查询不丢；
 - 群聊受 .bot 群聊服务开关（白名单）管辖，与其它命令一致；私聊可用；
 - 功能默认关闭（``dnddicer_query_enabled``）：未开启时不外呼、仅回一条提示。
 """
@@ -27,6 +29,7 @@ from nonebot.rule import Rule
 
 from .. import render
 from ..config import get_config
+from ..data import query_settings
 from ..query import (
     DEFAULT_TTL,
     MAX_CANDIDATES,
@@ -79,8 +82,18 @@ _HELP_SEARCH = (
     "示例：.搜索 借机攻击"
 )
 
+_HELP_IMAGE = (
+    "查询图片显示：.查询图片（.qimg）\n"
+    "- 无参数：查看本处当前的显示形态\n"
+    "- on / off：把本处切换为图片 / 文字显示\n"
+    "- 群聊设置对该群全员生效，私聊仅影响本人；无需管理权限，设置持久保存\n"
+    "- 需骰主先开启图片模式（并装好渲染依赖），否则开启会被拒绝\n"
+    "示例：.查询图片 on"
+)
+
 query_matcher = base.on_dnd_command("查询", _HELP_QUERY, aliases=("q",))
 search_matcher = base.on_dnd_command("搜索", _HELP_SEARCH, aliases=("s", "检索"))
+image_matcher = base.on_dnd_command("查询图片", _HELP_IMAGE, aliases=("qimg",))
 
 
 # =========================================================================
@@ -150,6 +163,73 @@ async def handle_search(bot: Bot, event: MessageEvent) -> None:
     """``.搜索``：全文模式。"""
     await _run_search(
         search_matcher, bot, event, mode=MODE_FULL, usage=text.TXT_QUERY_USAGE_FULL
+    )
+
+
+# =========================================================================
+# 图片显示的按处开关（.查询图片）
+# =========================================================================
+
+
+def _chat_key(event: MessageEvent) -> str:
+    """本处设置键：群聊按群（对该群全员生效）、私聊按用户（仅影响本人）。"""
+    group_id = getattr(event, "group_id", None)
+    if group_id is not None:
+        return query_settings.group_key(group_id)
+    return query_settings.private_key(event.user_id)
+
+
+def _where(event: MessageEvent) -> str:
+    """文案中的处所代词：群聊「本群」、私聊「你」。"""
+    return "本群" if getattr(event, "group_id", None) is not None else "你"
+
+
+def _image_unavailable_text() -> Optional[str]:
+    """图片显示当前不可用的原因文案（可用时返回 None）。
+
+    两级判定：骰主总开关未开 → 提示去宿主 .env 开启；开关已开但渲染器
+    不可用（依赖未装 / require 失败）→ 提示装 [render] extra。
+    """
+    if not get_config().dnddicer_query_image_enabled:
+        return text.TXT_QUERY_IMAGE_DISABLED
+    if not render.render_available():
+        return text.TXT_QUERY_IMAGE_NOT_READY
+    return None
+
+
+async def _image_state_text(event: MessageEvent) -> str:
+    """查看本处设置：按**实际生效**的形态回复（不可用时说明原因）。"""
+    where = _where(event)
+    if not await query_settings.is_image_enabled(_chat_key(event)):
+        return text.TXT_QUERY_IMAGE_STATE_OFF.format(where=where)
+    if _image_unavailable_text() is not None:
+        # 已设为图片但骰主当前未配置（总开关被关或依赖缺失）→ 暂以文字
+        return text.TXT_QUERY_IMAGE_STATE_PENDING.format(where=where)
+    return text.TXT_QUERY_IMAGE_STATE_ON.format(where=where)
+
+
+@image_matcher.handle()
+async def handle_image_setting(event: MessageEvent) -> None:
+    """``.查询图片``：查看 / 切换本处的查询图片显示（无需管理权限）。"""
+    rest = (base.get_command_rest(event) or "").strip()
+    where = _where(event)
+
+    if not rest:
+        await image_matcher.finish(await _image_state_text(event))
+
+    arg = rest.lower()
+    if arg == "on":
+        reason = _image_unavailable_text()
+        if reason is not None:
+            # 骰主未配置：报错且**不写入**（不留「看起来开了、实际没生效」的设置）
+            await image_matcher.finish(reason)
+        await query_settings.set_image_enabled(_chat_key(event), True)
+        await image_matcher.finish(text.TXT_QUERY_IMAGE_ON.format(where=where))
+    if arg == "off":
+        await query_settings.set_image_enabled(_chat_key(event), False)
+        await image_matcher.finish(text.TXT_QUERY_IMAGE_OFF.format(where=where))
+    await image_matcher.finish(
+        text.TXT_QUERY_IMAGE_BAD_ARG.format(arg=rest, usage=text.TXT_QUERY_IMAGE_USAGE)
     )
 
 
@@ -266,11 +346,19 @@ async def _send_entry(
     entry_text: str,
     located: bool,
 ) -> None:
-    """发送词条正文：图片模式可用时出图，否则文字分段（最多 3 段）。"""
+    """发送词条正文：图片模式可用时出图，否则文字分段（最多 3 段）。
+
+    两级图片开关：骰主总开关（能不能用）× 本处设置（本处用不用，默认关）；
+    正文为空（页面无可显示内容）时不出图——空白卡片无意义，走文字侧提示。
+    """
     global _image_fallback_notified
     image_hint = ""
-    # 正文为空（页面无可显示内容）时不出图——空白卡片无意义，走文字侧的提示
-    if get_config().dnddicer_query_image_enabled and entry_text.strip():
+    use_image = (
+        bool(entry_text.strip())
+        and get_config().dnddicer_query_image_enabled
+        and await query_settings.is_image_enabled(_chat_key(event))
+    )
+    if use_image:
         if render.render_available():
             try:
                 png = await _render_entry_image(candidate, keyword, entry_text, located)

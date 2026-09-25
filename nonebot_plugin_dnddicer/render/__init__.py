@@ -52,10 +52,15 @@ def set_renderer(renderer: Optional[Renderer]) -> None:
 
 
 def reset_renderer() -> None:
-    """重置渲染器状态（测试清理用）。"""
+    """重置渲染器状态（测试清理用）。
+
+    连同引擎的可用性判定缓存一并清空——判定结果与当时的配置绑定，测试中
+    改过配置（monkeypatch）后必须重判，否则会沿用加载期的旧结论。
+    """
     global _renderer, _resolved
     _renderer = None
     _resolved = False
+    engine.reset_availability()
 
 
 def _resolve() -> Optional[Renderer]:
