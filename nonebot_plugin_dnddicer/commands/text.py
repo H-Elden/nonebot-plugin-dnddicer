@@ -72,7 +72,7 @@ TXT_UNKNOWN_ERROR = "骰娘内部发生了错误，请联系管理员反馈。"
 TXT_BOT_HEAD = "屠龙骰（nonebot-plugin-dnddicer）v{version}"
 TXT_BOT_INTRO = (
     "专精 DND5e/5r 跑团的骰娘：掷骰表达式、角色卡与检定/豁免、"
-    "自定义武器与攻击、属性生成、HP 管理、先攻列表、战斗轮、群配置。"
+    "自定义武器与攻击、属性生成、HP 管理、先攻列表、战斗轮、规则查询、群配置。"
 )
 TXT_BOT_STATE_PRIVATE = (
     "私聊不受群聊服务开关限制：掷骰、属性生成等可直接使用，"
