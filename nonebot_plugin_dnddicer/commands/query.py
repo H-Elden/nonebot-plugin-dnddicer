@@ -360,7 +360,7 @@ def _books_lines() -> List[str]:
 @books_matcher.handle()
 async def handle_books(bot: Bot, event: MessageEvent) -> None:
     """``.规则书``：列出可设置的书目（默认出图，渲染不可用则回退文字）。"""
-    if render.render_available():
+    if render.books_available():
         try:
             png = await render.render_books_card(
                 _books_sections(),

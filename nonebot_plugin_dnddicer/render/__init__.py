@@ -5,10 +5,12 @@
 - **书目卡片**（``render_books_card``）：``.规则书`` 的可查询书目表（分组 + 缩写对照）。
 
 设计目标：
-- 对外暴露 ``render_available()`` 与两个渲染函数（均 async）；
-- ``nonebot-plugin-htmlkit`` 为可选依赖：配置关闭或依赖未装时
-  ``render_available()`` 返回 False，命令层据此回退文字输出；
-- 测试可注入假渲染器（``set_renderer`` / ``set_books_renderer``），CI 无需装 htmlkit。
+- 对外暴露 ``render_available()`` / ``books_available()`` 与两个渲染函数（均 async）；
+- ``nonebot-plugin-htmlkit`` 为可选依赖：配置关闭或依赖未装时两者均返回 False，
+  命令层据此回退文字输出；
+- 测试可注入假渲染器（``set_renderer`` / ``set_books_renderer``），CI 无需装 htmlkit；
+  两类卡片**各查各的可用性**（2026-09-26 修订：书目表此前借用词条渲染器的判定，
+  只注入书目假渲染器的测试会在未装 htmlkit 的环境误判不可用）。
 
 模块划分：
 - ``engine.py``：条件 require、模板环境与渲染调用适配；
@@ -35,8 +37,13 @@ _books_resolved = False
 
 
 def render_available() -> bool:
-    """图片渲染是否可用（配置开启 + 依赖已装 + require 成功）。"""
+    """词条卡片图片渲染是否可用（配置开启 + 依赖已装 + require 成功）。"""
     return _resolve() is not None
+
+
+def books_available() -> bool:
+    """书目卡片图片渲染是否可用（与词条卡片同一引擎判定，可独立注入）。"""
+    return _resolve_books() is not None
 
 
 async def render_rule_card(
@@ -60,7 +67,7 @@ async def render_books_card(
     hint: str,
     footer: str,
 ) -> bytes:
-    """渲染书目卡片为 PNG 字节。调用前应先检查 ``render_available()``。"""
+    """渲染书目卡片为 PNG 字节。调用前应先检查 ``books_available()``。"""
     renderer = _resolve_books()
     if renderer is None:
         raise RuntimeError("渲染器不可用")
