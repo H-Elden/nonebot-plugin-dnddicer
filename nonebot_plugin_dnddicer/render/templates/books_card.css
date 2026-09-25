@@ -1,0 +1,83 @@
+/* 书目卡片样式（与规则查询卡片同一套取色：标题 #800000、分组 #704cd9、
+   正文 #242629、次级文字 #666a70、边框 #dedbd7、浅底 #f7f7f8）。
+   litehtml 无 flex/grid：缩写与书名用 inline-block 定宽对齐。 */
+
+body {
+  margin: 0;
+  padding: 0;
+  background: #ffffff;
+}
+
+.card {
+  padding: 22px 28px 16px 28px;
+  font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "Segoe UI", sans-serif;
+  font-size: 16px;
+  color: #242629;
+  background: #ffffff;
+}
+
+.title {
+  font-size: 22px;
+  font-weight: bold;
+  color: #800000;
+  line-height: 1.35;
+  margin-bottom: 6px;
+  white-space: pre-wrap;
+}
+
+.hint {
+  font-size: 13px;
+  color: #666a70;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.divider {
+  height: 2px;
+  background: #800000;
+  margin: 10px 0 12px 0;
+}
+
+.sub {
+  font-size: 16px;
+  font-weight: bold;
+  color: #704cd9;
+  line-height: 1.6;
+  margin: 12px 0 4px 0;
+  white-space: pre-wrap;
+}
+
+.row {
+  line-height: 1.6;
+  margin: 2px 0;
+}
+
+.key {
+  display: inline-block;
+  width: 76px;
+  font-weight: bold;
+  color: #800000;
+}
+
+.name {
+  display: inline-block;
+  white-space: pre-wrap;
+}
+
+.note {
+  margin: 0 0 4px 76px;
+  font-size: 13px;
+  color: #666a70;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.footer {
+  margin-top: 14px;
+  padding-top: 8px;
+  border-top: 1px solid #dedbd7;
+  font-size: 13px;
+  color: #666a70;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}

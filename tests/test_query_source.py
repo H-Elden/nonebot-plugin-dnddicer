@@ -269,6 +269,126 @@ async def test_image_setting_tolerates_broken_storage(clean_query_settings):
     assert await _qs.is_image_enabled(_qs.group_key(1)) is False
 
 
+# -------------------------------------------------------------------------
+# 查询范围（同一文件的 scope 段）
+# -------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_scope_defaults_none(clean_query_settings):
+    """范围默认未设置（None = 全部开放）。"""
+    from nonebot_plugin_dnddicer.data import query_settings as _qs
+
+    assert await _qs.get_scope(_qs.group_key(1)) is None
+    assert await _qs.get_scope(_qs.private_key(2)) is None
+
+
+@pytest.mark.asyncio
+async def test_scope_roundtrip_and_persist(clean_query_settings):
+    """设置 → 查看 → 落盘重读；清空（None/空序列）回到未设置。"""
+    from nonebot_plugin_dnddicer.data import query_settings as _qs
+
+    key = _qs.group_key(1)
+    await _qs.set_scope(key, ["玩家手册2024", "第三方"])
+    assert await _qs.get_scope(key) == ["玩家手册2024", "第三方"]
+
+    _qs._cache = None  # 模拟进程重启：从磁盘重读
+    assert await _qs.get_scope(key) == ["玩家手册2024", "第三方"]
+
+    await _qs.set_scope(key, [])
+    assert await _qs.get_scope(key) is None
+    _qs._cache = None
+    assert await _qs.get_scope(key) is None
+
+
+@pytest.mark.asyncio
+async def test_scope_scoped_per_chat_and_independent_of_image(clean_query_settings):
+    """范围按处隔离，且与图片开关互不干扰（同一文件两段各自读写）。"""
+    from nonebot_plugin_dnddicer.data import query_settings as _qs
+
+    group_a, group_b = _qs.group_key(1), _qs.group_key(2)
+    await _qs.set_image_enabled(group_a, True)
+    await _qs.set_scope(group_a, ["玩家手册2024"])
+
+    _qs._cache = None
+    assert await _qs.is_image_enabled(group_a) is True
+    assert await _qs.get_scope(group_a) == ["玩家手册2024"]
+    assert await _qs.get_scope(group_b) is None
+
+    # 清掉范围不影响图片开关；关掉图片不影响范围
+    await _qs.set_scope(group_a, None)
+    _qs._cache = None
+    assert await _qs.is_image_enabled(group_a) is True
+
+
+@pytest.mark.asyncio
+async def test_search_scoped_queries_each_category():
+    """按范围检索：每个目录各发一次全文请求，结果合并。"""
+    import urllib.parse
+
+    def route(url: str) -> dict:
+        query = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+        category = query["category"][0]
+        index = {"玩家手册2024": 11, "塔莎的万事坩埚": 12}[category]
+        return make_search_response(
+            [make_result(index, f"{category}页", PAGE_SPELLS_2024, category=category)]
+        )
+
+    transport = FakeTransport([("category=", route)])
+    candidates = await _source(transport).search(
+        "火球术", mode=MODE_NAME, categories=["玩家手册2024", "塔莎的万事坩埚"]
+    )
+
+    assert len(transport.calls) == 2  # 每个目录一次（不再发标题查询）
+    assert all("category=" in url for url in transport.calls)
+    assert all("titleOnly=false" in url for url in transport.calls)
+    assert {c.category for c in candidates} == {"玩家手册2024", "塔莎的万事坩埚"}
+
+
+@pytest.mark.asyncio
+async def test_search_scoped_cached_by_scope():
+    """按范围检索的缓存含范围：同范围不重复外呼；换范围只补新目录。"""
+    def route(url: str) -> dict:
+        return make_search_response([make_result(7, "火球术", PAGE_SPELLS_2024)])
+
+    transport = FakeTransport([("category=", route)])
+    source = _source(transport)
+    await source.search("火球术", categories=["玩家手册2024"])
+    await source.search("火球术", categories=["玩家手册2024"])
+    assert len(transport.calls) == 1
+
+    # 范围扩为两本：已缓存的目录不重发，只补「模组」一次
+    await source.search("火球术", categories=["玩家手册2024", "模组"])
+    assert len(transport.calls) == 2
+    assert "category=%E6%A8%A1%E7%BB%84" in transport.calls[-1]  # 模组（URL 编码）
+
+
+@pytest.mark.asyncio
+async def test_search_scoped_all_endpoints_fail():
+    """按范围检索同样走端点回退：全部失败抛 QueryUnavailableError。"""
+    transport = FakeTransport(
+        [("category=", ConnectionRefusedError("拒绝连接"))]
+    )
+    with pytest.raises(QueryUnavailableError):
+        await _source(transport, base_urls=(_LOCAL,)).search(
+            "火球术", categories=["玩家手册2024"]
+        )
+
+
+@pytest.mark.asyncio
+async def test_search_without_scope_unchanged():
+    """不给范围：仍是两段式（标题 + 全文），行为与历史一致。"""
+    transport = FakeTransport(
+        [
+            ("titleOnly=true", make_search_response([make_result(1, "火球术", PAGE_SPELLS_2024)])),
+            ("titleOnly=false", make_search_response([make_result(1, "火球术", PAGE_SPELLS_2024)])),
+        ]
+    )
+    await _source(transport).search("火球术")
+    assert len(transport.calls) == 1  # 标题精确命中 → 不再发全文查询
+    assert all("category=" not in url for url in transport.calls)
+
+
 # =========================================================================
 # 数据源：检索、排序、缓存
 # =========================================================================

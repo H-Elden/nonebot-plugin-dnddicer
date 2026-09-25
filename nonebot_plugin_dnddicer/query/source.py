@@ -8,7 +8,11 @@
 - **两段式检索**：先标题查询（``titleOnly=true``，标题/条目名命中），需要时再
   补全文查询；合并后按「标题精确 > 标题包含 > 条目头命中 > 全文命中」排序、
   按 ``index`` 去重（服务端结果存在同页重复项）；
-- **关键词结果缓存**：按「关键词 + 查询模式」缓存（默认 10 分钟），显著减少外呼；
+- **查询范围（可选）**：给了 ``categories``（站内一级目录名，见 ``books.py``）时
+  走**逐目录检索**——服务端的 ``category`` 参数只支持单个目录，故对每个目录各发
+  一次全文请求再合并排序；未给时行为与历史一致（不带筛选，请求数最少）；
+- **关键词结果缓存**：按「关键词 + 查询模式 + 目录」缓存（默认 10 分钟），
+  显著减少外呼；
 - **礼貌外呼**：全局并发上限、超时、如实标注插件身份的 UA；
 - **HTTP 实现**：标准库 ``urllib`` 走 ``asyncio.to_thread``（不阻塞事件循环），
   不新增运行时依赖；请求低频且命中缓存，线程池开销可忽略。
@@ -24,7 +28,7 @@ import time
 import urllib.parse
 import urllib.request
 from dataclasses import replace
-from typing import Awaitable, Callable, Dict, List, Optional, Tuple
+from typing import Awaitable, Callable, Dict, List, Optional, Sequence, Tuple
 
 from nonebot import logger
 
@@ -76,6 +80,10 @@ MAX_CANDIDATES = 20
 #: 50 条的响应约 400KB，单次请求成本与服务端一次全量扫描相同。
 _TITLE_PAGE_SIZE = 8
 _FULL_PAGE_SIZE = 50
+
+#: 逐目录检索（查询范围）时单目录的取回条数：候选上限 20 条，单目录 20 条足够；
+#: 目录过滤后命中量本就大幅收窄（实测「火球术」在各书内 total 为 2~15 条）
+_SCOPED_PAGE_SIZE = 20
 
 #: 关键词缓存条数上限（按「关键词 + 查询模式」计数，单条最坏约 400KB，
 #: 上限 32 条对应最坏约 13MB 内存）
@@ -132,8 +140,8 @@ class FiveChmSource:
         self._transport = transport
         self._clock = clock
         self._cache_max = max(1, int(cache_max))
-        #: 缓存：``(关键词小写, 是否仅标题) -> (过期时刻, 候选列表)``
-        self._cache: Dict[Tuple[str, bool], Tuple[float, List[Candidate]]] = {}
+        #: 缓存：``(关键词小写, 是否仅标题, 站内目录) -> (过期时刻, 候选列表)``
+        self._cache: Dict[Tuple[str, bool, str], Tuple[float, List[Candidate]]] = {}
         #: 端点冷却：``base_url -> 冷却截止时刻``
         self._cooldown: Dict[str, float] = {}
         self._semaphore = asyncio.Semaphore(_MAX_CONCURRENCY)
@@ -150,24 +158,38 @@ class FiveChmSource:
         self._cache.clear()
         self._cooldown.clear()
 
-    async def search(self, keyword: str, *, mode: str = MODE_NAME) -> List[Candidate]:
+    async def search(
+        self,
+        keyword: str,
+        *,
+        mode: str = MODE_NAME,
+        categories: Optional[Sequence[str]] = None,
+    ) -> List[Candidate]:
         """检索关键词，返回排序去重后的候选列表（最多 ``MAX_CANDIDATES`` 条）。
 
         Args:
             keyword: 关键词（支持空格多关键词与 ``|`` 或，语义由服务端定义）。
             mode: ``MODE_NAME``（名称优先，标题精确命中时不再发全文查询）或
                 ``MODE_FULL``（全文）。
+            categories: 查询范围（站内目录名，见 ``books.py``）。给了就**只在这些
+                目录里检索**——服务端 ``category`` 只支持单目录，故逐目录各发一次
+                全文请求再合并；未给（None / 空）时不筛选，行为与历史一致。
 
         Raises:
             QueryUnavailableError: 全部端点尝试失败。
         """
         keyword = keyword.strip()
-        title_hits = await self._search_endpoint(keyword, title_only=True)
-        has_exact = any(self._is_title_exact(c, keyword) for c in title_hits)
-        need_full = mode == MODE_FULL or not has_exact
-        pool = list(title_hits)
-        if need_full:
-            pool.extend(await self._search_endpoint(keyword, title_only=False))
+        scope = tuple(c for c in (categories or ()) if c)
+        if scope:
+            # 逐目录检索：单次全文请求已覆盖标题与正文，无需再做标题查询
+            pool = await self._search_categories(keyword, scope)
+        else:
+            title_hits = await self._search_endpoint(keyword, title_only=True)
+            has_exact = any(self._is_title_exact(c, keyword) for c in title_hits)
+            need_full = mode == MODE_FULL or not has_exact
+            pool = list(title_hits)
+            if need_full:
+                pool.extend(await self._search_endpoint(keyword, title_only=False))
 
         scored: Dict[int, Candidate] = {}
         for candidate in pool:
@@ -187,19 +209,47 @@ class FiveChmSource:
 
     # ── 检索与排序 ──────────────────────────────────────────────────────
 
-    async def _search_endpoint(self, keyword: str, *, title_only: bool) -> List[Candidate]:
-        """调用 ``/api/search`` 并把响应解析为候选列表（带缓存）。"""
-        cache_key = (keyword.casefold(), title_only)
+    async def _search_categories(
+        self, keyword: str, categories: Sequence[str]
+    ) -> List[Candidate]:
+        """逐目录检索并合并（受全局并发上限约束；每目录一次全文请求）。"""
+        batches = await asyncio.gather(
+            *(
+                self._search_endpoint(keyword, title_only=False, category=category)
+                for category in categories
+            )
+        )
+        pool: List[Candidate] = []
+        for batch in batches:
+            pool.extend(batch)
+        return pool
+
+    async def _search_endpoint(
+        self, keyword: str, *, title_only: bool, category: str = ""
+    ) -> List[Candidate]:
+        """调用 ``/api/search`` 并把响应解析为候选列表（带缓存）。
+
+        ``category`` 非空时只在该站内目录内检索（服务端单目录筛选）。
+        """
+        cache_key = (keyword.casefold(), title_only, category)
         cached = self._cache_get(cache_key)
         if cached is not None:
             return cached
 
+        if title_only:
+            page_size = _TITLE_PAGE_SIZE
+        elif category:
+            page_size = _SCOPED_PAGE_SIZE
+        else:
+            page_size = _FULL_PAGE_SIZE
         params = {
             "keyword": keyword,
             "page": 1,
-            "pageSize": _TITLE_PAGE_SIZE if title_only else _FULL_PAGE_SIZE,
+            "pageSize": page_size,
             "titleOnly": "true" if title_only else "false",
         }
+        if category:
+            params["category"] = category
         data, base_url = await self._get_json(
             "/api/search", params, validate=_validate_search_payload
         )
@@ -326,7 +376,9 @@ class FiveChmSource:
 
     # ── 缓存 ────────────────────────────────────────────────────────────
 
-    def _cache_get(self, key: Tuple[str, bool]) -> Optional[List[Candidate]]:
+    def _cache_get(
+        self, key: Tuple[str, bool, str]
+    ) -> Optional[List[Candidate]]:
         entry = self._cache.get(key)
         if entry is None:
             return None
@@ -339,7 +391,9 @@ class FiveChmSource:
         self._cache[key] = entry
         return candidates
 
-    def _cache_put(self, key: Tuple[str, bool], candidates: List[Candidate]) -> None:
+    def _cache_put(
+        self, key: Tuple[str, bool, str], candidates: List[Candidate]
+    ) -> None:
         self._cache[key] = (self._clock() + self._cache_ttl, candidates)
         while len(self._cache) > self._cache_max:
             oldest = next(iter(self._cache))

@@ -13,13 +13,21 @@
   决定**本处用不用**——默认文字、需主动开启；开启请求在骰主未配置（总开关关或
   渲染依赖未装）时被拒（报错且不写入，仍以文字显示）；渲染异常或依赖失效则回退
   文字，查询不丢；
+- 查询范围（``.查询范围``，2026-09-25）：按处（群按群、私聊按用户）把可查询的
+  书目收窄为若干本/若干整目录，**未设置 = 全部开放**；设置只接受书目缩写（见
+  ``.规则书`` 与 ``query/books.py``），无权限限制；检索时对范围内的每个目录各发
+  一次请求（服务端 ``category`` 只支持单目录）再合并排序；
+- 书目表（``.规则书``）：列出可设置的书目缩写与中文名对照，**默认出图**（骰主
+  开启图片模式且渲染可用时），否则回退文字；该命令**不受** ``.查询图片`` 的按处
+  开关影响（书目表是给骰主/群管理查阅的参考页，不随查询结果的显示形态走）；
 - 群聊受 .bot 群聊服务开关（白名单）管辖，与其它命令一致；私聊可用；
 - 功能默认关闭（``dnddicer_query_enabled``）：未开启时不外呼、仅回一条提示。
 """
 
 from __future__ import annotations
 
-from typing import List, Optional
+import re
+from typing import List, Optional, Sequence
 
 from nonebot import logger
 from nonebot.adapters.onebot.v11 import Bot, MessageEvent, MessageSegment
@@ -45,6 +53,7 @@ from ..query import (
     locate_entry,
     parse_selection_token,
 )
+from ..query import books
 from . import base, text
 
 #: 单次查询允许的最大关键词组数（与服务端语义一致：空格分隔为 AND）
@@ -91,9 +100,27 @@ _HELP_IMAGE = (
     "示例：.查询图片 on"
 )
 
+_HELP_SCOPE = (
+    "查询范围：.查询范围（.qscope）\n"
+    "- 无参数：查看本处当前的查询范围\n"
+    "- <缩写>：只用指定的书目（逗号或空格分隔，如 .查询范围 PHB24,MM25）\n"
+    "- 全部：恢复为全部书目（未设置即全部开放）\n"
+    "- 群聊设置对该群全员生效，私聊仅影响本人；无需管理权限，设置持久保存\n"
+    "示例：.查询范围 PHB24,MM25,XGE（缩写见 .规则书）"
+)
+
+_HELP_BOOKS = (
+    "可查询书目：.规则书（.qbooks）\n"
+    "- 列出可设置的书目缩写与中文名对照（按书架分组）\n"
+    "- 合作内容、冒险模组等以整目录缩写设置（3PP / ADV / FR / MISC）\n"
+    "示例：.规则书"
+)
+
 query_matcher = base.on_dnd_command("查询", _HELP_QUERY, aliases=("q",))
 search_matcher = base.on_dnd_command("搜索", _HELP_SEARCH, aliases=("s", "检索"))
 image_matcher = base.on_dnd_command("查询图片", _HELP_IMAGE, aliases=("qimg",))
+scope_matcher = base.on_dnd_command("查询范围", _HELP_SCOPE, aliases=("qscope",))
+books_matcher = base.on_dnd_command("规则书", _HELP_BOOKS, aliases=("qbooks",))
 
 
 # =========================================================================
@@ -233,6 +260,122 @@ async def handle_image_setting(event: MessageEvent) -> None:
     )
 
 
+# =========================================================================
+# 查询范围（.查询范围）与书目表（.规则书）
+# =========================================================================
+
+
+def _scope_items(categories: Sequence[str]) -> str:
+    """范围条目的展示串（「键 中文名」顿号相连）。"""
+    return "、".join(books.category_display(category) for category in categories)
+
+
+def _unknown_detail(token: str) -> str:
+    """未知缩写的提示片段：能定位到整目录的给出对应键，否则标为无此项。"""
+    entry = books.umbrella_hint(token)
+    if entry is not None:
+        return f"{token}（请用 {entry.key}）"
+    return f"{token}（无此项）"
+
+
+async def _scope_state_text(chat_key: str, where: str) -> str:
+    """查看本处查询范围：未设置 = 全部开放。"""
+    scope = await query_settings.get_scope(chat_key)
+    if not scope:
+        return text.TXT_QUERY_SCOPE_CURRENT_ALL.format(where=where)
+    return text.TXT_QUERY_SCOPE_CURRENT.format(where=where, items=_scope_items(scope))
+
+
+@scope_matcher.handle()
+async def handle_scope(bot: Bot, event: MessageEvent) -> None:
+    """``.查询范围``：查看 / 设置本处的可查询书目（无需管理权限）。"""
+    rest = (base.get_command_rest(event) or "").strip()
+    where = _where(event)
+    chat_key = _chat_key(event)
+
+    if not rest:
+        await scope_matcher.finish(await _scope_state_text(chat_key, where))
+
+    if books.is_all_word(rest):
+        # 恢复全部：任何时候都放行（清理动作不应被功能开关挡住）
+        await query_settings.set_scope(chat_key, None)
+        await scope_matcher.finish(text.TXT_QUERY_SCOPE_RESET.format(where=where))
+
+    if not get_config().dnddicer_query_enabled:
+        await scope_matcher.finish(text.TXT_QUERY_DISABLED)
+
+    tokens = [token for token in re.split(r"[,，、\s]+", rest) if token]
+    entries, unknown = [], []
+    for token in tokens:
+        entry = books.find_entry(token)
+        if entry is None:
+            unknown.append(token)
+        elif entry not in entries:
+            entries.append(entry)
+    if unknown:
+        await scope_matcher.finish(
+            text.TXT_QUERY_SCOPE_UNKNOWN.format(
+                details="、".join(_unknown_detail(token) for token in unknown)
+            )
+        )
+
+    categories = [entry.category for entry in entries]
+    await query_settings.set_scope(chat_key, categories)
+    await scope_matcher.finish(
+        text.TXT_QUERY_SCOPE_SET.format(where=where, items=_scope_items(categories))
+    )
+
+
+def _books_sections() -> List[dict]:
+    """书目表的分组数据（图片与文字形态共用同一份内容）。"""
+    return [
+        {
+            "title": title,
+            "rows": [
+                {"key": entry.key, "name": entry.title, "note": entry.note}
+                for entry in entries
+            ],
+        }
+        for title, entries in books.sections_for_display()
+    ]
+
+
+def _books_lines() -> List[str]:
+    """书目表的文字形态（分组标题 + 每项一行 + 整目录说明）。"""
+    lines = [text.TXT_QUERY_BOOKS_HEAD]
+    total = 0
+    for title, entries in books.sections_for_display():
+        lines.append(text.TXT_QUERY_BOOKS_SECTION.format(title=title))
+        for entry in entries:
+            total += 1
+            lines.append(
+                text.TXT_QUERY_BOOKS_ROW.format(key=entry.key, name=entry.title)
+            )
+            if entry.note:
+                lines.append(text.TXT_QUERY_BOOKS_NOTE.format(note=entry.note))
+    lines.append(text.TXT_QUERY_BOOKS_TAIL.format(count=total))
+    return lines
+
+
+@books_matcher.handle()
+async def handle_books(bot: Bot, event: MessageEvent) -> None:
+    """``.规则书``：列出可设置的书目（默认出图，渲染不可用则回退文字）。"""
+    if render.render_available():
+        try:
+            png = await render.render_books_card(
+                _books_sections(),
+                title=text.TXT_QUERY_BOOKS_CARD_TITLE,
+                hint=text.TXT_QUERY_BOOKS_CARD_HINT,
+                footer=text.TXT_QUERY_BOOKS_TAIL.format(count=len(books.SCOPE_ENTRIES)),
+            )
+        except Exception:
+            logger.exception("DNDDicer 书目表图片渲染失败，已回退文字输出")
+        else:
+            await bot.send(event, MessageSegment.image(png))
+            return
+    await _send_chunked(bot, event, _books_lines())
+
+
 async def _run_search(
     matcher: Matcher, bot: Bot, event: MessageEvent, *, mode: str, usage: str
 ) -> None:
@@ -248,8 +391,9 @@ async def _run_search(
             text.TXT_QUERY_TOO_MANY_KEYWORDS.format(max=MAX_KEYWORDS)
         )
 
+    scope = await query_settings.get_scope(_chat_key(event))
     try:
-        candidates = await get_source().search(keyword, mode=mode)
+        candidates = await get_source().search(keyword, mode=mode, categories=scope)
     except QueryUnavailableError as exc:
         logger.warning(
             "DNDDicer 规则查询服务不可用 endpoints={} last_error={}",
@@ -259,6 +403,15 @@ async def _run_search(
         await matcher.finish(text.TXT_QUERY_UNAVAILABLE.format(count=len(exc.attempts)))
 
     if not candidates:
+        if scope:
+            # 范围生效时说明「为什么没有」——并给出自行放开的路子
+            await matcher.finish(
+                text.TXT_QUERY_NO_RESULT_SCOPED.format(
+                    keyword=keyword,
+                    where=_where(event),
+                    scope="、".join(scope),
+                )
+            )
         await matcher.finish(text.TXT_QUERY_NO_RESULT.format(keyword=keyword))
 
     record = default_store.put(
@@ -386,6 +539,11 @@ async def _send_entry(
     if image_hint:
         lines.append(image_hint)
 
+    await _send_chunked(bot, event, lines)
+
+
+async def _send_chunked(bot: Bot, event: MessageEvent, lines: List[str]) -> None:
+    """按 20 行分段发送，最多 3 段（超出时在末段追加截断提示）。"""
     chunks = [lines[i : i + _CHUNK_LINES] for i in range(0, len(lines), _CHUNK_LINES)]
     truncated = len(chunks) > _MAX_CHUNKS
     chunks = chunks[:_MAX_CHUNKS]

@@ -340,6 +340,42 @@ TXT_QUERY_IMAGE_NOT_READY = (
     "无法开启：图片渲染依赖未就绪，请联系骰主解决。当前仍以文字显示。"
 )
 
+# ── 规则查询范围 .查询范围 / 书目表 .规则书（2026-09-25 新增）────────────
+# 语义：范围默认「全部开放」；设置只接受书目缩写（大小写不敏感）与整目录键，
+# 未设置即不筛选。{where} 为「本群」（群聊）或「你」（私聊）。
+TXT_QUERY_SCOPE_USAGE = (
+    "用法：.查询范围 <书目缩写>（逗号或空格分隔，如 .查询范围 PHB24,MM25）；"
+    "无参数查看当前，.查询范围 全部 恢复全部书目。"
+)
+TXT_QUERY_SCOPE_CURRENT_ALL = (
+    "{where}的查询范围为全部书目（未设置）。"
+    "发送 .查询范围 PHB24,MM25 可只开放指定书目。"
+)
+TXT_QUERY_SCOPE_CURRENT = (
+    "{where}的查询范围为：{items}。发送 .查询范围 全部 恢复全部书目。"
+)
+TXT_QUERY_SCOPE_SET = "已设置：{where}的查询范围收窄为 {items}。"
+TXT_QUERY_SCOPE_RESET = "已恢复：{where}可查询全部书目。"
+#: 无法识别的缩写（{details} 形如「Dk（请用 3PP）、XX（无此项）」）
+TXT_QUERY_SCOPE_UNKNOWN = (
+    "无法设置：{details}。设置只接受书目缩写，发送 .规则书 查看对照"
+    "（合作内容、模组等以整目录缩写设置）。"
+)
+#: 范围生效时「没搜到」的补充说明（只在该处设了范围时出现）
+TXT_QUERY_NO_RESULT_SCOPED = (
+    "没有找到与「{keyword}」相关的内容。"
+    "{where}的查询范围为 {scope}，可发送 .查询范围 全部 放开全部书目后再试。"
+)
+#: .规则书 文字形态的标题与分组行
+TXT_QUERY_BOOKS_HEAD = "《5E不全书》可查询书目（.查询范围 用缩写设置，未设置 = 全部开放）："
+TXT_QUERY_BOOKS_SECTION = "【{title}】"
+TXT_QUERY_BOOKS_ROW = "{key}  {name}"
+TXT_QUERY_BOOKS_NOTE = "    {note}"
+TXT_QUERY_BOOKS_TAIL = "共 {count} 项可设置；发送 .查询范围 <缩写> 收窄本处的查询范围。"
+#: .规则书 图片形态的标题与说明行（正文内容与文字形态同源）
+TXT_QUERY_BOOKS_CARD_TITLE = "《5E不全书》可查询书目"
+TXT_QUERY_BOOKS_CARD_HINT = "发送 .查询范围 PHB24,MM25 设置本处可查的书；未设置 = 全部开放。"
+
 
 def _d20_crit_counts(res_list: List[RollResult]) -> Tuple[int, int]:
     """统计被保留 d20 骰中的大成功（出目 20）与大失败（出目 1）次数。

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from nonebot import logger
 
@@ -29,12 +29,13 @@ CARD_WIDTH = 700
 #: 模板目录与模板名
 _TEMPLATE_DIR = Path(__file__).parent / "templates"
 _TEMPLATE_NAME = "rule_card.html"
+_BOOKS_TEMPLATE_NAME = "books_card.html"
 
 #: 可用性判定结果（None = 尚未判定；未初始化时会话下不缓存，留待下次重试）
 _ready: Optional[bool] = None
 
 _env: Any = None
-_css: Optional[str] = None
+_css_cache: Dict[str, str] = {}
 
 
 def htmlkit_installed() -> bool:
@@ -116,12 +117,11 @@ def _get_env():
     return _env
 
 
-def _css_text() -> str:
+def _css_text(name: str) -> str:
     """读取（并缓存）模板样式表文本（内联进 HTML，避免外部请求）。"""
-    global _css
-    if _css is None:
-        _css = (_TEMPLATE_DIR / "rule_card.css").read_text(encoding="utf-8")
-    return _css
+    if name not in _css_cache:
+        _css_cache[name] = (_TEMPLATE_DIR / name).read_text(encoding="utf-8")
+    return _css_cache[name]
 
 
 async def _render(
@@ -144,7 +144,33 @@ async def _render(
         # 未精确定位时在正文顶部加一行说明（与文字模式同口径）
         fallback_note="" if located else "（未精确定位到词条，以下为页面片段）",
         source_path=source_path,
-        css=_css_text(),
+        css=_css_text("rule_card.css"),
+    )
+    return await html_to_pic(
+        html,
+        max_width=CARD_WIDTH,
+        allow_refit=False,
+        img_fetch_fn=none_fetcher,
+        css_fetch_fn=none_fetcher,
+    )
+
+
+async def _render_books(
+    sections: List[dict],
+    title: str,
+    hint: str,
+    footer: str,
+) -> bytes:
+    """渲染书目卡片为 PNG 字节（内部实现）。"""
+    from nonebot_plugin_htmlkit import html_to_pic, none_fetcher
+
+    template = _get_env().get_template(_BOOKS_TEMPLATE_NAME)
+    html = await template.render_async(
+        title=title,
+        hint=hint,
+        footer=footer,
+        sections=sections,
+        css=_css_text("books_card.css"),
     )
     return await html_to_pic(
         html,
@@ -156,8 +182,13 @@ async def _render(
 
 
 def build_renderer() -> Optional["Renderer"]:
-    """构建渲染器；不可用时返回 None。"""
+    """构建词条卡片渲染器；不可用时返回 None。"""
     return _render if ensure_available() else None
+
+
+def build_books_renderer():
+    """构建书目卡片渲染器；不可用时返回 None。"""
+    return _render_books if ensure_available() else None
 
 
 # 插件加载期先行判定一次（使条件 require 尽早生效）；

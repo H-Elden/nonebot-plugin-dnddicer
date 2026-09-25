@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+{{ css }}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="title">{{ title }}</div>
+  <div class="hint">{{ hint }}</div>
+  <div class="divider"></div>
+  <div class="content">
+    {% for section in sections %}
+    <div class="sub">{{ section.title }}</div>
+    {% for row in section.rows %}
+    <div class="row"><span class="key">{{ row.key }}</span><span class="name">{{ row.name }}</span></div>
+    {% if row.note %}<div class="note">{{ row.note }}</div>{% endif %}
+    {% endfor %}
+    {% endfor %}
+  </div>
+  <div class="footer">{{ footer }}</div>
+</div>
+</body>
+</html>

@@ -989,6 +989,290 @@ async def test_image_setting_does_not_shadow_query(app: App, enabled_query, imag
     )
 
 
+# ── 查询范围 .查询范围 与书目表 .规则书（2026-09-25 新增）────────────────
+
+
+def _fake_books_renderer(png: bytes = _PNG_1PX, calls: Optional[list] = None):
+    """构造假书目表渲染器（记录调用参数，返回固定 PNG 字节）。"""
+
+    async def _render(sections, title, hint, footer):
+        if calls is not None:
+            calls.append(
+                {"sections": sections, "title": title, "hint": hint, "footer": footer}
+            )
+        return png
+
+    return _render
+
+
+def _expected_books_lines() -> list:
+    """按文案常量拼出书目表文字形态的全部行。"""
+    from nonebot_plugin_dnddicer.query import books
+
+    lines = [text.TXT_QUERY_BOOKS_HEAD]
+    total = 0
+    for title, entries in books.sections_for_display():
+        lines.append(text.TXT_QUERY_BOOKS_SECTION.format(title=title))
+        for entry in entries:
+            total += 1
+            lines.append(
+                text.TXT_QUERY_BOOKS_ROW.format(key=entry.key, name=entry.title)
+            )
+            if entry.note:
+                lines.append(text.TXT_QUERY_BOOKS_NOTE.format(note=entry.note))
+    lines.append(text.TXT_QUERY_BOOKS_TAIL.format(count=total))
+    return lines
+
+
+async def _expect_books_text(app: App, matcher, event) -> None:
+    """断言书目表以文字形态（按 20 行分段）发送。"""
+    lines = _expected_books_lines()
+    chunks = [lines[i : i + 20] for i in range(0, len(lines), 20)]
+    async with app.test_matcher(matcher) as ctx:
+        adapter = ctx.create_adapter(base=OnebotV11Adapter)
+        bot = ctx.create_bot(base=Bot, adapter=adapter)
+        for chunk in chunks:
+            ctx.should_call_send(event, "\n".join(chunk))
+        ctx.receive_event(bot, event)
+
+
+@pytest.mark.asyncio
+async def test_scope_view_default_all(app: App, enabled_query):
+    """无参数：默认（未设置）回报全部书目可查。"""
+    await _expect(
+        app,
+        query_cmd.scope_matcher,
+        _group_event(".查询范围"),
+        text.TXT_QUERY_SCOPE_CURRENT_ALL.format(where="本群"),
+    )
+
+
+@pytest.mark.asyncio
+async def test_scope_set_and_view(app: App, enabled_query):
+    """设置：只接受缩写（大小写不敏感），回复列出条目；查看回显、逐字一致。"""
+    await _expect(
+        app,
+        query_cmd.scope_matcher,
+        _group_event(".查询范围 PHB24,MM25"),
+        text.TXT_QUERY_SCOPE_SET.format(
+            where="本群", items="PHB24 玩家手册2024、MM25 怪物图鉴2025"
+        ),
+    )
+    await _expect(
+        app,
+        query_cmd.scope_matcher,
+        _group_event(".查询范围"),
+        text.TXT_QUERY_SCOPE_CURRENT.format(
+            where="本群", items="PHB24 玩家手册2024、MM25 怪物图鉴2025"
+        ),
+    )
+    # 大小写不敏感 + 顿号分隔 + 去重
+    await _expect(
+        app,
+        query_cmd.scope_matcher,
+        _group_event(".查询范围 phb24、PHB24、xge"),
+        text.TXT_QUERY_SCOPE_SET.format(
+            where="本群", items="PHB24 玩家手册2024、XGE 珊娜萨的万事指南"
+        ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_scope_reset_all(app: App, enabled_query):
+    """「全部」恢复：清掉设置，查看回到「全部书目」。"""
+    await _expect(
+        app,
+        query_cmd.scope_matcher,
+        _group_event(".查询范围 3PP"),
+        text.TXT_QUERY_SCOPE_SET.format(where="本群", items="3PP 第三方（合作内容）"),
+    )
+    await _expect(
+        app,
+        query_cmd.scope_matcher,
+        _group_event(".查询范围 全部"),
+        text.TXT_QUERY_SCOPE_RESET.format(where="本群"),
+    )
+    await _expect(
+        app,
+        query_cmd.scope_matcher,
+        _group_event(".查询范围"),
+        text.TXT_QUERY_SCOPE_CURRENT_ALL.format(where="本群"),
+    )
+
+
+@pytest.mark.asyncio
+async def test_scope_unknown_and_umbrella_hint(app: App, enabled_query):
+    """未知缩写与整目录提示（合作内容作品 → 请用 3PP）。"""
+    await _expect(
+        app,
+        query_cmd.scope_matcher,
+        _group_event(".查询范围 不存在"),
+        text.TXT_QUERY_SCOPE_UNKNOWN.format(details="不存在（无此项）"),
+    )
+    await _expect(
+        app,
+        query_cmd.scope_matcher,
+        _group_event(".查询范围 Dk"),
+        text.TXT_QUERY_SCOPE_UNKNOWN.format(details="Dk（请用 3PP）"),
+    )
+    # 中文书名同样不接受（设置只认缩写）
+    await _expect(
+        app,
+        query_cmd.scope_matcher,
+        _group_event(".查询范围 玩家手册2024"),
+        text.TXT_QUERY_SCOPE_UNKNOWN.format(details="玩家手册2024（无此项）"),
+    )
+
+
+@pytest.mark.asyncio
+async def test_scope_requires_query_enabled(app: App):
+    """查询功能未开启：设置被拒（与 .查询 同口径）；「全部」仍可清理。"""
+    await _expect(
+        app,
+        query_cmd.scope_matcher,
+        _group_event(".查询范围 PHB24"),
+        text.TXT_QUERY_DISABLED,
+    )
+    await _expect(
+        app,
+        query_cmd.scope_matcher,
+        _group_event(".查询范围 全部"),
+        text.TXT_QUERY_SCOPE_RESET.format(where="本群"),
+    )
+
+
+@pytest.mark.asyncio
+async def test_scope_scoped_per_chat_and_alias(app: App, enabled_query):
+    """按处隔离（A 群设置不影响 B 群）；别名 .qscope 等价。"""
+    await _expect(
+        app,
+        query_cmd.scope_matcher,
+        _group_event(".qscope PHB24", group_id=_G),
+        text.TXT_QUERY_SCOPE_SET.format(where="本群", items="PHB24 玩家手册2024"),
+    )
+    await _expect(
+        app,
+        query_cmd.scope_matcher,
+        _group_event(".查询范围", group_id=_G + 1),
+        text.TXT_QUERY_SCOPE_CURRENT_ALL.format(where="本群"),
+    )
+    # 私聊按用户隔离，措辞用「你」
+    await _expect(
+        app,
+        query_cmd.scope_matcher,
+        fake_private_message_event_v11(message=Message(".查询范围 XGE")),
+        text.TXT_QUERY_SCOPE_SET.format(where="你", items="XGE 珊娜萨的万事指南"),
+    )
+    await _expect(
+        app,
+        query_cmd.scope_matcher,
+        _group_event(".查询范围", group_id=_G),
+        text.TXT_QUERY_SCOPE_CURRENT.format(
+            where="本群", items="PHB24 玩家手册2024"
+        ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_scoped_search_queries_only_scope(app: App, enabled_query):
+    """范围生效时检索：逐目录请求（URL 带 category），候选只来自范围内。"""
+    import urllib.parse
+
+    def route(url: str) -> dict:
+        query = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+        category = query["category"][0]
+        index = {"玩家手册2024": 21, "珊娜萨的万事指南": 22}[category]
+        return make_search_response(
+            [make_result(index, "火球术", PAGE_SPELLS_2024, category=category)]
+        )
+
+    transport = FakeTransport([("category=", route)])
+    _install(transport)
+    await _expect(
+        app,
+        query_cmd.scope_matcher,
+        _group_event(".查询范围 PHB24,XGE"),
+        text.TXT_QUERY_SCOPE_SET.format(
+            where="本群", items="PHB24 玩家手册2024、XGE 珊娜萨的万事指南"
+        ),
+    )
+    await _expect(
+        app,
+        query_cmd.query_matcher,
+        _group_event(".查询 火球术"),
+        _expected_list(
+            "火球术",
+            [("火球术", "玩家手册2024"), ("火球术", "珊娜萨的万事指南")],
+            count=2,
+        ),
+    )
+    assert len(transport.calls) == 2
+    assert all("category=" in url for url in transport.calls)
+
+
+@pytest.mark.asyncio
+async def test_scoped_no_result_explains_scope(app: App, enabled_query):
+    """范围生效且无结果：提示里说明当前范围与放开办法。"""
+    _install(FakeTransport([("category=", make_search_response([]))]))
+    await _expect(
+        app,
+        query_cmd.scope_matcher,
+        _group_event(".查询范围 PHB24"),
+        text.TXT_QUERY_SCOPE_SET.format(where="本群", items="PHB24 玩家手册2024"),
+    )
+    await _expect(
+        app,
+        query_cmd.query_matcher,
+        _group_event(".查询 火球术"),
+        text.TXT_QUERY_NO_RESULT_SCOPED.format(
+            keyword="火球术", where="本群", scope="玩家手册2024"
+        ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_books_command_sends_image(app: App, image_mode):
+    """书目表默认出图（骰主已开图片模式 + 渲染可用），内容为分组数据。"""
+    calls: list = []
+    render.set_books_renderer(_fake_books_renderer(calls=calls))
+    await _expect_image(app, query_cmd.books_matcher, _group_event(".规则书"), _PNG_1PX)
+
+    assert len(calls) == 1
+    call = calls[0]
+    sections = call["sections"]
+    assert sections[0]["title"].startswith("新版核心资源")
+    assert sections[-1]["title"].startswith("整目录")
+    rows = [(row["key"], row["name"]) for section in sections for row in section["rows"]]
+    assert ("PHB24", "玩家手册2024") in rows
+    assert ("3PP", "第三方（合作内容）") in rows
+    assert any(row["note"] for section in sections for row in section["rows"])
+
+
+@pytest.mark.asyncio
+async def test_books_command_text_fallback(app: App, enabled_query):
+    """渲染不可用（默认关）：书目表回退文字（分组 + 缩写对照逐行）。"""
+    await _expect_books_text(app, query_cmd.books_matcher, _group_event(".规则书"))
+
+
+@pytest.mark.asyncio
+async def test_books_command_unaffected_by_image_switch(app: App, image_mode):
+    """书目表不受 .查询图片 影响：本处关掉图片后，.规则书 仍出图。"""
+    render.set_books_renderer(_fake_books_renderer())
+    await _expect(
+        app,
+        query_cmd.image_matcher,
+        _group_event(".查询图片 off"),
+        text.TXT_QUERY_IMAGE_OFF.format(where="本群"),
+    )
+    await _expect_image(app, query_cmd.books_matcher, _group_event(".规则书"), _PNG_1PX)
+
+
+@pytest.mark.asyncio
+async def test_books_command_alias(app: App, enabled_query):
+    """别名 .qbooks 等价。"""
+    await _expect_books_text(app, query_cmd.books_matcher, _group_event(".qbooks"))
+
+
 # ── 门禁（真实服务开关，不旁路）──────────────────────────────────────────
 
 @pytest.mark.service_gate
