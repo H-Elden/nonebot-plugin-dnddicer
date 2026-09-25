@@ -4,7 +4,7 @@ layout: home
 hero:
   name: 屠龙骰
   text: DNDDicer 使用文档
-  tagline: 专精 DND5e/5r 的 QQ 跑团骰娘插件——掷骰表达式、角色卡与属性、检定与豁免、HP 管理、先攻列表与战斗轮
+  tagline: 专精 DND5e/5r 的 QQ 跑团骰娘插件：掷骰表达式、角色卡与属性、检定与豁免、HP 管理、先攻列表与战斗轮
   actions:
     - theme: brand
       text: 快速开始

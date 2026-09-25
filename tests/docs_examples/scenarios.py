@@ -43,10 +43,13 @@ cast_setup = Scene(
 
 quickstart_first_roll = Scene(
     id="quickstart_first_roll",
-    title="第一条命令：掷骰",
+    title="第一条命令：掷骰（小鹿尚未建卡取群名片；阿茶建卡后取角色名）",
     steps=[
+        # 小鹿 全程没有角色卡：落款取群名片「小鹿」（《快速开始》第一条命令示此态：先裸 .r，再 .r2d6+3）
+        Step("小鹿", ".r", dice=[20]),
+        Step("小鹿", ".r2d6+3", dice=[5, 2]),
+        # 阿茶 已建卡：落款取角色名「薇拉」（cast「示例怎么读」与 roll-basics「结果怎么读」两页共用）
         Step("阿茶", ".r2d6+3", dice=[5, 2]),
-        Step("阿茶", ".rd", dice=[20]),
     ],
 )
 
@@ -1085,7 +1088,7 @@ TIMELINE = [
     quickstart_bot_on,
     quickstart_bot_info,
     cast_setup,
-    quickstart_first_roll,
+    quickstart_first_roll,   # 小鹿（无卡，取群名片）与 阿茶（有卡，取角色名）的掷骰示例
     quickstart_private_limits,
     # 第二幕：旅店试骰（掷骰基础 / 掷骰进阶）
     roll_basics_basic,
