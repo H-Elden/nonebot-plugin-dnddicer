@@ -404,12 +404,18 @@ async def _run_search(
 
     if not candidates:
         if scope:
-            # 范围生效时说明「为什么没有」——并给出自行放开的路子
+            # 范围生效时说明「为什么没有」——并给出自行放开的路子；
+            # 「.查询」再附一句可改用「.搜索」全文检索（.搜索 自身即全文检索，不再提示）
             await matcher.finish(
                 text.TXT_QUERY_NO_RESULT_SCOPED.format(
                     keyword=keyword,
                     where=_where(event),
                     scope="、".join(scope),
+                    hint=(
+                        text.TXT_QUERY_NO_RESULT_SCOPED_HINT
+                        if mode == MODE_NAME
+                        else ""
+                    ),
                 )
             )
         await matcher.finish(text.TXT_QUERY_NO_RESULT.format(keyword=keyword))

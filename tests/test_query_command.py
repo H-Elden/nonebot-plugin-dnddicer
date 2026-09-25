@@ -1237,7 +1237,7 @@ async def test_scoped_search_queries_only_scope(app: App, enabled_query):
 
 @pytest.mark.asyncio
 async def test_scoped_no_result_explains_scope(app: App, enabled_query):
-    """范围生效且无结果：提示里说明当前范围与放开办法。"""
+    """范围生效且无结果：`.查询` 说明当前范围、放开办法，并建议改用 `.搜索`。"""
     _install(FakeTransport([("category=", make_search_response([]))]))
     await _expect(
         app,
@@ -1250,8 +1250,30 @@ async def test_scoped_no_result_explains_scope(app: App, enabled_query):
         query_cmd.query_matcher,
         _group_event(".查询 火球术"),
         text.TXT_QUERY_NO_RESULT_SCOPED.format(
-            keyword="火球术", where="本群", scope="玩家手册2024"
+            keyword="火球术",
+            where="本群",
+            scope="玩家手册2024",
+            hint=text.TXT_QUERY_NO_RESULT_SCOPED_HINT,
         ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_scoped_no_result_full_search_no_hint(app: App, enabled_query):
+    """范围生效且无结果：`.搜索` 本身即全文检索，只说明范围，不提示建议改用 `.搜索`。"""
+    _install(FakeTransport([("category=", make_search_response([]))]))
+    await _expect(
+        app,
+        query_cmd.scope_matcher,
+        _group_event(".查询范围 PHB24"),
+        text.TXT_QUERY_SCOPE_SET.format(where="本群", items="PHB24 玩家手册2024"),
+    )
+    expected = text.TXT_QUERY_NO_RESULT_SCOPED.format(
+        keyword="火球术", where="本群", scope="玩家手册2024", hint=""
+    )
+    assert text.TXT_QUERY_NO_RESULT_SCOPED_HINT not in expected
+    await _expect(
+        app, query_cmd.search_matcher, _group_event(".搜索 火球术"), expected
     )
 
 
