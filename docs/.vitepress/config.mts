@@ -8,7 +8,7 @@ export default defineConfig({
   lang: 'zh-CN',
   title: '屠龙骰 DNDDicer',
   description:
-    '专精 DND5e/5r 的 QQ 跑团骰娘插件使用文档：掷骰表达式、角色卡与属性、检定与豁免、HP 管理、先攻列表与战斗轮',
+    '专精 DND5e/5r 的 QQ 跑团骰娘插件使用文档：掷骰表达式、角色卡与属性、检定与豁免、生命值管理、先攻列表与战斗轮、规则查询、DM 进阶与最佳实践',
   base: '/nonebot-plugin-dnddicer/',
   cleanUrls: true,
   lastUpdated: true,
@@ -41,23 +41,32 @@ export default defineConfig({
         items: [
           { text: '掷骰基础', link: '/guide/roll-basics' },
           { text: '掷骰进阶', link: '/guide/roll-advanced' },
+          { text: '生命值管理', link: '/guide/hp' },
           { text: '先攻列表', link: '/guide/initiative' },
-        ],
-      },
-      {
-        text: '第二章 · 进阶操作',
-        items: [
-          { text: '角色卡与属性', link: '/guide/character-card' },
-          { text: '检定与豁免', link: '/guide/checks' },
-          { text: '武器与攻击', link: '/guide/weapons' },
-          { text: 'HP 与长休', link: '/guide/hp-rest' },
           { text: '战斗轮', link: '/guide/battle' },
           { text: '规则查询', link: '/guide/query' },
         ],
       },
       {
-        text: '第三章 · DM 操作',
-        items: [{ text: 'DM 实战指南', link: '/guide/dm-guide' }],
+        text: '第二章 · 玩家进阶',
+        items: [
+          { text: '角色卡与属性', link: '/guide/character-card' },
+          { text: '检定与豁免', link: '/guide/checks' },
+          { text: '武器与攻击', link: '/guide/weapons' },
+          { text: 'HP 进阶与长休', link: '/guide/hp-advanced' },
+        ],
+      },
+      {
+        text: '第三章 · DM 进阶',
+        items: [
+          { text: '代掷与代操作', link: '/guide/dm-proxy' },
+          { text: '血量与伤害结算', link: '/guide/dm-settlement' },
+          { text: '查询范围', link: '/guide/query-scope' },
+        ],
+      },
+      {
+        text: '第四章 · 最佳实践',
+        items: [{ text: '最佳实践', link: '/guide/best-practices' }],
       },
       {
         text: '参考',

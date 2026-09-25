@@ -10,7 +10,7 @@ DNDDicer 的目标是填补「NoneBot 商店中缺少 **DND5e/5r 专业 + 现代
 
 - **掷骰引擎**：内置 AST 表达式引擎（Lark 文法），支持 `2d20kh1`、优势/劣势、爆炸骰、连掷、暗骰等完整掷骰语法；
 - **跑团全流程**：掷骰 → `.dnd` 属性生成 → 角色卡与检定/豁免点命令 → 自定义武器与攻击（`.X攻击`/`.X伤害`）/ HP 管理（伤害掷骰、抗性/易伤、AOE 多目标结算、长休）→ 先攻列表与战斗轮 → 规则查询（`.查询`/`.搜索`，可限定书目、可出图）；
-- **规则范围**：仅 DND5e/5r——专精 DND 定位，不做 COC/D100 体系与 `.mode` 模式切换；
+- **规则范围**：仅 DND5e/5r：专精 DND 定位，不做 COC/D100 体系与 `.mode` 模式切换；
 - **商店合规**：零配置可加载、本地存储走 `nonebot-plugin-localstore`、元数据完整、全程异步。
 
 ## 📖 使用文档
@@ -18,10 +18,11 @@ DNDDicer 的目标是填补「NoneBot 商店中缺少 **DND5e/5r 专业 + 现代
 详细用法、输入/输出示例与常见问题见使用文档（手册式分章，含跑团示例；**在线版**：<https://h-elden.github.io/nonebot-plugin-dnddicer/>，源文件在仓库 `docs/`）：
 
 - 开始：[快速开始](./docs/guide/quickstart.md) · [示例团与人物](./docs/guide/cast.md)
-- 第一章 · 基础操作：[掷骰基础](./docs/guide/roll-basics.md) · [掷骰进阶](./docs/guide/roll-advanced.md) · [先攻列表](./docs/guide/initiative.md)
-- 第二章 · 进阶操作：[角色卡与属性](./docs/guide/character-card.md) · [检定与豁免](./docs/guide/checks.md) · [武器与攻击](./docs/guide/weapons.md) · [HP 与长休](./docs/guide/hp-rest.md) · [战斗轮](./docs/guide/battle.md) · [规则查询](./docs/guide/query.md)
-- 第三章 · DM 操作：[DM 实战指南](./docs/guide/dm-guide.md)
-- 参考 · [命令总览](./docs/guide/overview.md) · [群管理与 FAQ](./docs/guide/faq.md) · [自建查询服务](./docs/guide/self-host.md)
+- 第一章 · 基础操作：[掷骰基础](./docs/guide/roll-basics.md) · [掷骰进阶](./docs/guide/roll-advanced.md) · [生命值管理](./docs/guide/hp.md) · [先攻列表](./docs/guide/initiative.md) · [战斗轮](./docs/guide/battle.md) · [规则查询](./docs/guide/query.md)
+- 第二章 · 玩家进阶：[角色卡与属性](./docs/guide/character-card.md) · [检定与豁免](./docs/guide/checks.md) · [武器与攻击](./docs/guide/weapons.md) · [HP 进阶与长休](./docs/guide/hp-advanced.md)
+- 第三章 · DM 进阶：[代掷与代操作](./docs/guide/dm-proxy.md) · [血量与伤害结算](./docs/guide/dm-settlement.md) · [查询范围](./docs/guide/query-scope.md)
+- 第四章 · 最佳实践：[最佳实践](./docs/guide/best-practices.md)
+- 参考：[命令总览](./docs/guide/overview.md) · [群管理与 FAQ](./docs/guide/faq.md) · [自建查询服务](./docs/guide/self-host.md)
 
 ## 📦 安装
 
@@ -57,9 +58,9 @@ plugins = ["nonebot_plugin_dnddicer"]
 
 ## 🎲 用法
 
-> 命令以 `.`（或全角 `。`）开头；命令起始符默认仅 `.` / `。`，如需用宿主斜杠 `/` 等起始符触发（如 `/.help`），请设置配置项 `dnddicer_use_host_command_starts=true`。**群聊服务默认关闭（白名单）**：需群主/管理员发送 `.bot on` 开启本群服务；`.bot off` 关闭后本群不再响应命令（`.bot` 本身不受影响）。群聊中使用 `.bot` 需先 @ 本机器人；私聊不受服务开关限制，但可用命令更少——角色卡、检定、HP、先攻等仅限群聊（差异见[快速开始](./docs/guide/quickstart.md)）。
+> 命令以 `.`（或全角 `。`）开头；命令起始符默认仅 `.` / `。`，如需用宿主斜杠 `/` 等起始符触发（如 `/.help`），请设置配置项 `dnddicer_use_host_command_starts=true`。**群聊服务默认关闭（白名单）**：需群主/管理员发送 `.bot on` 开启本群服务；`.bot off` 关闭后本群不再响应命令（`.bot` 本身不受影响）。群聊中使用 `.bot` 需先 @ 本机器人；私聊不受服务开关限制，但可用命令更少：角色卡、检定、HP、先攻等仅限群聊（差异见[快速开始](./docs/guide/quickstart.md)）。
 >
-> **DM 代操作（@ 提及目标）**：多数带目标的命令支持用 **@群成员** 指定目标——直连该成员在本群的角色卡，不受同名 NPC/改名影响，且可与名称混写（`.hp @玩家 -4d6`、`.hp @玩家;地精 -d4`、`.ri+3 @玩家`、`.init del @玩家`、`.回合 @玩家`、`.角色卡 @玩家`、`.力量豁免 @玩家`、`.先攻检定 @玩家` 等）。详见 [命令总览 - @ 提及目标](./docs/guide/overview.md#-提及目标dm-代操作)。
+> **DM 代操作（@ 提及目标）**：多数带目标的命令支持用 **@群成员** 指定目标：直连该成员在本群的角色卡，不受同名 NPC/改名影响，且可与名称混写（`.hp @玩家 -4d6`、`.hp @玩家;地精 -d4`、`.ri+3 @玩家`、`.init del @玩家`、`.回合 @玩家`、`.角色卡 @玩家`、`.力量豁免 @玩家`、`.先攻检定 @玩家` 等）。完整机制见[代掷与代操作](./docs/guide/dm-proxy.md)，命令清单见[命令总览 - @ 提及目标](./docs/guide/overview.md#提及目标-dm-代操作)。
 
 ### 🎲 掷骰（群聊 / 私聊）
 
@@ -101,7 +102,7 @@ plugins = ["nonebot_plugin_dnddicer"]
 | `.dnd [次数] [原因]` | 4D6K3 掷点生成六项属性（附合计与降序，自行分配给六属性） |
 | `.dndx [次数] [原因]` | 4D6K3 掷点并绑定属性名（不排序，掷出即定、可直接抄入角色卡） |
 
-### ❤️ HP 与长休（群聊）
+### ❤️ 生命值管理（群聊）
 
 | 命令 | 说明 |
 | --- | --- |
@@ -112,6 +113,8 @@ plugins = ["nonebot_plugin_dnddicer"]
 | `.hp del 名称` / `.hp clr` | 删除单个 / 清空全部 NPC 血量记录（玩家角色卡请用 `.角色卡清除`，玩家先攻条目用 `.init del`） |
 | `.npc 持久/临时 名称` | NPC 血量跨战斗保持 / 恢复默认（同名 NPC 新入先攻表默认自动回满并提示） |
 | `.长休` / `.长休 @玩家` | 长休结算（回满 HP、清临时 HP、回复一半生命骰）；@ 形式代不在场的玩家收尾 |
+
+> 基础用法见[生命值管理](./docs/guide/hp.md)，武器伤害写法与长休进阶见 [HP 进阶与长休](./docs/guide/hp-advanced.md)，DM 的结算打法见[血量与伤害结算](./docs/guide/dm-settlement.md)。
 
 ### ⚔️ 先攻与战斗轮（群聊）
 
@@ -149,7 +152,7 @@ plugins = ["nonebot_plugin_dnddicer"]
 
 ## 📄 版本与路线
 
-1. ✅ **v0.1.0**（第一期 = T0 + T1 + 战斗轮简化版 + `.bot` 服务开关）：掷骰引擎移植、`.r/.rh`、帮助、群配置（`.dset`）、角色卡与检定/豁免/攻击、`.dnd` 属性生成、HP 管理与长休（含抗性/易伤与 AOE 伤害掷骰）、先攻列表、战斗轮——全部落地，全量测试通过；
+1. ✅ **v0.1.0**（第一期 = T0 + T1 + 战斗轮简化版 + `.bot` 服务开关）：掷骰引擎移植、`.r/.rh`、帮助、群配置（`.dset`）、角色卡与检定/豁免/攻击、`.dnd` 属性生成、HP 管理与长休（含抗性/易伤与 AOE 伤害掷骰）、先攻列表、战斗轮，全部落地、全量测试通过；
 2. ✅ **v0.2.0**：HP 抗性/易伤与 AOE 掷骰完善、`.dnd 原因` 兼容修复、**NPC/怪物血量**（三层目标搜索、先攻列表与 `.hp list` 联动、`.ri` 入表自动回满、`.npc 持久/临时` 跨战斗保持）、`.dndx` 属性名绑定掷点；
 3. ✅ **v0.2.1**：**@ 提及目标**（DM 可代玩家操作 `.hp`/`.npc`/`.ri`/`.回合` 等、查看角色卡）、玩家名称显示统一回退链、`.hp del/clr` 语义修订（仅作用 NPC 血量）、优势/劣势别名粘连等真机反馈修复；
 4. ✅ **v0.2.2**：掷骰说明文字按四则运算还原（常量复合子表达式与一元负号）、私聊下的群聊限定命令不再静默与 `.bot` 私聊文案修正；**使用文档站上线**（手册式 15 页，随发版自动部署）；
