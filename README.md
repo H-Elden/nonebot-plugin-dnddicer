@@ -21,7 +21,7 @@ DNDDicer 的目标是填补「NoneBot 商店中缺少 **DND5e/5r 专业 + 现代
 - 第一章 · 基础操作：[掷骰基础](./docs/guide/roll-basics.md) · [掷骰进阶](./docs/guide/roll-advanced.md) · [先攻列表](./docs/guide/initiative.md)
 - 第二章 · 进阶操作：[角色卡与属性](./docs/guide/character-card.md) · [检定与豁免](./docs/guide/checks.md) · [武器与攻击](./docs/guide/weapons.md) · [HP 与长休](./docs/guide/hp-rest.md) · [战斗轮](./docs/guide/battle.md) · [规则查询](./docs/guide/query.md)
 - 第三章 · DM 操作：[DM 实战指南](./docs/guide/dm-guide.md)
-- 参考 · [命令总览](./docs/guide/overview.md) · [群管理与 FAQ](./docs/guide/faq.md)
+- 参考 · [命令总览](./docs/guide/overview.md) · [群管理与 FAQ](./docs/guide/faq.md) · [自建查询服务](./docs/guide/self-host.md)
 
 ## 📦 安装
 

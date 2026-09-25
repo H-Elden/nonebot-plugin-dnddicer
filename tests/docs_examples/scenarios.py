@@ -1069,6 +1069,17 @@ query_books_text = Scene(
     ],
 )
 
+dm_scope_setup = Scene(
+    id="dm_scope_setup",
+    title="开团前：DM 把本团可查书目收窄到核心三书",
+    steps=[
+        # 本团只跑核心三书：把本群可查范围收窄（未设置 = 全部开放）
+        Step("白鸦", ".查询范围 PHB24,DMG24,MM25"),
+        # 查看当前范围：方便和玩家对齐「本团开放了哪些书」
+        Step("白鸦", ".查询范围"),
+    ],
+)
+
 #: 时间线（顺序执行；后续按页补场景，注意保持剧情顺序）
 TIMELINE = [
     quickstart_bot_on,
@@ -1183,5 +1194,6 @@ TIMELINE = [
     query_image_switch,
     query_scope_set,
     query_books_text,
+    dm_scope_setup,      # DM 给本团定可查书目（核心三书；置尾以免影响上面的开放范围示例）
     quickstart_bot_off,  # 压轴：服务关闭后本群不再响应其他命令
 ]

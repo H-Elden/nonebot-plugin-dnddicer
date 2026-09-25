@@ -29,6 +29,12 @@ pip install nonebot-plugin-dnddicer
 plugins = ["nonebot_plugin_dnddicer"]
 ```
 
+词条卡片图（图片模式）需要可选的渲染依赖，按需安装（NB-CLI 安装的机器人也用同一条 pip 命令补装；未装时自动回退文字，查询不受影响）：
+
+```bash
+pip install "nonebot-plugin-dnddicer[render]"
+```
+
 安装完成后重启机器人，私聊机器人发送 `.bot` 即可验证插件已加载。
 
 ## 配置项
@@ -49,7 +55,34 @@ dnddicer_command_priority=10
 dnddicer_default_face=20
 ```
 
-除上表之外，插件不读取其他宿主配置；与宿主插件的共存与排查见[群管理与 FAQ](./faq.md)。
+### 规则查询（可选）
+
+规则查询（`.查询` / `.搜索`）**默认关闭**：开启后群聊仍受本群服务开关管辖、私聊可用，玩法与书单见[规则查询](./query.md)。开启与调优：
+
+| 配置项 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `dnddicer_query_enabled` | `bool` | `false` | 规则查询总开关；关闭时不对查询服务发起任何请求 |
+| `dnddicer_query_base_urls` | `list` | 在线服务 | 查询服务端点，按顺序尝试、失败自动回退下一个 |
+| `dnddicer_query_image_enabled` | `bool` | `false` | 图片模式总开关，决定各处**能不能**出图；需先安装上文的 `[render]` 依赖 |
+| `dnddicer_query_timeout` | `float` | `8.0` | 单个端点的请求超时（秒） |
+| `dnddicer_query_cache_ttl` | `float` | `600.0` | 同一关键词的结果缓存时长（秒） |
+| `dnddicer_query_endpoint_cooldown` | `float` | `60.0` | 端点失败后的冷却时长（秒） |
+
+默认端点是公开的在线服务（`https://5echmsearch.kagangtuya.top`），开箱无需部署；图片模式各群/私聊的启用方式见[规则查询 - 图片显示](./query.md#图片显示-查询图片)。
+
+开启示例（按需取舍）：
+
+```bash
+dnddicer_query_enabled=true
+dnddicer_query_image_enabled=true
+dnddicer_query_base_urls=["http://127.0.0.1:13000", "https://5echmsearch.kagangtuya.top"]
+```
+
+> **图片模式与字体**：渲染依赖对平台有要求——Linux 需要 glibc ≥ 2.34（Ubuntu 22.04+ / Debian 12+ 可用；CentOS 7/8、Ubuntu 20.04 等老系统装不了，图片模式不可用、文字查询不受影响）。成图走系统字体（fontconfig），请确认系统已装有中文字体（如 `fonts-noto-cjk`），否则成图里的中文可能显示为方框；未安装渲染依赖或渲染失败时自动回退文字。
+>
+> **自建查询服务**是可选路线（默认直接用公开在线服务）：自建实例与插件之间只用 `dnddicer_query_base_urls` 对接，部署步骤与内存分档建议见[自建查询服务](./self-host.md)。
+
+以上两个小节即本插件读取的全部宿主配置；与宿主插件的共存与排查见[群管理与 FAQ](./faq.md)。
 
 ## 开启本群服务
 
