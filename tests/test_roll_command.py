@@ -174,6 +174,38 @@ async def test_roll_multi_times_sum_only(app: App, roll_matcher):
 
 
 @pytest.mark.asyncio
+async def test_roll_multi_times_crit_summary(app: App, roll_matcher):
+    """连掷出大成功/大失败 → 汇总播报另起一行（不与末轮结果同行）。"""
+    token = set_runtime(SequenceRuntime([20, 1]))
+    try:
+        event = fake_group_message_event_v11(message=Message(".r2#d"))
+        await _expect_send(
+            app,
+            roll_matcher,
+            event,
+            "test 的掷骰结果为 2次 1D20:\n[20]=20,\n[1]=1\n1次 大成功 1次 大失败",
+        )
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_roll_multi_times_sum_only_crit_summary(app: App, roll_matcher):
+    """s 连掷出大成功/大失败 → 汇总同样另起一行。"""
+    token = set_runtime(SequenceRuntime([20, 1]))
+    try:
+        event = fake_group_message_event_v11(message=Message(".r s 2#d"))
+        await _expect_send(
+            app,
+            roll_matcher,
+            event,
+            "test 的掷骰结果为 2次 1D20: [20, 1]\n1次 大成功 1次 大失败",
+        )
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
 async def test_roll_crit_success(app: App, roll_matcher):
     """唯一 d20 大成功 → 追加「好耶！大成功!」。"""
     token = set_runtime(SequenceRuntime([20]))

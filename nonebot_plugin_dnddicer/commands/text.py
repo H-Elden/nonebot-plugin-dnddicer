@@ -447,6 +447,22 @@ def get_roll_state_text(res_list: List[RollResult]) -> str:
     return ""
 
 
+def join_roll_state_text(content: str, state: str, own_line: bool) -> str:
+    """把 d20 状态文案（大成功/大失败）拼到掷骰结果块末尾（.r 与检定点共用）。
+
+    - ``own_line=True``：状态**另起一行**——`.r` 的 N# 连掷（按次汇总）与
+      全部检定点（单轮、连掷同规则）都用这一形态（2026-09-26 修订——与
+      结果同行时连成一长串，播报读不断）；
+    - ``own_line=False``：以空格接在同一行（`.r` / `.rh` 单轮）；
+    - state 为空时原样返回 content。
+    """
+    if not state:
+        return content
+    if own_line:
+        return f"{content}\n{state}"
+    return f"{content} {state}"
+
+
 def format_nat_attack_state(res_list: List[RollResult], weapon_name: str) -> str:
     """武器攻击检定的天然 20/1 提示（DND 术语；只认被保留的 d20）。
 

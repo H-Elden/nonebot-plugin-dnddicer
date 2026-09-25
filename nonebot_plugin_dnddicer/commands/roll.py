@@ -92,7 +92,8 @@ async def _roll_and_render(args: RollParseArgs, group_id: Optional[int] = None) 
 
     final = _render_roll_result(res_list, args.is_show_info)
     state = text.get_roll_state_text(res_list)
-    return f"{final} {state}".rstrip()
+    # N# 连掷的汇总播报另起一行（单轮仍接同行，规则见 text.join_roll_state_text）
+    return text.join_roll_state_text(final, state, own_line=len(res_list) > 1).rstrip()
 
 
 async def _compose_reply(args: RollParseArgs, nickname: str, final_with_state: str) -> str:

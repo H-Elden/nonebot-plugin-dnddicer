@@ -189,7 +189,7 @@ async def test_check_miss_without_char(app: App):
 
 @pytest.mark.asyncio
 async def test_check_critical_success_and_failure(app: App):
-    """.力量检定 掷 20/1 → 播报大成功/大失败（检定与 .r 播报统一）。"""
+    """.力量检定 掷 20/1 → 播报大成功/大失败（单独成行，与 .r 同文案）。"""
     from nonebot_plugin_dnddicer.commands.character import char_matcher, check_matcher
 
     await _expect(app, char_matcher, _event(_RECORD, user_id=10010), "角色卡已设置")
@@ -200,7 +200,8 @@ async def test_check_critical_success_and_failure(app: App):
         expected = (
             "伊丽莎白进行【力量检定】：\n"
             "熟练加值:3 力量调整值:2\n"
-            "1D20+2+3=[20]+2+3=25 好耶！大成功!"
+            "1D20+2+3=[20]+2+3=25\n"
+            "好耶！大成功!"
         )
         await _expect(app, check_matcher, event, expected)
     finally:
@@ -212,7 +213,30 @@ async def test_check_critical_success_and_failure(app: App):
         expected = (
             "伊丽莎白进行【力量检定】：\n"
             "熟练加值:3 力量调整值:2\n"
-            "1D20+2+3=[1]+2+3=6 哇哦！大失败!"
+            "1D20+2+3=[1]+2+3=6\n"
+            "哇哦！大失败!"
+        )
+        await _expect(app, check_matcher, event, expected)
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_check_multi_critical_summary(app: App):
+    """.2#力量检定 连掷出大成功/大失败 → 汇总另起一行（与 .r 连掷同规则）。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher, check_matcher
+
+    await _expect(app, char_matcher, _event(_RECORD, user_id=10010), "角色卡已设置")
+
+    token = set_runtime(SequenceRuntime([20, 1]))
+    try:
+        event = _event(".2#力量检定", user_id=10010)
+        expected = (
+            "伊丽莎白进行【2次力量检定】：\n"
+            "熟练加值:3 力量调整值:2\n"
+            "1D20+2+3=[20]+2+3=25\n"
+            "1D20+2+3=[1]+2+3=6\n"
+            "1次 大成功 1次 大失败"
         )
         await _expect(app, check_matcher, event, expected)
     finally:

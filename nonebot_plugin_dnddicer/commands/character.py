@@ -342,11 +342,12 @@ async def handle_check(bot: Bot, event: MessageEvent) -> None:
         display_item = f"{check_name}检定"
     display_check = display_item if times == 1 else f"{times}次{display_item}"
     # d20 大成功/大失败播报：与 .r 同文案同聚合（唯一 d20 出目 20/1 判定见
-    # text._d20_crit_counts）；先攻检定除外——先攻掷骰没有大成功/大失败一说
+    # text._d20_crit_counts）；播报一律另起一行（单轮与连掷同规则，见
+    # text.join_roll_state_text）；先攻检定除外——先攻掷骰没有大成功/大失败一说
     if check_name != "先攻":
         state = text.get_roll_state_text(roll_results)
         if state:
-            results[-1] = f"{results[-1]} {state}"
+            results[-1] = text.join_roll_state_text(results[-1], state, own_line=True)
     feedback = text.TXT_CHECK_RESULT.format(
         name=name,
         check=display_check,
