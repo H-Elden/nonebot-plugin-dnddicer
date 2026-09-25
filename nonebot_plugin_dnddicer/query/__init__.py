@@ -20,7 +20,7 @@ from .interaction import (
     default_store,
     parse_selection_token,
 )
-from .locating import locate_entry, split_entry_head
+from .locating import find_entry_head, locate_entry, split_entry_head
 from .models import Candidate, QueryUnavailableError
 from .source import (
     MAX_CANDIDATES,
@@ -41,6 +41,7 @@ __all__ = [
     "SelectionRecord",
     "SelectionStore",
     "default_store",
+    "find_entry_head",
     "locate_entry",
     "parse_selection_token",
     "split_entry_head",

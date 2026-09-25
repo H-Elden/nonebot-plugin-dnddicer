@@ -246,3 +246,18 @@ def locate_entry(
         return _truncate(paragraph, max_lines, max_chars), False
 
     return _truncate(lines, max_lines, max_chars), False
+
+
+def find_entry_head(content: str, keyword: str) -> Optional[Tuple[str, str]]:
+    """在页面正文中找到关键词对应的条目头（名称, 英文名）。
+
+    供渲染模块使用（卡片标题取条目头名称，比候选标题更精确）。
+    找不到时返回 None（调用方应回退使用关键词本身）。
+
+    复用 ``_find_head_index`` 与 ``head_at`` 的三级定位逻辑。
+    """
+    lines = _normalize_lines(content)
+    head_index = _find_head_index(lines, keyword)
+    if head_index is not None:
+        return head_at(lines, head_index)
+    return None

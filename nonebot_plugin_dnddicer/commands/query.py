@@ -8,6 +8,9 @@
   其余消息一律不拦截，避免与其他插件抢数字回复；
 - 内容只用于当次回复与短时内存缓存，不落盘；输出统一标注来源（《5e不全书》）；
 - 长内容按 20 行分段发送，最多 3 段（超出截断并提示），避免刷屏；
+- 图片模式（``dnddicer_query_image_enabled``，默认关）开启且装了可选依赖时，
+  词条正文以图片卡片返回（候选列表与各类提示仍为文字）；渲染失败或依赖缺失
+  一律回退文字，查询不丢；
 - 群聊受 .bot 群聊服务开关（白名单）管辖，与其它命令一致；私聊可用；
 - 功能默认关闭（``dnddicer_query_enabled``）：未开启时不外呼、仅回一条提示。
 """
@@ -17,11 +20,12 @@ from __future__ import annotations
 from typing import List, Optional
 
 from nonebot import logger
-from nonebot.adapters.onebot.v11 import Bot, MessageEvent
+from nonebot.adapters.onebot.v11 import Bot, MessageEvent, MessageSegment
 from nonebot.matcher import Matcher
 from nonebot.plugin import on_message
 from nonebot.rule import Rule
 
+from .. import render
 from ..config import get_config
 from ..query import (
     DEFAULT_TTL,
@@ -34,6 +38,7 @@ from ..query import (
     QueryUnavailableError,
     SelectionRecord,
     default_store,
+    find_entry_head,
     locate_entry,
     parse_selection_token,
 )
@@ -48,6 +53,16 @@ MAX_KEYWORDS = 5
 #: 自带省略号，本层超段时追加截断提示（双保险）。
 _CHUNK_LINES = 20
 _MAX_CHUNKS = 3
+
+#: 图片模式回退提示是否已发出（依赖缺失时进程内只提示一次，避免刷屏）
+_image_fallback_notified = False
+
+
+def reset_image_fallback_notice() -> None:
+    """重置「图片模式回退提示已发出」标记（测试清理用）。"""
+    global _image_fallback_notified
+    _image_fallback_notified = False
+
 
 _HELP_QUERY = (
     "规则查询：.查询 <关键词>（.q）\n"
@@ -200,7 +215,7 @@ async def handle_selection(bot: Bot, event: MessageEvent) -> None:
     candidate = record.candidates[number - 1]
     entry_text, located = locate_entry(candidate.content, record.keyword)
     default_store.touch(record)
-    await _send_entry(bot, event, candidate, entry_text, located)
+    await _send_entry(bot, event, candidate, record.keyword, entry_text, located)
     await selection_matcher.finish()
 
 
@@ -247,10 +262,29 @@ async def _send_entry(
     bot: Bot,
     event: MessageEvent,
     candidate: Candidate,
+    keyword: str,
     entry_text: str,
     located: bool,
 ) -> None:
-    """发送词条正文（长内容按行分段，最多 3 段）。"""
+    """发送词条正文：图片模式可用时出图，否则文字分段（最多 3 段）。"""
+    global _image_fallback_notified
+    image_hint = ""
+    # 正文为空（页面无可显示内容）时不出图——空白卡片无意义，走文字侧的提示
+    if get_config().dnddicer_query_image_enabled and entry_text.strip():
+        if render.render_available():
+            try:
+                png = await _render_entry_image(candidate, keyword, entry_text, located)
+            except Exception:
+                # 渲染异常：回退文字（用户无感，查询不丢），细节进日志
+                logger.exception("DNDDicer 规则查询图片渲染失败，已回退文字输出")
+            else:
+                await bot.send(event, MessageSegment.image(png))
+                return
+        elif not _image_fallback_notified:
+            # 依赖缺失：首次回退附一行提示（进程内只提示一次，避免刷屏）
+            _image_fallback_notified = True
+            image_hint = text.TXT_QUERY_IMAGE_FALLBACK
+
     lines: List[str] = [
         text.TXT_QUERY_ENTRY_HEAD.format(
             category=candidate.category or "未分类",
@@ -261,6 +295,8 @@ async def _send_entry(
         lines.append(text.TXT_QUERY_ENTRY_FALLBACK)
     body = entry_text.strip()
     lines.extend(body.splitlines() if body else [text.TXT_QUERY_ENTRY_EMPTY])
+    if image_hint:
+        lines.append(image_hint)
 
     chunks = [lines[i : i + _CHUNK_LINES] for i in range(0, len(lines), _CHUNK_LINES)]
     truncated = len(chunks) > _MAX_CHUNKS
@@ -270,3 +306,21 @@ async def _send_entry(
         if truncated and index == len(chunks) - 1:
             payload.append(text.TXT_QUERY_TRUNCATED)
         await bot.send(event, "\n".join(payload))
+
+
+async def _render_entry_image(
+    candidate: Candidate, keyword: str, entry_text: str, located: bool
+) -> bytes:
+    """渲染词条图片卡片。
+
+    标题取条目头名称（如「镜影术」，比页面标题「二环」更精确）；条目头未命中
+    时退用关键词。分类与来源分别取候选的 category / path。
+    """
+    head = find_entry_head(candidate.content, keyword)
+    return await render.render_rule_card(
+        title=head[0] if head else keyword,
+        category=candidate.category,
+        body=entry_text,
+        source_path=candidate.path,
+        located=located,
+    )

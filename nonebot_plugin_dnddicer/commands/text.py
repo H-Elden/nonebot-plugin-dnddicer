@@ -311,6 +311,12 @@ TXT_QUERY_ENTRY_EMPTY = "该页面没有可显示的正文。"
 #: 内容超长被截断的提示（追加在最后一段）
 TXT_QUERY_TRUNCATED = "（内容过长，已截断）"
 
+# ── 规则查询图片模式（htmlkit 成图）────────────────────────────────────
+#: 图片模式开启但依赖未安装时的回退提示（进程内只附一次，避免刷屏）
+TXT_QUERY_IMAGE_FALLBACK = (
+    "（图片模式已开启，但未安装渲染依赖：pip install nonebot-plugin-dnddicer[render]）"
+)
+
 
 def _d20_crit_counts(res_list: List[RollResult]) -> Tuple[int, int]:
     """统计被保留 d20 骰中的大成功（出目 20）与大失败（出目 1）次数。

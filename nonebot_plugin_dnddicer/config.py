@@ -63,6 +63,11 @@ class Config(BaseModel):
     #: 避免自建实例重启/更新索引的几秒窗口里每次查询都先撞一次
     dnddicer_query_endpoint_cooldown: float = 60.0
 
+    #: 规则查询图片模式开关。默认 False（文字输出）；开启后词条正文以图片卡片
+    #: 返回（仿 5e 不全书站点样式），候选列表仍为文字。需安装 [render] extra
+    #: （nonebot-plugin-htmlkit），未装时自动回退文字。
+    dnddicer_query_image_enabled: bool = False
+
     # 注：更多配置项（第一期落地时逐步补充，例如连掷上限、暗骰私聊开关等）
     # 将在对应功能实现时按需追加，保持「全部有默认值」的零配置原则。
 

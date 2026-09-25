@@ -1,0 +1,101 @@
+/* 规则查询卡片样式（仿 5e 不全书站点）
+   取色自站点样式表：标题 #800000、子标题 #704cd9、正文 #242629、
+   次级文字 #666a70、边框 #dedbd7、浅底 #f7f7f8、白底。
+   litehtml 无 flex/grid，全部按块级排版；正文行以 pre-wrap 呈现
+   （折行已在 Python 侧完成，此处只防溢出兜底）。 */
+
+body {
+  margin: 0;
+  padding: 0;
+  background: #ffffff;
+}
+
+.card {
+  padding: 22px 28px 16px 28px;
+  font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "Segoe UI", sans-serif;
+  font-size: 16px;
+  color: #242629;
+  background: #ffffff;
+}
+
+/* ── 标题区 ─────────────────────────────────────────── */
+.title {
+  font-size: 22px;
+  font-weight: bold;
+  color: #800000;
+  line-height: 1.35;
+  margin-bottom: 8px;
+  white-space: pre-wrap;
+}
+
+.chip {
+  display: inline-block;
+  padding: 1px 8px;
+  margin-right: 8px;
+  font-size: 13px;
+  color: #666a70;
+  background: #f7f7f8;
+  border: 1px solid #dedbd7;
+  border-radius: 4px;
+}
+
+.source {
+  font-size: 13px;
+  color: #666a70;
+}
+
+.divider {
+  height: 2px;
+  background: #800000;
+  margin: 10px 0 14px 0;
+}
+
+/* ── 正文区 ─────────────────────────────────────────── */
+.sub {
+  font-size: 17px;
+  font-weight: bold;
+  color: #704cd9;
+  line-height: 1.6;
+  margin: 14px 0 6px 0;
+  white-space: pre-wrap;
+}
+
+.label,
+.lead {
+  margin: 6px 0;
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+
+.para {
+  margin: 6px 0;
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+
+.strong {
+  font-weight: bold;
+}
+
+.note {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  color: #666a70;
+  white-space: pre-wrap;
+}
+
+/* ── 底部来源行 ─────────────────────────────────────── */
+.footer {
+  margin-top: 16px;
+  padding-top: 8px;
+  border-top: 1px solid #dedbd7;
+  font-size: 13px;
+  color: #666a70;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.footer-source {
+  font-weight: bold;
+  margin-right: 6px;
+}

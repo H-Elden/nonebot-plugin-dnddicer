@@ -152,6 +152,22 @@ def test_locate_entry_rejects_mid_sentence_false_head():
     assert text.startswith("借机攻击是当你")
 
 
+def test_find_entry_head_variants():
+    """条目头查询（图片卡片标题用）：三种形态命中，未命中返回 None。"""
+    from nonebot_plugin_dnddicer.query.locating import find_entry_head
+
+    # 2024 竖线式
+    assert find_entry_head(PAGE_SPELLS_2024, "镜影术") == ("镜影术", "Mirror Image")
+    # 2014 空格式
+    assert find_entry_head(PAGE_TERM_2014, "借机攻击") == ("借机攻击", "Opportunity Attacks")
+    # 前缀命中（关键词是条目名的前缀）
+    assert find_entry_head(PAGE_SPELLS_2024, "镜影") == ("镜影术", "Mirror Image")
+    # 未命中：叙述页无条目头
+    assert find_entry_head(PAGE_NARRATIVE, "优势与劣势") is None
+    # 未命中：关键词在该页完全不存在
+    assert find_entry_head(PAGE_SPELLS_2024, "法术位") is None
+
+
 # =========================================================================
 # 数据源：检索、排序、缓存
 # =========================================================================

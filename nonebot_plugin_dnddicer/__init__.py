@@ -63,10 +63,14 @@ __plugin_meta__ = PluginMetadata(
 # 子模块导入策略：
 # - engine（掷骰引擎）无初始化副作用，随包导入以尽早暴露导入错误（引擎单测在
 #   pytest 收集阶段直接 import 本包时也需要可用）；
-# - commands（命令注册：顶层创建 on_message matcher 并读取插件配置）与 data
-#   （localstore 存储）必须在 NoneBot 初始化后的加载流程中导入，否则略过——
-#   这正是 NoneBot 加载本插件时的场景（NoneFlow/宿主加载），matcher 照常注册。
+# - commands（命令注册：顶层创建 on_message matcher 并读取插件配置）、data
+#   （localstore 存储）与 render（图片渲染：条件 require 可选依赖）必须在
+#   NoneBot 初始化后的加载流程中导入，否则略过——这正是 NoneBot 加载本插件时
+#   的场景（NoneFlow/宿主加载），matcher 照常注册。
+#   注：render 需在**加载期**导入——其条件 require 触发的 fontconfig 初始化
+#   依赖驱动的 startup 钩子，延后到首次查询就来不及了。
 if _nonebot_initialized():
     from . import commands  # noqa: E402,F401
     from . import data  # noqa: E402,F401
+    from . import render  # noqa: E402,F401
 from . import engine  # noqa: E402,F401

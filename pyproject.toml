@@ -64,6 +64,12 @@ dev = [
     "nonebug>=0.4.4,<1.0.0",
     "nonebot2[fastapi]>=2.4.0,<3.0.0",
 ]
+# 规则查询图片模式（htmlkit 成图）：可选渲染依赖，默认不装。
+# 开启 dnddicer_query_image_enabled 后需安装此 extra 才能出图，
+# 否则回退为文字输出。htmlkit 当前仍为 RC，依赖写法须带预发布标记。
+render = [
+    "nonebot-plugin-htmlkit>=0.1.0rc5",
+]
 
 [dependency-groups]
 # 开发/测试依赖组（uv / pdm 使用；pip 用户装 [dev] extra，内容与上方保持一致）
@@ -85,6 +91,8 @@ path = "nonebot_plugin_dnddicer/version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["nonebot_plugin_dnddicer"]
+# 确保模板文件（HTML/CSS）随 wheel 分发
+artifacts = ["nonebot_plugin_dnddicer/render/templates/*.html", "nonebot_plugin_dnddicer/render/templates/*.css"]
 
 [tool.hatch.metadata]
 license-files = ["LICENSE"]

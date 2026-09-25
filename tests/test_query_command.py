@@ -3,7 +3,8 @@
 覆盖：开关默认关闭的提示、用法与关键词上限、候选列表渲染、别名（.q/.s）、
 数字选择与越界、+/- 翻页（含到头到底）、条目头定位与回退提示、长内容分段、
 私有会话可用、服务不可用降级、多端点回退、以及「过期记录 / 他人数字 /
-无记录数字」一律不响应（不与其他插件抢消息）；门禁单独用例（service_gate）。
+无记录数字」一律不响应（不与其他插件抢消息）；门禁单独用例（service_gate）；
+图片模式（开关开/关、发图、渲染失败回退、依赖缺失回退与首提示一次）。
 
 注：NoneBot 群聊会话 id 形如 ``group_<群号>_<用户号>``（已含用户维度），
 候选记录按「会话 + 用户」隔离即等价于按用户隔离。
@@ -11,10 +12,12 @@
 
 from __future__ import annotations
 
+from typing import Optional
+
 import pytest
 from nonebug import App
 from nonebot.adapters.onebot.v11 import Adapter as OnebotV11Adapter
-from nonebot.adapters.onebot.v11 import Bot, Message
+from nonebot.adapters.onebot.v11 import Bot, Message, MessageSegment
 
 from fake_event import fake_group_message_event_v11, fake_private_message_event_v11
 from query_fakes import (
@@ -26,6 +29,7 @@ from query_fakes import (
     make_search_response,
 )
 
+from nonebot_plugin_dnddicer import render
 from nonebot_plugin_dnddicer.commands import query as query_cmd
 from nonebot_plugin_dnddicer.commands import text
 from nonebot_plugin_dnddicer.config import get_config
@@ -44,17 +48,45 @@ _G = 33333          # 专用群号（与其它测试文件隔离）
 _USER = 12345678
 _OTHER_USER = 99999999
 
+#: 1×1 透明 PNG（假渲染器产物；仅用于断言「发的是图片」）
+_PNG_1PX = bytes.fromhex(
+    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4"
+    "890000000a49444154789c6300010000050001"
+    "0d0a2db40000000049454e44ae426082"
+)
+
+
+def _fake_renderer(png: bytes = _PNG_1PX, calls: Optional[list] = None):
+    """构造假渲染器（记录调用参数，返回固定 PNG 字节）。"""
+
+    async def _render(title, category, body, source_path, located):
+        if calls is not None:
+            calls.append(
+                {
+                    "title": title,
+                    "category": category,
+                    "body": body,
+                    "source_path": source_path,
+                    "located": located,
+                }
+            )
+        return png
+
+    return _render
+
+
 
 # ── 夹具 ────────────────────────────────────────────────────────────────
 
 
 @pytest.fixture(autouse=True)
 def _clean_query_state():
-    """每个用例前后清理候选记录与数据源注入（用例互不影响）。"""
+    """每个用例前后清理候选记录、数据源注入与渲染器（用例互不影响）。"""
     default_store.reset()
     yield
     default_store.reset()
     query_cmd.set_source(None)
+    render.reset_renderer()
 
 
 @pytest.fixture
@@ -476,8 +508,226 @@ async def test_overlong_entry_truncated_with_note(app: App, enabled_query):
         ctx.receive_event(bot, event)
 
 
-# ── 门禁（真实服务开关，不旁路）──────────────────────────────────────────
+# ── 图片模式（dnddicer_query_image_enabled，默认关）──────────────────────
 
+
+@pytest.fixture
+def image_mode(monkeypatch):
+    """打开图片模式开关（渲染器由用例自行注入或缺失）。"""
+    monkeypatch.setattr(get_config(), "dnddicer_query_image_enabled", True)
+    query_cmd.reset_image_fallback_notice()
+    yield
+    render.reset_renderer()
+    query_cmd.reset_image_fallback_notice()
+
+
+async def _expect_image(app: App, matcher, event, png: bytes) -> None:
+    """断言发出的是图片消息（内容为给定 PNG 字节）。
+
+    注：nonebug 捕获的是命令层直接交给 ``bot.send`` 的 ``MessageSegment``
+    （不经过适配器包装），故期望值也用 ``MessageSegment``。
+    """
+    async with app.test_matcher(matcher) as ctx:
+        adapter = ctx.create_adapter(base=OnebotV11Adapter)
+        bot = ctx.create_bot(base=Bot, adapter=adapter)
+        ctx.should_call_send(event, MessageSegment.image(png))
+        ctx.receive_event(bot, event)
+
+
+def _setup_entry(transport_routes=None):
+    """安装假数据源（默认：镜影术条目）。"""
+    routes = transport_routes or _routes([make_result(1, "二环", PAGE_SPELLS_2024)])
+    return _install(FakeTransport(routes))
+
+
+@pytest.mark.asyncio
+async def test_image_mode_off_still_sends_text(app: App, enabled_query):
+    """开关默认关闭：即便注入了渲染器，词条仍按文字发送（逐字不变）。"""
+    render.set_renderer(_fake_renderer())
+    _setup_entry()
+    await _expect(
+        app,
+        query_cmd.query_matcher,
+        _group_event(".查询 镜影术"),
+        _expected_list("镜影术", [("二环", "玩家手册2024")]),
+    )
+    entry_body = (
+        "二环 幻术\n"
+        "施法时间：1 动作\n"
+        "距离：自身\n"
+        "成分：V、S\n"
+        "持续时间：1 分钟\n"
+        "三个镜像出现在你周围，用于迷惑攻击者。"
+    )
+    await _expect(
+        app,
+        query_cmd.selection_matcher,
+        _group_event("1"),
+        _expected_entry("二环", "玩家手册2024", entry_body),
+    )
+
+
+@pytest.mark.asyncio
+async def test_image_mode_sends_rendered_card(app: App, enabled_query, image_mode):
+    """开关开 + 渲染器可用：词条以图片发送，标题取条目头名称。"""
+    calls: list = []
+    render.set_renderer(_fake_renderer(calls=calls))
+    _setup_entry()
+    # 候选列表仍为文字（候选列表不出图）
+    await _expect(
+        app,
+        query_cmd.query_matcher,
+        _group_event(".查询 镜影术"),
+        _expected_list("镜影术", [("二环", "玩家手册2024")]),
+    )
+    await _expect_image(app, query_cmd.selection_matcher, _group_event("1"), _PNG_1PX)
+
+    assert len(calls) == 1
+    call = calls[0]
+    # 标题取条目头名称（比页面标题「二环」精确）
+    assert call["title"] == "镜影术"
+    assert call["category"] == "玩家手册2024"
+    assert call["located"] is True
+    assert "三个镜像出现在你周围" in call["body"]
+    assert call["source_path"].endswith(".htm")
+
+
+@pytest.mark.asyncio
+async def test_image_mode_falls_back_when_title_missing(app: App, enabled_query, image_mode):
+    """条目头未命中（叙述页片段）：卡片标题退用关键词。"""
+    calls: list = []
+    render.set_renderer(_fake_renderer(calls=calls))
+    _install(FakeTransport(_routes([], [make_result(5, "优势与劣势", PAGE_NARRATIVE)])))
+    await _expect(
+        app,
+        query_cmd.query_matcher,
+        _group_event(".查询 优势与劣势"),
+        _expected_list("优势与劣势", [("优势与劣势", "玩家手册2024")]),
+    )
+    await _expect_image(app, query_cmd.selection_matcher, _group_event("1"), _PNG_1PX)
+    assert calls[0]["title"] == "优势与劣势"
+    assert calls[0]["located"] is False
+
+
+@pytest.mark.asyncio
+async def test_image_render_error_falls_back_to_text(app: App, enabled_query, image_mode):
+    """渲染抛异常：落回文字输出（与默认文字逐字一致，不加提示）。"""
+
+    async def _boom(title, category, body, source_path, located):
+        raise RuntimeError("渲染失败")
+
+    render.set_renderer(_boom)
+    _setup_entry()
+    await _expect(
+        app,
+        query_cmd.query_matcher,
+        _group_event(".查询 镜影术"),
+        _expected_list("镜影术", [("二环", "玩家手册2024")]),
+    )
+    entry_body = (
+        "二环 幻术\n"
+        "施法时间：1 动作\n"
+        "距离：自身\n"
+        "成分：V、S\n"
+        "持续时间：1 分钟\n"
+        "三个镜像出现在你周围，用于迷惑攻击者。"
+    )
+    await _expect(
+        app,
+        query_cmd.selection_matcher,
+        _group_event("1"),
+        _expected_entry("二环", "玩家手册2024", entry_body),
+    )
+
+
+@pytest.mark.asyncio
+async def test_image_dependency_missing_hint_once(app: App, enabled_query, image_mode, monkeypatch):
+    """开关开但依赖缺失：回退文字 + 首次附一行提示（第二次不再附）。"""
+    monkeypatch.setattr(render, "render_available", lambda: False)
+    _setup_entry()
+    await _expect(
+        app,
+        query_cmd.query_matcher,
+        _group_event(".查询 镜影术"),
+        _expected_list("镜影术", [("二环", "玩家手册2024")]),
+    )
+    entry_body = (
+        "二环 幻术\n"
+        "施法时间：1 动作\n"
+        "距离：自身\n"
+        "成分：V、S\n"
+        "持续时间：1 分钟\n"
+        "三个镜像出现在你周围，用于迷惑攻击者。"
+    )
+    # 首次：文字 + 提示行
+    await _expect(
+        app,
+        query_cmd.selection_matcher,
+        _group_event("1"),
+        _expected_entry("二环", "玩家手册2024", entry_body)
+        + "\n"
+        + text.TXT_QUERY_IMAGE_FALLBACK,
+    )
+    # 第二次：文字（不再附提示）
+    await _expect(
+        app,
+        query_cmd.selection_matcher,
+        _group_event("1"),
+        _expected_entry("二环", "玩家手册2024", entry_body),
+    )
+
+
+@pytest.mark.asyncio
+async def test_image_mode_off_no_hint_when_dependency_missing(app: App, enabled_query, monkeypatch):
+    """开关关闭时不检查依赖、也不附提示（默认装机零打扰）。"""
+    monkeypatch.setattr(render, "render_available", lambda: False)
+    _setup_entry()
+    await _expect(
+        app,
+        query_cmd.query_matcher,
+        _group_event(".查询 镜影术"),
+        _expected_list("镜影术", [("二环", "玩家手册2024")]),
+    )
+    entry_body = (
+        "二环 幻术\n"
+        "施法时间：1 动作\n"
+        "距离：自身\n"
+        "成分：V、S\n"
+        "持续时间：1 分钟\n"
+        "三个镜像出现在你周围，用于迷惑攻击者。"
+    )
+    await _expect(
+        app,
+        query_cmd.selection_matcher,
+        _group_event("1"),
+        _expected_entry("二环", "玩家手册2024", entry_body),
+    )
+
+
+@pytest.mark.asyncio
+async def test_image_mode_skips_empty_body(app: App, enabled_query, image_mode):
+    """正文为空（页面无可显示内容）：不出空白图，走文字侧的「无正文」提示。"""
+    calls: list = []
+    render.set_renderer(_fake_renderer(calls=calls))
+    _install(FakeTransport(_routes([make_result(1, "空页", "\n\n")])))
+    await _expect(
+        app,
+        query_cmd.query_matcher,
+        _group_event(".查询 空页"),
+        _expected_list("空页", [("空页", "玩家手册2024")]),
+    )
+    await _expect(
+        app,
+        query_cmd.selection_matcher,
+        _group_event("1"),
+        _expected_entry(
+            "空页", "玩家手册2024", text.TXT_QUERY_ENTRY_EMPTY, fallback=True
+        ),
+    )
+    assert calls == []
+
+
+# ── 门禁（真实服务开关，不旁路）──────────────────────────────────────────
 
 @pytest.mark.service_gate
 @pytest.mark.asyncio
