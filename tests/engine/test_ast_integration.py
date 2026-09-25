@@ -47,6 +47,25 @@ class TestASTEngineAdapter:
         assert result.get_val() == 3
         assert result.get_complete_result() == "1+2=3"
 
+    def test_modifier_echo_wraps_comparison_only(self):
+        """带比较符的修饰符（R / X / XO / CS）回显以英文括号包裹；
+        K / KL / M / P / F 无比较符，保持原样（2026-09-26 修订）。"""
+        assert exec_roll_exp_unified(
+            "2D6R=1+3", dice_roller=MockDiceRoller([1, 3, 5])
+        ).get_exp() == "2D6(R=1)+3"
+        assert exec_roll_exp_unified(
+            "1D6X>=6", dice_roller=MockDiceRoller([6, 3])
+        ).get_exp() == "1D6(X>=6)"
+        assert exec_roll_exp_unified(
+            "3D20CS>=15", dice_roller=MockDiceRoller([16, 7, 18])
+        ).get_exp() == "3D20(CS>=15)"
+        assert exec_roll_exp_unified(
+            "4D6K3", dice_roller=MockDiceRoller([1, 4, 2, 6])
+        ).get_exp() == "4D6K3"
+        assert exec_roll_exp_unified(
+            "1D6M2", dice_roller=MockDiceRoller([1])
+        ).get_exp() == "1D6M2"
+
     def test_syntax_error_raises(self):
         from nonebot_plugin_dnddicer.engine.roll.roll_utils import RollDiceError
         with pytest.raises(RollDiceError):

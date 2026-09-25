@@ -234,7 +234,9 @@ def canonical_str(node: ASTNode) -> str:
 
     规范化规则：
     - DiceNode: count 和 sides 都显式写出，如 ``D`` → ``1D20``，``3D`` → ``3D20``
-    - 修饰符按短名称（ModifierType.value）拼接
+    - 修饰符按短名称（ModifierType.value）拼接；带比较符的（R / X / XO / CS）
+      以英文括号包裹（如 ``2D6(R=1)+3``，2026-09-26 修订，避免修饰符里的
+      比较符与结果的 ``=`` 混淆）
     - 算术运算符保留原样
     - 括号节点保留括号
     """
@@ -270,7 +272,12 @@ def canonical_str(node: ASTNode) -> str:
 
 
 def _modifier_to_str(mod: "ModifierNode") -> str:
-    """将修饰符节点转为字符串，如 K1、KL2、R<5、CS>10 等。"""
+    """将修饰符节点转为字符串，如 K1、KL2、(R<5)、(CS>10) 等。
+
+    带比较符的修饰符（R / X / XO / CS）以英文括号包裹：早先直接拼成
+    ``2D6R=1+3``，修饰符里的 ``=`` 与结果分隔的 ``=`` 阅读混淆
+    （2026-09-26 修订）；K / KL / M / P / F 无比较符，保持原样。
+    """
     mt = mod.modifier_type
     base = mt.value  # "K", "KL", "R", "X", "XO", "M", "P", "F", "CS"
 
@@ -287,9 +294,9 @@ def _modifier_to_str(mod: "ModifierNode") -> str:
 
     elif mt in (ModifierType.REROLL, ModifierType.EXPLODE,
                 ModifierType.EXPLODE_ONCE, ModifierType.COUNT_SUCCESS):
-        # R / X / XO / CS + compare_op + compare_value
+        # R / X / XO / CS + compare_op + compare_value（带比较符 → 括号包裹）
         if mod.compare_op is not None and mod.compare_value is not None:
-            return f"{base}{mod.compare_op.value}{mod.compare_value}"
+            return f"({base}{mod.compare_op.value}{mod.compare_value})"
         return base
 
     return base
