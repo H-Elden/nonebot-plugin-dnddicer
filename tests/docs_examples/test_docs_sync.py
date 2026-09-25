@@ -38,6 +38,7 @@ SYNCED_PAGES = [
     "guide/weapons.md",
     "guide/hp-rest.md",
     "guide/battle.md",
+    "guide/query.md",
     "guide/dm-guide.md",
     "guide/overview.md",
     "guide/faq.md",

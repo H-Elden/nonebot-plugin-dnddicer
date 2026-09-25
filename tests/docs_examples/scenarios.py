@@ -19,7 +19,6 @@ quickstart_bot_on = Scene(
         Step("白鸦", "@屠龙骰 .bot on", gate="real"),
     ],
 )
-
 quickstart_bot_info = Scene(
     id="quickstart_bot_info",
     title="查看插件信息与本群服务状态",
@@ -1004,6 +1003,71 @@ quickstart_bot_off = Scene(
     ],
 )
 
+
+# ── 第八幕：规则查询（《规则查询》页）─────────────────────────────────────
+# 注：本幕的词条内容为**演示用合成文本**（文档页不转录《5e不全书》正文，
+# 见 query_demo.py）；查询命令的真实行为（候选列表、数字选择、翻页、按处
+# 开关、查询范围）全部真实执行，示例逐字来自基线转录。
+
+query_search_select = Scene(
+    id="query_search_select",
+    title="规则查询：名称检索 → 候选列表 → 回复数字看词条",
+    steps=[
+        Step("阿茶", ".查询 镜影术"),
+        Step("阿茶", "1"),
+    ],
+)
+
+query_full_paging = Scene(
+    id="query_full_paging",
+    title="全文检索与翻页：.搜索 返回候选，+ / - 翻页（60 秒内有效）",
+    steps=[
+        Step("阿茶", ".搜索 借机攻击"),
+        Step("阿茶", "+"),
+        Step("阿茶", "-"),
+    ],
+)
+
+query_multi_keyword = Scene(
+    id="query_multi_keyword",
+    title="多关键词：| 表示或，空格分隔表示且",
+    steps=[
+        Step("阿茶", ".查询 火焰|闪电"),
+        Step("阿茶", ".查询 火焰 伤害"),
+    ],
+)
+
+query_image_switch = Scene(
+    id="query_image_switch",
+    title="图片显示：按处开关需骰主先开启（未开启时被拒并回退文字）",
+    steps=[
+        Step("阿茶", ".查询图片"),
+        Step("阿茶", ".查询图片 on"),
+        Step("阿茶", ".查询图片"),
+    ],
+)
+
+query_scope_set = Scene(
+    id="query_scope_set",
+    title="查询范围：用书目缩写收窄本群可查的书（含整目录提示与恢复）",
+    steps=[
+        Step("白鸦", ".查询范围 PHB24,MM25,XGE"),
+        Step("白鸦", ".查询范围"),
+        Step("阿茶", ".查询 镜影术"),          # 范围内命中：正常出候选
+        Step("阿茶", ".查询 法术位"),          # 范围内无结果：提示说明当前范围
+        Step("白鸦", ".查询范围 Dk"),          # 合作内容书目：提示改用整目录键
+        Step("白鸦", ".查询范围 全部"),         # 恢复全部书目
+    ],
+)
+
+query_books_text = Scene(
+    id="query_books_text",
+    title="书目表：.规则书 列出可设置项（骰主未开图片模式时为文字形态）",
+    steps=[
+        Step("白鸦", ".规则书"),
+    ],
+)
+
 #: 时间线（顺序执行；后续按页补场景，注意保持剧情顺序）
 TIMELINE = [
     quickstart_bot_on,
@@ -1111,5 +1175,12 @@ TIMELINE = [
     faq_dset,
     faq_default_face,
     faq_dset_denied,
+    # 第八幕：规则查询（《规则查询》页）
+    query_search_select,
+    query_multi_keyword,
+    query_full_paging,
+    query_image_switch,
+    query_scope_set,
+    query_books_text,
     quickstart_bot_off,  # 压轴：服务关闭后本群不再响应其他命令
 ]

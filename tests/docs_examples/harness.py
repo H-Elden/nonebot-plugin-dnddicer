@@ -166,14 +166,23 @@ class TimelineRunner:
         self.bot.recorder = self.recorder  # type: ignore[attr-defined]
 
     async def reset_group_state(self) -> None:
-        """重置示例群状态（服务关闭、清空角色卡 / NPC 血量 / 先攻表 / 群配置）。"""
+        """重置示例群状态（服务关闭、清空角色卡 / NPC 血量 / 先攻表 / 群配置 / 查询设置）。
+
+        规则查询场景另装**合成数据源**（见 query_demo.py）：查询行为真实执行，
+        词条内容为自写演示文本（文档页不能转录规则原文）。
+        """
+        from nonebot_plugin_dnddicer.commands import query as query_cmd
         from nonebot_plugin_dnddicer.data import (
             characters,
             group_config,
             initiative,
             npc_health,
+            query_settings,
             service_state,
         )
+        from nonebot_plugin_dnddicer.query import default_store
+
+        import query_demo
 
         await service_state.set_service_enabled(cast.GROUP_ID, False)
         for persona in cast.PERSONAS:
@@ -181,13 +190,37 @@ class TimelineRunner:
         await npc_health.clear_npc_health(cast.GROUP_ID)
         await initiative.clear_init_list(cast.GROUP_ID)
         await group_config.set_group_config_field(cast.GROUP_ID, "default_dice", "D20")
+        # 查询：本处设置回到默认（文字、全部书目），候选记录与数据源一并复位
+        chat_key = query_settings.group_key(cast.GROUP_ID)
+        await query_settings.set_image_enabled(chat_key, False)
+        await query_settings.set_scope(chat_key, None)
+        default_store.reset()
+        query_cmd.set_source(query_demo.build_demo_source())
 
     async def run_scene(self, scene: Scene) -> List[Line]:
         """跑一个场景，返回本场景产生的消息行。"""
         start = len(self.recorder.lines)
         for index, step in enumerate(scene.steps, start=1):
-            await self.run_step(step, label=f"{scene.id}#{index}")
+            with self._query_enabled():
+                await self.run_step(step, label=f"{scene.id}#{index}")
         return self.recorder.lines[start:]
+
+    @contextmanager
+    def _query_enabled(self) -> Iterator[None]:
+        """场景执行期间开启规则查询（骰主配置默认关闭）；结束后还原。
+
+        规则查询与图片模式的总开关默认关（零配置可加载）：文档要演示查询行为，
+        故在场景内临时打开——单步收敛，不影响其他测试与示例场景。
+        """
+        from nonebot_plugin_dnddicer.config import get_config
+
+        config = get_config()
+        original = config.dnddicer_query_enabled
+        config.dnddicer_query_enabled = True
+        try:
+            yield
+        finally:
+            config.dnddicer_query_enabled = original
 
     async def run_step(self, step: Step, *, label: str) -> None:
         """执行一步：记录输入 → 真实分发 → 校验骰值恰好耗尽。"""

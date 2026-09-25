@@ -52,6 +52,7 @@ export default defineConfig({
           { text: '武器与攻击', link: '/guide/weapons' },
           { text: 'HP 与长休', link: '/guide/hp-rest' },
           { text: '战斗轮', link: '/guide/battle' },
+          { text: '规则查询', link: '/guide/query' },
         ],
       },
       {
