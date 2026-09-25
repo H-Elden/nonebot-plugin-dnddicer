@@ -18,6 +18,7 @@
 - npc.py           NPC 血量跨战斗保持开关（.npc 持久 / .npc 临时，已落地）
 - initiative.py    先攻列表（.init/.ri/.先攻 + .先攻检定 联动入表，已落地）
 - battle.py        战斗轮（.br/.ed/.回合/.轮次，已落地）
+- query.py         规则查询（.查询/.q + .搜索/.s/.检索，候选列表 + 数字选择，已落地）
 - bot.py           .bot 插件信息服务与群聊服务开关（2026-09-09 宿主新需求）
 - group_config.py  群配置（默认骰面 .dset，已落地）
 - help.py          帮助（.帮助 / .help，已落地；须在其它命令之后导入以保持列表顺序）
@@ -33,6 +34,7 @@ from . import hp  # noqa: F401  # .hp / .长休 HP 管理
 from . import npc  # noqa: F401  # .npc 持久/.npc 临时 NPC 血量跨战斗保持开关
 from . import initiative  # noqa: F401  # .init/.ri/.先攻 先攻列表
 from . import battle  # noqa: F401  # .br/.ed/.回合/.轮次 战斗轮
+from . import query  # noqa: F401  # .查询/.搜索 规则查询（候选 + 数字选择）
 from . import bot  # noqa: F401  # .bot 插件信息与群聊服务开关
 from . import help  # noqa: F401  # .帮助 / .help（须在其它命令之后导入以保持列表顺序）
 from . import roll_parse_args  # noqa: F401  # .r 参数解析（引擎同源）

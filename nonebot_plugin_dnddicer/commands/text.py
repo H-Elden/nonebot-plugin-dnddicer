@@ -278,6 +278,40 @@ TXT_BR_ERROR_NOT_FOUND = "没有找到这个回合。"
 TXT_BR_ERROR_TOO_MUCH_FOUND = "找到复数回合，请换一个关键词。"
 
 
+# ── 规则查询 .查询/.搜索 文案（T2）─────────────────────────────────────
+# 查询结果来自《5e不全书》内容（在线服务或其自建实例），输出统一标注来源；
+# 候选项与词条正文按行组装，长内容由命令层分段发送。
+TXT_QUERY_DISABLED = (
+    "规则查询功能未开启：管理员可在宿主 .env 中设置 DNDDICER_QUERY_ENABLED=true "
+    "并重启后使用。"
+)
+#: 用法提示（{usage} 为两条命令各自的用法片段）
+TXT_QUERY_USAGE = "用法：{usage}"
+TXT_QUERY_USAGE_NAME = ".查询 <关键词>（如 .查询 火球术）；全文检索用 .搜索"
+TXT_QUERY_USAGE_FULL = ".搜索 <关键词>（如 .搜索 借机攻击）；按名称查用 .查询"
+TXT_QUERY_TOO_MANY_KEYWORDS = "关键词过多（最多 {max} 个；空格分隔表示同时满足，| 表示或）。"
+TXT_QUERY_UNAVAILABLE = (
+    "规则查询服务暂不可用（已尝试 {count} 个地址）。请稍后再试；"
+    "若你自建了查询服务，请确认它已启动。"
+)
+TXT_QUERY_NO_RESULT = "没有找到与「{keyword}」相关的内容。可换个关键词，或用 .搜索 全文检索。"
+#: 候选列表标题行（{limited} 为「仅显示前 N 条」提示片段，正常为空串）
+TXT_QUERY_LIST_HEAD = "「{keyword}」共 {count} 条候选{limited}（第 {page}/{pages} 页）："
+TXT_QUERY_LIST_LIMITED = "（候选较多，仅显示前 {count} 条）"
+TXT_QUERY_LIST_ITEM = "{no}. {title}{category}"
+#: 分类展示（候选条目后缀）
+TXT_QUERY_LIST_CATEGORY = "（{category}）"
+TXT_QUERY_LIST_TAIL = "回复数字查看详情，+ / - 翻页（{seconds} 秒内有效）"
+TXT_QUERY_BAD_INDEX = "没有编号 {no}（请输入 1~{max}）。"
+#: 词条正文的标题行（来源标注）
+TXT_QUERY_ENTRY_HEAD = "《5e不全书》· {category} · {title}"
+#: 未能精确定位条目时的提示行（随后为页面片段）
+TXT_QUERY_ENTRY_FALLBACK = "（未精确定位到词条，以下为页面片段）"
+TXT_QUERY_ENTRY_EMPTY = "该页面没有可显示的正文。"
+#: 内容超长被截断的提示（追加在最后一段）
+TXT_QUERY_TRUNCATED = "（内容过长，已截断）"
+
+
 def _d20_crit_counts(res_list: List[RollResult]) -> Tuple[int, int]:
     """统计被保留 d20 骰中的大成功（出目 20）与大失败（出目 1）次数。
 

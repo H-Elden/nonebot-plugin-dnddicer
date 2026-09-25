@@ -9,8 +9,10 @@
 新配置项按需追加，注意保持「全部有默认值」原则。
 """
 
+from typing import List
+
 from nonebot import get_plugin_config
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class Config(BaseModel):
@@ -38,6 +40,28 @@ class Config(BaseModel):
     #: 自带的 "." / "。"——避免 "/help"、"/bot" 等常见单词命令与本插件同时
     #: 命中宿主其他插件（冲突）。宿主环境明确需要时设 true。
     dnddicer_use_host_command_starts: bool = False
+
+    # ── 规则查询（.查询 / .搜索，T2）────────────────────────────────────
+    #: 规则查询总开关。默认 False：不做任何外呼（不给第三方服务造成默认压力）；
+    #: 开启后群聊仍受 .bot 群聊服务开关（白名单）管辖。
+    dnddicer_query_enabled: bool = False
+
+    #: 查询服务端点列表：按顺序优先使用，失败自动回退下一个。
+    #: 默认值为公开在线服务；自建查询服务的骰主把本机地址放首位即可
+    #: （如 ["http://127.0.0.1:13000", "https://5echmsearch.kagangtuya.top"]）。
+    dnddicer_query_base_urls: List[str] = Field(
+        default_factory=lambda: ["https://5echmsearch.kagangtuya.top"]
+    )
+
+    #: 单个端点的请求超时（秒）
+    dnddicer_query_timeout: float = 8.0
+
+    #: 关键词结果缓存时长（秒）：同一关键词在此窗口内不重复外呼
+    dnddicer_query_cache_ttl: float = 600.0
+
+    #: 端点失败后的冷却时长（秒）：冷却期内跳过该端点，
+    #: 避免自建实例重启/更新索引的几秒窗口里每次查询都先撞一次
+    dnddicer_query_endpoint_cooldown: float = 60.0
 
     # 注：更多配置项（第一期落地时逐步补充，例如连掷上限、暗骰私聊开关等）
     # 将在对应功能实现时按需追加，保持「全部有默认值」的零配置原则。
