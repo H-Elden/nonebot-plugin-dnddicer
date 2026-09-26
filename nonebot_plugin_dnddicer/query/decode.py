@@ -55,6 +55,7 @@ HIGHLIGHT_CLASS = "dx-hl"
 # ── 标题点（切分边界）─────────────────────────────────────────────────
 
 _HEAD_TAG_RE = re.compile(r"<H[1-6]\b", re.I)
+_HEADING_RE = re.compile(r"<H([1-6])\b[^>]*>(.*?)</H\1\s*>", re.I | re.S)
 _RED_FONT_RE = re.compile(r"<FONT\s+color=#800000[^>]*>", re.I)
 _RED_BLOCK_RE = re.compile(r"<FONT\s+color=#800000[^>]*>(.{0,300}?)</FONT>", re.I | re.S)
 _STAT_BLOCK_RE = re.compile(r'<div[^>]*\bclass="[^"]*\bstat-block\b[^"]*"', re.I)
@@ -62,6 +63,33 @@ _TAG_RE = re.compile(r"<[^>]+>")
 
 #: 红标题前可回退到的块起始标签（让切片包含段首标签）
 _BLOCK_START_TAGS = ("<p", "<div", "<li", "<strong", "<h1", "<h2", "<h3", "<h4", "<h5", "<h6")
+
+
+def _zh_part(text: str) -> str:
+    """取「中文名 English」的中文部分（首个 ASCII 字母之前）。"""
+    match = re.search(r"[A-Za-z]", text)
+    if match is None:
+        return text.strip()
+    return text[: match.start()].strip(" ·：:")
+
+
+def _find_heading(html: str, name: str):
+    """按文字找**页面级**标题（H1~H6）：精确中文名优先，其次前缀/包含。
+
+    职业 / 起源等条目即整页（站点以 ``<H1>野蛮人 Barbarian</H1>`` 为页题），
+    此规则先于红标题形态匹配（后者用于专长 / 单位小节这类页内条目）。
+    """
+    fallback = None
+    for match in _HEADING_RE.finditer(html):
+        text = _clean_text(match.group(2))
+        zh = _zh_part(text)
+        if not zh:
+            continue
+        if zh == name:
+            return match, text
+        if fallback is None and (zh.startswith(name) or name in zh):
+            fallback = match, text
+    return fallback
 
 
 def _clean_text(fragment: str) -> str:
@@ -91,6 +119,22 @@ class Slice:
     end: int
     title: str
     located: bool
+    #: 片段内是否还需去掉开头的第一个标题标签（数据卡容器分支：条目头在容器内）
+    drop_first_head: bool = False
+
+
+def _head_end(html: str, open_end: int) -> int:
+    """标题标签（``<H?>`` 已匹配到开标签）的内容结束位置（``</H?>`` 之后）。"""
+    close = re.search(r"</H[1-6]\s*>", html[open_end:], re.I)
+    return open_end + close.end() if close else open_end
+
+
+def _strip_first_heading(fragment: str) -> str:
+    """去掉片段开头的第一个标题标签（含其文字与闭合标签）。"""
+    match = re.search(r"<H[1-6]\b[^>]*>.*?</H[1-6]\s*>", fragment, re.I | re.S)
+    if match is None:
+        return fragment
+    return fragment[: match.start()] + fragment[match.end() :]
 
 
 def slice_entry(
@@ -111,13 +155,15 @@ def slice_entry(
             rf"<H[1-6]\b[^>]*\bid=\"{re.escape(anchor)}\"[^>]*>", html, re.I
         )
         if match is not None:
-            # 2024 怪物数据卡：条目在 stat-block 容器内，整块切出
+            # 2024 怪物数据卡：条目在 stat-block 容器内，整块切出（条目头随后去掉）
             containers = list(_STAT_BLOCK_RE.finditer(html, 0, match.start()))
             if containers:
                 start = containers[-1].start()
                 end = _div_end(html, start)
-                return Slice(start, end, _head_text(html, match), True)
-            start = match.end()
+                return Slice(
+                    start, end, _head_text(html, match), True, drop_first_head=True
+                )
+            start = _head_end(html, match.end())
             end = len(html)
             nxt = _HEAD_TAG_RE.search(html, start)
             if nxt is not None:
@@ -125,6 +171,20 @@ def slice_entry(
             return Slice(start, end, _head_text(html, match), True)
 
     if name:
+        # ② 页面级条目（职业 / 起源等）：标题标签文字与条目名匹配，切到下一个
+        #    同级或更高级标题（或页尾）
+        found = _find_heading(html, name)
+        if found is not None:
+            match, text = found
+            level = int(match.group(1))
+            end = len(html)
+            for nxt in _HEADING_RE.finditer(html, match.end()):
+                if int(nxt.group(1)) <= level:
+                    end = nxt.start()
+                    break
+            return Slice(match.end(), end, text, True)
+
+        # ③ 页内条目（专长 / 单位小节）：紫红加粗标题块
         for match in _RED_BLOCK_RE.finditer(html):
             text = _clean_text(match.group(1))
             if name not in text:
@@ -269,6 +329,11 @@ class _Sanitizer(HTMLParser):
     def handle_data(self, data):
         if self.skip:
             return
+        # 折叠源 HTML 的原始空白（缩进/换行）：渲染侧用 pre-wrap 呈现我们
+        # 自己插入的折行，若保留原始换行会到处多出空行
+        data = re.sub(r"[ \t\r\n\u3000]+", " ", data)
+        if not data:
+            return
         if self._hl_re is None:
             self.out.append(data)
             return
@@ -287,7 +352,9 @@ def sanitize_html(fragment: str, *, highlight: str = "") -> str:
     parser = _Sanitizer(highlight=highlight)
     parser.feed(fragment)
     parser.close()
-    return "".join(parser.out).strip()
+    cleaned = "".join(parser.out).strip()
+    # 标签之间的空白（源缩进/换行）直接删除，避免 pre-wrap 下多出空行
+    return re.sub(r">[ \t\r\n\u3000]+<", "><", cleaned)
 
 
 # ── 文字模式：片段 → 结构化文本 ───────────────────────────────────────
@@ -334,6 +401,117 @@ def fragment_to_text(fragment: str) -> str:
     return "\n".join(out)
 
 
+# ── 富文本折行（Python 侧避头尾；litehtml 无避头尾规则）──────────────
+
+#: 行首禁则标点（不允许出现在行首；与 render/layout.py 同口径）
+_LINE_START_FORBIDDEN = set("。，、；：！？）」』】》…·")
+
+#: 块级标签（出现即视为新行开始；折行宽度重新累计）
+_BLOCK_TAGS = {
+    "p", "div", "li", "ul", "ol", "table", "tr", "td", "th", "hr",
+    "h1", "h2", "h3", "h4", "h5", "h6", "blockquote",
+}
+
+
+def _char_width_px(char: str, font_size: int) -> float:
+    """单字符宽度估算（全角 1em、半角 0.5em；与 render/layout.py 同口径）。"""
+    import unicodedata
+
+    if unicodedata.east_asian_width(char) in ("F", "W"):
+        return float(font_size)
+    return font_size * 0.5
+
+
+class _FragmentWrapper(HTMLParser):
+    """在文本节点内插入换行实现避头尾（标签原样保留、不占宽度）。
+
+    litehtml 无避头尾规则（实测 ``white-space: nowrap`` 不生效），行首标点
+    （如一行以「。」开头）需在 Python 侧规避：按可见宽度累计折行，行首禁则
+    标点拉回上一行（宁可略超宽），ASCII 词整体不拆。
+    """
+
+    def __init__(self, *, width_em: float, font_size: int) -> None:
+        super().__init__(convert_charrefs=True)
+        self.out: List[str] = []
+        self.max_width = width_em * font_size
+        self.font_size = font_size
+        self.line_width = 0.0
+
+    def _emit_text(self, text: str) -> None:
+        index = 0
+        length = len(text)
+        while index < length:
+            char = text[index]
+            if char == " " and self.line_width == 0:
+                index += 1  # 行首空格不输出（标签间残留的空白）
+                continue
+            if char.isascii() and (char.isalnum() or char in "-'"):
+                end = index
+                while (
+                    end < length
+                    and text[end].isascii()
+                    and (text[end].isalnum() or text[end] in "-'")
+                ):
+                    end += 1
+                word = text[index:end]
+                width = sum(_char_width_px(c, self.font_size) for c in word)
+                if self.line_width > 0 and self.line_width + width > self.max_width:
+                    self.out.append("\n")
+                    self.line_width = 0.0
+                self.out.append(word)
+                self.line_width += width
+                index = end
+                continue
+            width = _char_width_px(char, self.font_size)
+            if (
+                self.line_width > 0
+                and self.line_width + width > self.max_width
+                and char not in _LINE_START_FORBIDDEN
+            ):
+                self.out.append("\n")
+                self.line_width = 0.0
+            self.out.append(char)
+            self.line_width += width
+            index += 1
+
+    def handle_starttag(self, tag, attrs):
+        tag = tag.lower()
+        if tag == "br":
+            self.out.append("<br>")
+            self.line_width = 0.0
+            return
+        if tag in _BLOCK_TAGS:
+            self.line_width = 0.0
+        self.out.append(self.get_starttag_text())
+
+    def handle_startendtag(self, tag, attrs):
+        if tag.lower() == "br":
+            self.out.append("<br>")
+            self.line_width = 0.0
+        else:
+            self.out.append(self.get_starttag_text())
+
+    def handle_endtag(self, tag):
+        if tag.lower() in _BLOCK_TAGS:
+            self.line_width = 0.0
+        self.out.append(f"</{tag}>")
+
+    def handle_data(self, data):
+        self._emit_text(data)
+
+
+def wrap_fragment(fragment: str, *, width_em: float = 39, font_size: int = 16) -> str:
+    """对清洗后的片段做「Python 侧折行」（跨标签累计宽度、避头尾、整词保护）。
+
+    渲染侧以 ``white-space: pre-wrap`` 呈现（换行即所见）；宽度预算与
+    ``render/layout.py`` 的文案卡片一致（默认 39em × 16px）。
+    """
+    wrapper = _FragmentWrapper(width_em=width_em, font_size=font_size)
+    wrapper.feed(fragment)
+    wrapper.close()
+    return "".join(wrapper.out)
+
+
 # ── 对外主入口 ─────────────────────────────────────────────────────────
 
 
@@ -362,7 +540,13 @@ def decode_entry(
         ``DecodedEntry``（``located=False`` 表示未精确定位、给的是页面片段）。
     """
     sliced = slice_entry(html, anchor=anchor, name=name)
-    fragment = sanitize_html(html[sliced.start : sliced.end], highlight=keyword)
+    fragment_html = html[sliced.start : sliced.end]
+    if sliced.drop_first_head:
+        fragment_html = _strip_first_heading(fragment_html)
+    # 清洗 → 折行（Python 侧避头尾；图片模式以 pre-wrap 呈现换行）
+    fragment = wrap_fragment(
+        sanitize_html(fragment_html, highlight=keyword)
+    )
     return DecodedEntry(
         title=sliced.title or name,
         fragment=fragment,

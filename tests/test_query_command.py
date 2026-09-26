@@ -101,15 +101,37 @@ def _fake_renderer(png: bytes = _PNG_1PX, calls: Optional[list] = None):
 # ── 夹具 ────────────────────────────────────────────────────────────────
 
 
+class _FailingFetcher:
+    """抓取必失败：通用检索测试走「服务端纯文本」回退路径（避免真实网络）。"""
+
+    async def get_page(self, path: str):
+        from nonebot_plugin_dnddicer.query.models import QueryUnavailableError
+
+        raise QueryUnavailableError([], None)
+
+
 @pytest.fixture(autouse=True)
-def _clean_query_state():
-    """每个用例前后清空候选记录、按处设置、数据源注入与渲染器（互不影响）。"""
+def _clean_query_state(tmp_path):
+    """每个用例前后清空候选记录、按处设置、数据源注入与渲染器（互不影响）。
+
+    另注入「抓取必失败」的索引存储：通用检索的正文层会优先尝试站点页面
+    （富文本），测试中一律失败并回退服务端纯文本，保证离线且断言稳定。
+    """
+    from nonebot_plugin_dnddicer.commands import atlas as _atlas_cmd
+    from nonebot_plugin_dnddicer.query import atlas as _atlas_mod
+
     _reset_query_settings()
     default_store.reset()
+    _atlas_cmd.set_store(
+        _atlas_mod.AtlasStore(
+            _FailingFetcher(), cache_file=tmp_path / "query_atlas.json"
+        )
+    )
     yield
     default_store.reset()
     query_cmd.set_source(None)
     render.reset_renderer()
+    _atlas_cmd.set_store(None)
     _reset_query_settings()
 
 
@@ -346,6 +368,54 @@ async def test_single_candidate_goes_straight_to_entry(app: App, enabled_query):
     # 未写候选记录：随后回复数字不被接管（走普通聊天，不出现「没有编号」提示）
     assert default_store.size == 0
     await _expect_silence(app, query_cmd.selection_matcher, _group_event("1"))
+
+
+@pytest.mark.asyncio
+async def test_site_entry_preferred_over_service_text(app: App, enabled_query, tmp_path):
+    """正文层：站点页面可抓时优先站点正文（富文本路径），标题取条目名。"""
+    from nonebot_plugin_dnddicer.commands import atlas as atlas_cmd
+    from nonebot_plugin_dnddicer.query import atlas as atlas_mod
+
+    class _PageFetcher:
+        def __init__(self, pages: dict) -> None:
+            self.pages = pages
+
+        async def get_page(self, path: str) -> str:
+            return self.pages[path]
+
+    page = (
+        '<H4 id="Fireball">火球术｜Fireball</H4>'
+        "<P><STRONG>施法时间：</STRONG>动作<BR>一段站点正文。</P>"
+        '<H4 id="Other">另一个法术</H4>'
+    )
+    atlas_cmd.set_store(
+        atlas_mod.AtlasStore(
+            _PageFetcher({"玩家手册2024/法术详述/1环.htm": page}),
+            cache_file=tmp_path / "query_atlas.json",
+        )
+    )
+    _install(
+        FakeTransport(
+            _routes(
+                [
+                    make_result(
+                        1,
+                        "火球术",
+                        PAGE_SPELLS_2024,
+                        path="topics/玩家手册2024/法术详述/1环.htm",
+                    )
+                ]
+            )
+        )
+    )
+    await _expect(
+        app,
+        query_cmd.query_matcher,
+        _group_event(".查询 火球术"),
+        _expected_entry(
+            "火球术｜Fireball", "玩家手册2024", "施法时间：动作\n一段站点正文。"
+        ),
+    )
 
 
 @pytest.mark.asyncio

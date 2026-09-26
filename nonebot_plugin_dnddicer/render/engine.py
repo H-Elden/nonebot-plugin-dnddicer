@@ -29,6 +29,7 @@ CARD_WIDTH = 700
 #: 模板目录与模板名
 _TEMPLATE_DIR = Path(__file__).parent / "templates"
 _TEMPLATE_NAME = "rule_card.html"
+_RICH_TEMPLATE_NAME = "rich_card.html"
 _BOOKS_TEMPLATE_NAME = "books_card.html"
 
 #: 可用性判定结果（None = 尚未判定；未初始化时会话下不缓存，留待下次重试）
@@ -155,6 +156,40 @@ async def _render(
     )
 
 
+async def _render_rich(
+    title: str,
+    category: str,
+    body_html: str,
+    source_path: str,
+    located: bool,
+) -> bytes:
+    """渲染富文本词条卡片（站点 HTML 清洗后的片段）为 PNG 字节。
+
+    ``body_html`` 由 ``query/decode.py`` 白名单清洗产出（保留加粗/斜体/颜色/
+    色块表格/列表与站点数据卡类名），模板内以 ``| safe`` 直出；样式由本模块
+    的 ``rich_card.css`` 复刻站点语义，不引用站点任何外部资源（禁网渲染）。
+    """
+    from nonebot_plugin_htmlkit import html_to_pic, none_fetcher
+
+    template = _get_env().get_template(_RICH_TEMPLATE_NAME)
+    html = await template.render_async(
+        title=title,
+        category=category,
+        body_html=body_html,
+        # 未精确定位时在正文顶部加一行说明（与文字模式同口径）
+        fallback_note="" if located else "（未精确定位到词条，以下为页面片段）",
+        source_path=source_path,
+        css=_css_text("rich_card.css"),
+    )
+    return await html_to_pic(
+        html,
+        max_width=CARD_WIDTH,
+        allow_refit=False,
+        img_fetch_fn=none_fetcher,
+        css_fetch_fn=none_fetcher,
+    )
+
+
 async def _render_books(
     sections: List[dict],
     title: str,
@@ -184,6 +219,11 @@ async def _render_books(
 def build_renderer() -> Optional["Renderer"]:
     """构建词条卡片渲染器；不可用时返回 None。"""
     return _render if ensure_available() else None
+
+
+def build_rich_renderer():
+    """构建富文本词条卡片渲染器（站点 HTML 清洗后的片段）；不可用时返回 None。"""
+    return _render_rich if ensure_available() else None
 
 
 def build_books_renderer():

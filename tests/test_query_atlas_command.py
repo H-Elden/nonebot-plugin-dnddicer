@@ -10,13 +10,13 @@ from __future__ import annotations
 import pytest
 from nonebug import App
 from nonebot.adapters.onebot.v11 import Adapter as OnebotV11Adapter
-from nonebot.adapters.onebot.v11 import Bot, Message
+from nonebot.adapters.onebot.v11 import Bot, Message, MessageSegment
 
 from fake_event import fake_group_message_event_v11
 
 from nonebot_plugin_dnddicer.commands import atlas as atlas_cmd
 from nonebot_plugin_dnddicer.commands import query as query_cmd
-from nonebot_plugin_dnddicer.commands import query_atlas, text
+from nonebot_plugin_dnddicer.commands import query_atlas, query_common, text
 from nonebot_plugin_dnddicer.config import get_config
 from nonebot_plugin_dnddicer.data import query_settings
 from nonebot_plugin_dnddicer.query import atlas as atlas_mod
@@ -26,6 +26,13 @@ _G = 55555
 _USER = 12345678
 
 _LEGACY_PATH = "玩家手册/魔法/法术详述/1环.htm"
+
+#: 1×1 透明 PNG（假渲染器产物）
+_PNG_1PX = bytes.fromhex(
+    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4"
+    "890000000a49444154789c6300010000050001"
+    "0d0a2db40000000049454e44ae426082"
+)
 
 _SPELL_TABLE = """<TABLE>
 <TR spell="样例法术Sample Spell">
@@ -289,4 +296,93 @@ async def test_usage_when_keyword_missing(app: App, enabled_query, store):
         text.TXT_QUERY_USAGE.format(
             usage=text.TXT_ATLAS_USAGE.format(kind="法术", example=".查询法术 火球术")
         ),
+    )
+
+
+# ── 图片模式：富文本卡片 ───────────────────────────────────────────────
+
+
+@pytest.fixture
+def image_mode(monkeypatch):
+    """打开图片模式总开关（渲染器由用例注入）。"""
+    from nonebot_plugin_dnddicer import render
+
+    monkeypatch.setattr(get_config(), "dnddicer_query_image_enabled", True)
+    query_common.reset_image_fallback()
+    yield
+    render.reset_renderer()
+
+
+async def _enable_image_here(event) -> None:
+    """把该事件所在处预设为图片显示（等价于先发一次 .查询图片 on）。"""
+    await query_settings.set_image_enabled(query_common.chat_key(event), True)
+
+
+@pytest.mark.asyncio
+async def test_image_mode_sends_rich_card(app: App, enabled_query, store, image_mode):
+    """图片模式：优先富文本卡片（片段保留样式标签与关键词高亮）。"""
+    from nonebot_plugin_dnddicer import render
+
+    calls: list = []
+
+    async def _fake_rich(title, category, body_html, source_path, located):
+        calls.append(
+            {
+                "title": title,
+                "category": category,
+                "body_html": body_html,
+                "located": located,
+            }
+        )
+        return _PNG_1PX
+
+    render.set_rich_renderer(_fake_rich)
+    await _enable_image_here(_group_event("1"))
+
+    async with app.test_matcher(query_atlas.spell_matcher) as ctx:
+        adapter = ctx.create_adapter(base=OnebotV11Adapter)
+        bot = ctx.create_bot(base=Bot, adapter=adapter)
+        event = _group_event(".查询法术 旧版")
+        ctx.should_call_send(event, MessageSegment.image(_PNG_1PX))
+        ctx.receive_event(bot, event)
+
+    assert calls and calls[0]["title"].startswith("旧版样例法术")
+    assert calls[0]["category"] == "玩家手册2014 · 一环 · 惑控"
+    assert "施法时间：" in calls[0]["body_html"]
+    assert '<span class="dx-hl">旧版</span>' in calls[0]["body_html"]
+    assert calls[0]["located"] is True
+
+
+@pytest.mark.asyncio
+async def test_entry_fetch_failure_hint(app: App, enabled_query, image_mode, tmp_path):
+    """索引可用但详情页抓取失败：唯一命中路径给出服务不可用提示。"""
+    from nonebot_plugin_dnddicer.query.models import QueryUnavailableError
+
+    class _PartialFetcher:
+        """速查表可抓、详情页不可达。"""
+
+        def __init__(self, pages: dict) -> None:
+            self.pages = pages
+
+        async def get_page(self, path: str) -> str:
+            if path in self.pages:
+                return self.pages[path]
+            raise QueryUnavailableError([path], None)
+
+    atlas_cmd.set_store(
+        atlas_mod.AtlasStore(
+            _PartialFetcher(
+                {
+                    atlas_mod._QUICKREF_PAGES["spell"][0]: _SPELL_TABLE,
+                    atlas_mod._QUICKREF_PAGES["spell"][1]: "<TABLE></TABLE>",
+                }
+            ),
+            cache_file=tmp_path / "query_atlas.json",
+        )
+    )
+    await _expect(
+        app,
+        query_atlas.spell_matcher,
+        _group_event(".查询法术 旧版"),
+        text.TXT_QUERY_UNAVAILABLE.format(count=1),
     )

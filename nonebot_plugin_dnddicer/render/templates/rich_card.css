@@ -1,0 +1,212 @@
+/* 富文本词条卡片样式（站点 HTML 清洗后的片段；2026-09-26）
+   与 rule_card.css 同一主题（取色自站点样式表），并复刻：
+   - 站点标签语义配色（术语绿 / 法术紫 / 魔法物品蓝 / 怪物橙红）；
+   - 2024 怪物数据卡规格（米色底、双线框、属性块交替底色）；
+   - 表格、列表、高亮（dx-hl）样式。
+   litehtml 无 flex/grid，全部按块级排版。 */
+
+body {
+  margin: 0;
+  padding: 0;
+  background: #ffffff;
+}
+
+.card {
+  padding: 22px 28px 16px 28px;
+  font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "Segoe UI", sans-serif;
+  font-size: 16px;
+  color: #242629;
+  background: #ffffff;
+}
+
+/* ── 标题区 ─────────────────────────────────────────── */
+.title {
+  font-size: 22px;
+  font-weight: bold;
+  color: #800000;
+  line-height: 1.35;
+  margin-bottom: 8px;
+}
+
+.chip {
+  display: inline-block;
+  padding: 1px 8px;
+  margin-right: 8px;
+  font-size: 13px;
+  color: #666a70;
+  background: #f7f7f8;
+  border: 1px solid #dedbd7;
+  border-radius: 4px;
+}
+
+.source {
+  font-size: 13px;
+  color: #666a70;
+}
+
+.divider {
+  height: 2px;
+  background: #800000;
+  margin: 10px 0 14px 0;
+}
+
+/* ── 正文区 ─────────────────────────────────────────── */
+.content {
+  line-height: 1.75;
+  /* 折行在 Python 侧完成（query/decode.py 的 wrap_fragment，避头尾），
+     此处只把换行原样呈现并兜底防溢出 */
+  white-space: pre-wrap;
+}
+
+.content p {
+  margin: 6px 0;
+}
+
+.content .rt-h {
+  font-size: 17px;
+  font-weight: bold;
+  color: #704cd9;
+  margin: 14px 0 6px 0;
+}
+
+.content ul {
+  margin: 6px 0;
+  padding-left: 1.4em;
+}
+
+.content li {
+  margin: 2px 0;
+}
+
+.content hr {
+  border: none;
+  border-top: 1px solid #dedbd7;
+  margin: 10px 0;
+}
+
+/* 站点标签语义配色（与站点 stat-block.css 同口径；不复制其样式资产） */
+.content u {
+  color: #008000;
+  font-weight: bold;
+  text-decoration: none;
+}
+
+.content u i,
+.content u em {
+  color: #704CD9;
+  font-style: italic;
+  font-weight: bold;
+}
+
+.content em u,
+.content i u {
+  color: #0000ff;
+  font-style: normal;
+  font-weight: bold;
+}
+
+.content b u,
+.content u b,
+.content strong u,
+.content u strong {
+  color: #ee3300;
+  font-weight: bold;
+}
+
+/* 关键词高亮（未精确定位 / 通用检索时标出命中处） */
+.dx-hl {
+  background-color: #fff3a0;
+}
+
+/* 表格（普通内容表：表头底色来自站点 bgcolor，此处给边框） */
+.rt-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 15px;
+}
+
+.rt-table td,
+.rt-table th {
+  padding: 4px 8px;
+  border: 1px solid #dedbd7;
+}
+
+/* ── 2024 怪物数据卡（视觉规格参照站点样式表）───────────────── */
+.stat-block {
+  background: #F8F8F6;
+  border: 3px double #808080;
+  padding: 12px 15px 6px 15px;
+  margin: 0 0 12px 0;
+}
+
+.stat-block .rt-h {
+  color: #800000;
+  border-bottom: 1px solid #800000;
+  margin: 12px 0 6px 0;
+  font-size: 17px;
+}
+
+.stat-block .sub-line {
+  color: #808080;
+  font-style: italic;
+  margin: 0 0 10px 0;
+}
+
+.stat-block table,
+.stat-block .rt-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 8px 0;
+  color: #800000;
+  font-size: 16px;
+}
+
+.stat-block table td,
+.stat-block table th {
+  border: none;
+  padding: 1px 4px;
+  text-align: left;
+}
+
+.stat-block table.stat-abilities {
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+.stat-block table.stat-abilities th {
+  font-size: 12px;
+  color: #808080;
+  font-weight: normal;
+  text-align: center;
+}
+
+.stat-block table.stat-abilities td {
+  text-align: center;
+}
+
+td.c1 { background-color: #e9e3d6; }
+td.c2 { background-color: #d8d0c9; }
+td.c3 { background-color: #d2d6ce; }
+td.c4 { background-color: #cbc6c6; }
+
+.note {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  color: #666a70;
+}
+
+/* ── 底部来源行 ─────────────────────────────────────── */
+.footer {
+  margin-top: 16px;
+  padding-top: 8px;
+  border-top: 1px solid #dedbd7;
+  font-size: 13px;
+  color: #666a70;
+  line-height: 1.6;
+}
+
+.footer-source {
+  font-weight: bold;
+  margin-right: 6px;
+}

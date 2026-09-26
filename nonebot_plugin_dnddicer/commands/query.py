@@ -519,11 +519,19 @@ async def _send_entry(
     entry_text: str,
     located: bool,
 ) -> None:
-    """发送词条正文：图片模式可用时出图，否则文字分段（最多 3 段）。
+    """发送词条正文：**优先站点页面**（富文本卡片 / 结构化文本），失败回退
+    服务端纯文本（``locate_entry`` 的三级定位）。
 
-    两级图片开关：骰主总开关（能不能用）× 本处设置（本处用不用，默认关）；
-    正文为空（页面无可显示内容）时不出图——空白卡片无意义，走文字侧提示。
+    站点页面路径取自候选的 ``path``（``topics/`` 前缀剥离）；抓取失败（站点
+    不可达、自建服务只提供接口等）时走下方回退路径，查询不中断。
     """
+    from . import query_atlas
+
+    if await query_atlas.send_atlas_entry(
+        bot, event, candidate, keyword=keyword, name=keyword
+    ):
+        return
+
     image_hint = ""
     use_image = (
         bool(entry_text.strip())

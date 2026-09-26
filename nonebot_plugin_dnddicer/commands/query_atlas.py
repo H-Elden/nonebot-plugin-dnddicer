@@ -143,10 +143,14 @@ async def _run_atlas_query(
         _to_candidate(entry, index) for index, entry in enumerate(entries, start=1)
     ]
     if len(candidates) == 1:
-        # 唯一命中：直接展示正文（不写候选记录）
-        await send_atlas_entry(
+        # 唯一命中：直接展示正文（不写候选记录）；站点不可达时给出提示
+        sent = await send_atlas_entry(
             bot, event, candidates[0], keyword=keyword, kind=kind
         )
+        if not sent:
+            await matcher.finish(
+                cmd_text.TXT_QUERY_UNAVAILABLE.format(count=1)
+            )
         await matcher.finish()
 
     record = default_store.put(
@@ -166,9 +170,21 @@ async def send_atlas_entry(
     candidate: Candidate,
     *,
     keyword: str,
-    kind: str,
-) -> None:
-    """抓取候选页 → 解码条目 → 按图片 / 文字模式发送。"""
+    kind: str = "",
+    name: str = "",
+) -> bool:
+    """抓取候选页 → 解码条目 → 按图片（富文本卡片）/ 文字（结构化文本）发送。
+
+    Args:
+        candidate: 候选（``path`` 为站点相对路径、``anchor`` 可为空）。
+        keyword: 用户关键词（高亮与回退匹配用）。
+        kind: 速查类别（速查子命令传入；通用检索为空串）。
+        name: 无锚点时的条目名（通用检索传关键词；速查候选默认用候选标题）。
+
+    Returns:
+        是否已发送：``False`` 表示站点抓取失败（速查子命令据此提示不可用，
+        通用检索据此回退服务端纯文本正文）。
+    """
     # 复核范围：选择期间范围可能被改，避免展示范围外内容
     scope = await query_settings.get_scope(query_common.chat_key(event))
     if scope and candidate.category not in scope:
@@ -178,26 +194,27 @@ async def send_atlas_entry(
                 category=query_common.category_label(candidate.category)
             ),
         )
-        return
+        return True
 
-    label = atlas_mod.KIND_LABELS.get(kind, "")
     store = atlas_cmd.get_store()
+    # 路径归一：速查索引存的是 topics/ 之后的相对路径，服务端候选带 topics/ 前缀
+    page_path = candidate.path.removeprefix("topics/")
     try:
-        html = await store.fetcher.get_page(candidate.path)
+        html = await store.fetcher.get_page(page_path)
     except QueryUnavailableError as exc:
         logger.warning(
-            "DNDDicer 速查正文抓取失败 path={} attempts={}", candidate.path, exc.attempts
+            "DNDDicer 正文抓取失败 path={} attempts={}", page_path, exc.attempts
         )
-        await bot.send(event, cmd_text.TXT_QUERY_UNAVAILABLE.format(count=len(exc.attempts)))
-        return
+        return False
 
+    title_match = name or candidate.title or keyword
     decoded = decode.decode_entry(
-        html, anchor=candidate.anchor, name=candidate.title, keyword=keyword
+        html, anchor=candidate.anchor, name=title_match, keyword=keyword
     )
-    title = decoded.title or candidate.title
+    title = decoded.title or title_match
     category = query_common.display_meta(candidate.category, candidate.meta)
 
-    # 图片模式（两级开关；渲染不可用时回退文字，全插件只提示一次）
+    # 图片模式（两级开关；富文本卡片优先，渲染不可用时回退文字并只提示一次）
     image_hint = ""
     use_image = (
         bool(decoded.text.strip())
@@ -205,20 +222,20 @@ async def send_atlas_entry(
         and await query_settings.is_image_enabled(query_common.chat_key(event))
     )
     if use_image:
-        if render.render_available():
+        if render.rich_available():
             try:
-                png = await render.render_rule_card(
+                png = await render.render_rich_card(
                     title=title,
                     category=category,
-                    body=decoded.text,
+                    body_html=decoded.fragment,
                     source_path=candidate.path,
                     located=decoded.located,
                 )
             except Exception:  # noqa: BLE001 - 渲染异常回退文字（查询不丢）
-                logger.exception("DNDDicer 速查图片渲染失败，已回退文字输出")
+                logger.exception("DNDDicer 富文本卡片渲染失败，已回退文字输出")
             else:
                 await bot.send(event, MessageSegment.image(png))
-                return
+                return True
         elif query_common.notify_image_fallback():
             image_hint = cmd_text.TXT_QUERY_IMAGE_FALLBACK
 
@@ -230,6 +247,7 @@ async def send_atlas_entry(
     if image_hint:
         lines.append(image_hint)
     await query_cmd._send_chunked(bot, event, lines)
+    return True
 
 
 #: 八条速查子命令（模块顶层注册；顺序与「本书速查」一致）

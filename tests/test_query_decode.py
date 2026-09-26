@@ -175,6 +175,27 @@ def test_fragment_to_text_blocks() -> None:
     assert "侦测魔法 | 0" in text
 
 
+def test_wrap_fragment_avoids_line_start_punctuation() -> None:
+    """Python 侧折行：长段落按宽度断行，行首不出现禁则标点。"""
+    fragment = "<p>" + "测试" * 60 + "。收尾</p>"
+    wrapped = decode.wrap_fragment(fragment, width_em=10, font_size=16)
+    body = wrapped.removeprefix("<p>").removesuffix("</p>")
+    lines = [line for line in body.split("\n") if line]
+    assert len(lines) > 3
+    for line in lines:
+        assert line[0] not in decode._LINE_START_FORBIDDEN
+
+
+def test_wrap_fragment_keeps_ascii_words() -> None:
+    """整词保护：ASCII 词不跨行拆断（换行可落在行内标签之前/之后）。"""
+    fragment = "<p>" + "文字" * 20 + "<u>Dragonkind</u>" + "文字" * 20 + "</p>"
+    wrapped = decode.wrap_fragment(fragment, width_em=6, font_size=16)
+    assert "Dragonkind" in wrapped
+    lines = wrapped.split("\n")
+    assert not any(line.strip().startswith("kind") for line in lines)
+    assert not any(line.rstrip().endswith("Dragon") for line in lines)
+
+
 def test_decode_entry_end_to_end() -> None:
     """decode_entry：切分 + 清洗 + 高亮 + 文字块一次完成。"""
     entry = decode.decode_entry(_FEAT_PAGE, name="冲锋手", keyword="冲锋")
