@@ -312,6 +312,55 @@ TXT_QUERY_ENTRY_EMPTY = "该页面没有可显示的正文。"
 #: 内容超长被截断的提示（追加在最后一段）
 TXT_QUERY_TRUNCATED = "（内容过长，已截断）"
 
+# ── 骰主命令（仅骰主私聊可用；.帮助 不显示，见 commands/base.py 的隐藏注册）──
+TXT_SUPERUSER_ONLY = "该命令仅骰主可用。"
+
+#: 速查索引命令（.查询索引）帮助
+TXT_INDEX_HELP = (
+    "速查索引：.查询索引（.qatlas）\n"
+    "- 无参数：查看各类索引的状态（条目数、构建时间）\n"
+    "- 刷新：重建全部索引\n"
+    "- 刷新 <类型>：只重建指定类型\n"
+    "类型：法术 / 怪物 / 物品 / 专长 / 职业 / 起源 / 术语 / 单位\n"
+    "示例：.查询索引 刷新 法术"
+)
+TXT_INDEX_STATUS_HEAD = "速查索引状态（构建于 {built_at}）："
+TXT_INDEX_STATUS_ROW = "· {label}：{count} 条"
+TXT_INDEX_STATUS_EMPTY = "尚未建立（发送 .查询索引 刷新 构建）"
+TXT_INDEX_USAGE = "用法：.查询索引 [刷新 [类型…]]（类型见 .查询索引 的帮助）"
+TXT_INDEX_UNKNOWN_KIND = "未知类型「{name}」。可用类型：{kinds}"
+TXT_INDEX_REFRESHING = "正在重建索引（{kinds}），可能需要一两分钟，完成后回报。"
+TXT_INDEX_REFRESH_DONE = "索引重建完成：\n{details}"
+TXT_INDEX_REFRESH_FAILED = "索引重建失败：站点不可达或解析异常，已保留原索引。"
+TXT_INDEX_REFRESH_KEPT = "（新构建条目数异常，已保留原数据）"
+
+# ── 速查子命令（.查询法术 / .查询怪物 / …，2026-09-26）────────────────
+#: 子命令用法提示（{kind} 类型名、{example} 示例）
+TXT_ATLAS_USAGE = "用法：.查询{kind} <名称>（如 {example}）"
+#: 子命令帮助全文
+TXT_ATLAS_HELP = (
+    "查询{kind}：.查询{kind} <名称>\n"
+    "- 在《5e不全书》的{kind}速查索引中按名称查找（中文名 / 英文名均可）\n"
+    "- 唯一命中直接展示正文；多个候选回复数字查看，多于一页可 + / - 翻页\n"
+    "- 受 .查询范围 限制：只在本处开放的书目里查找\n"
+    "示例：{example}"
+)
+#: 索引尚未就绪（懒构建失败或站点不可达）
+TXT_ATLAS_NOT_READY = "速查索引尚未就绪（未能从站点获取），请稍后再试。"
+#: 无结果（未设范围时）
+TXT_ATLAS_NO_RESULT = "没有找到与「{keyword}」相关的{kind}。"
+#: 无结果（范围生效时；{hint} 为空串）
+TXT_ATLAS_NO_RESULT_SCOPED = (
+    "没有找到与「{keyword}」相关的{kind}。本处的查询范围为 {scope}，"
+    "可发送 .查询范围 全部 放开全部书目后再试。"
+)
+#: 候选列表头部（{kind} 类型名、{page} 页码后缀）
+TXT_ATLAS_LIST_HEAD = "「{keyword}」共 {count} 条{kind}候选{page}："
+#: 候选条目（{no} 编号、{title} 名称、{meta} 出处与元数据）
+TXT_ATLAS_LIST_ITEM = "{no}. {title}（{meta}）"
+#: 选中条目已不在当前范围内（选择期间范围被改）
+TXT_ATLAS_OUT_OF_SCOPE = "该条目来自「{category}」，不在本处当前的查询范围内。"
+
 # ── 规则查询图片模式（htmlkit 成图）────────────────────────────────────
 #: 图片模式开启但依赖未安装时的回退提示（进程内只附一次，避免刷屏）。
 #: 面向群成员：不暴露安装命令与配置名，指引找骰主（技术细节只进日志与文档）

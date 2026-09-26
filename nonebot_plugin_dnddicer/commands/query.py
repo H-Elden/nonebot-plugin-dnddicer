@@ -56,7 +56,7 @@ from ..query import (
     parse_selection_token,
 )
 from ..query import books
-from . import base, text
+from . import base, query_common, text
 
 #: 单次查询允许的最大关键词组数（与服务端语义一致：空格分隔为 AND）
 MAX_KEYWORDS = 5
@@ -68,14 +68,9 @@ MAX_KEYWORDS = 5
 _CHUNK_LINES = 20
 _MAX_CHUNKS = 3
 
-#: 图片模式回退提示是否已发出（依赖缺失时进程内只提示一次，避免刷屏）
-_image_fallback_notified = False
-
-
 def reset_image_fallback_notice() -> None:
-    """重置「图片模式回退提示已发出」标记（测试清理用）。"""
-    global _image_fallback_notified
-    _image_fallback_notified = False
+    """重置「图片模式回退提示已发出」标记（测试清理用；全插件共用发出口）。"""
+    query_common.reset_image_fallback()
 
 
 _HELP_QUERY = (
@@ -201,16 +196,13 @@ async def handle_search(bot: Bot, event: MessageEvent) -> None:
 
 
 def _chat_key(event: MessageEvent) -> str:
-    """本处设置键：群聊按群（对该群全员生效）、私聊按用户（仅影响本人）。"""
-    group_id = getattr(event, "group_id", None)
-    if group_id is not None:
-        return query_settings.group_key(group_id)
-    return query_settings.private_key(event.user_id)
+    """本处设置键（群聊按群、私聊按用户）——见 ``query_common.chat_key``。"""
+    return query_common.chat_key(event)
 
 
 def _where(event: MessageEvent) -> str:
-    """文案中的处所代词：群聊「本群」、私聊「你」。"""
-    return "本群" if getattr(event, "group_id", None) is not None else "你"
+    """文案中的处所代词（群聊「本群」、私聊「你」）——见 ``query_common.where``。"""
+    return query_common.where(event)
 
 
 def _image_unavailable_text() -> Optional[str]:
@@ -461,8 +453,17 @@ async def handle_selection(bot: Bot, event: MessageEvent) -> None:
         )
 
     candidate = record.candidates[number - 1]
-    entry_text, located = locate_entry(candidate.content, record.keyword)
     default_store.touch(record)
+    if record.mode == query_common.MODE_ATLAS:
+        # 速查子命令候选：正文来自站点页面（抓取 + 解码），与检索候选分流
+        from . import query_atlas
+
+        await query_atlas.send_atlas_entry(
+            bot, event, candidate, keyword=record.keyword, kind=record.kind
+        )
+        await selection_matcher.finish()
+
+    entry_text, located = locate_entry(candidate.content, record.keyword)
     await _send_entry(bot, event, candidate, record.keyword, entry_text, located)
     await selection_matcher.finish()
 
@@ -486,35 +487,28 @@ def _render_list(record: SelectionRecord) -> str:
         if page_count > 1
         else ""
     )
-    lines = [
-        text.TXT_QUERY_LIST_HEAD.format(
-            keyword=record.keyword,
-            count=len(record.candidates),
-            limited=limited,
-            page=page_suffix,
-        )
-    ]
+    head = text.TXT_QUERY_LIST_HEAD.format(
+        keyword=record.keyword,
+        count=len(record.candidates),
+        limited=limited,
+        page=page_suffix,
+    )
     base_no = (record.page - 1) * PAGE_SIZE
+    item_lines = []
     for offset, candidate in enumerate(items):
         category = (
             text.TXT_QUERY_LIST_CATEGORY.format(category=candidate.category)
             if candidate.category
             else ""
         )
-        lines.append(
+        item_lines.append(
             text.TXT_QUERY_LIST_ITEM.format(
                 no=base_no + offset + 1,
                 title=candidate.title or f"页面 #{candidate.index}",
                 category=category,
             )
         )
-    tail = (
-        text.TXT_QUERY_LIST_TAIL
-        if page_count > 1
-        else text.TXT_QUERY_LIST_TAIL_ONE_PAGE
-    )
-    lines.append(tail.format(seconds=int(DEFAULT_TTL)))
-    return "\n".join(lines)
+    return query_common.list_frame(head=head, items=item_lines, pages=page_count)
 
 
 async def _send_entry(
@@ -530,7 +524,6 @@ async def _send_entry(
     两级图片开关：骰主总开关（能不能用）× 本处设置（本处用不用，默认关）；
     正文为空（页面无可显示内容）时不出图——空白卡片无意义，走文字侧提示。
     """
-    global _image_fallback_notified
     image_hint = ""
     use_image = (
         bool(entry_text.strip())
@@ -547,9 +540,8 @@ async def _send_entry(
             else:
                 await bot.send(event, MessageSegment.image(png))
                 return
-        elif not _image_fallback_notified:
-            # 依赖缺失：首次回退附一行提示（进程内只提示一次，避免刷屏）
-            _image_fallback_notified = True
+        elif query_common.notify_image_fallback():
+            # 依赖缺失：首次回退附一行提示（全插件只提示一次，避免刷屏）
             image_hint = text.TXT_QUERY_IMAGE_FALLBACK
 
     lines: List[str] = [

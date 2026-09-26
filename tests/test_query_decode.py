@@ -54,13 +54,12 @@ _UNIT_PAGE = """<html><body>
 
 
 def test_slice_by_anchor() -> None:
-    """锚点标题：切到下一个标题，标题取条目头文字。"""
+    """锚点标题：切到下一个标题，标题取条目头文字（片段从标题之后开始）。"""
     sliced = decode.slice_entry(_SPELL_PAGE, anchor="Sample_Spell")
     assert sliced.located is True
     assert "样例法术" in sliced.title
 
     fragment = decode.sanitize_html(_SPELL_PAGE[sliced.start : sliced.end])
-    assert "样例法术" in fragment
     assert "施法时间：" in fragment
     assert "另一个法术" not in fragment
 
@@ -83,6 +82,23 @@ def test_slice_by_red_title() -> None:
     assert "冲锋手" in fragment
     assert "属性值提升" in fragment
     assert "大厨" not in fragment
+
+
+def test_slice_page_level_heading() -> None:
+    """页面级条目（职业）：H1 标题文字匹配，切片为整页内容。"""
+    html = (
+        "<H1>样例职业 Sample Class</H1>"
+        "<P>开头段落。</P>"
+        "<H3>样例职业特性 Class Features</H3>"
+        "<P>正文。</P>"
+    )
+    sliced = decode.slice_entry(html, name="样例职业")
+    assert sliced.located is True
+    assert "样例职业" in sliced.title
+    fragment = decode.sanitize_html(html[sliced.start : sliced.end])
+    # 匹配 H1（若误配「包含同名」的 H3 会丢掉开头段落）
+    assert "开头段落。" in fragment
+    assert "正文。" in fragment
 
 
 def test_slice_unit_section() -> None:

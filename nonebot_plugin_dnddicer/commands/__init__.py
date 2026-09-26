@@ -35,6 +35,8 @@ from . import npc  # noqa: F401  # .npc 持久/.npc 临时 NPC 血量跨战斗�
 from . import initiative  # noqa: F401  # .init/.ri/.先攻 先攻列表
 from . import battle  # noqa: F401  # .br/.ed/.回合/.轮次 战斗轮
 from . import query  # noqa: F401  # .查询/.搜索 规则查询（候选 + 数字选择）
+from . import query_atlas  # noqa: F401  # .查询法术 等速查子命令（8 条，速查索引）
+from . import atlas  # noqa: F401  # 速查索引编排 + .查询索引（骰主命令，隐藏）
 from . import bot  # noqa: F401  # .bot 插件信息与群聊服务开关
 from . import help  # noqa: F401  # .帮助 / .help（须在其它命令之后导入以保持列表顺序）
 from . import roll_parse_args  # noqa: F401  # .r 参数解析（引擎同源）

@@ -45,7 +45,11 @@ def parse_selection_token(text: str) -> Optional[str]:
 
 @dataclass
 class SelectionRecord:
-    """一次查询的候选列表状态（按会话 + 用户隔离）。"""
+    """一次查询的候选列表状态（按会话 + 用户隔离）。
+
+    ``mode`` 区分候选来源：``name`` / ``full``（服务端检索）与 ``atlas``
+    （速查索引子命令，配合 ``kind`` 标明类别，如 ``spell``）。
+    """
 
     session_id: str
     user_id: str
@@ -53,6 +57,7 @@ class SelectionRecord:
     mode: str
     candidates: List[Candidate]
     page: int = 1
+    kind: str = ""
     touched_at: float = field(default_factory=time.monotonic)
 
     @property
@@ -95,6 +100,7 @@ class SelectionStore:
         keyword: str,
         mode: str,
         candidates: List[Candidate],
+        kind: str = "",
     ) -> SelectionRecord:
         """写入（或覆盖）一条记录并返回它。"""
         record = SelectionRecord(
@@ -103,6 +109,7 @@ class SelectionStore:
             keyword=keyword,
             mode=mode,
             candidates=list(candidates),
+            kind=kind,
             touched_at=self._clock(),
         )
         key = (str(session_id), str(user_id))

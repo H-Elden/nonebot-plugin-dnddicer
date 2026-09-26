@@ -36,6 +36,10 @@ class Candidate:
     content: str
     base_url: str
     score: int = 0
+    #: 条目锚点（速查索引候选特有；空串表示无锚点、按标题形态定位）
+    anchor: str = ""
+    #: 展示用元数据（速查索引候选特有，如「一环 · 惑控」「CR2 · 大型巨人」）
+    meta: str = ""
 
 
 class QueryUnavailableError(Exception):

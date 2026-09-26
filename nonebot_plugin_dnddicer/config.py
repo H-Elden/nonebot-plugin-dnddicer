@@ -68,6 +68,29 @@ class Config(BaseModel):
     #: （nonebot-plugin-htmlkit），未装时自动回退文字。
     dnddicer_query_image_enabled: bool = False
 
+    # ── 规则查询：速查索引（.查询法术 等子命令，2026-09-26）──────────────
+    #: **页面抓取**的站点地址（正文层抓 HTML 用；与上面的检索端点分开）。
+    #: 实测（2026-09-26）：在线检索服务域名只覆盖部分静态页，正文抓取须用
+    #: 站点主域名；自建部署的骰主把这里设为你的站点地址（自建站含完整页面）。
+    dnddicer_query_site_urls: List[str] = Field(
+        default_factory=lambda: ["https://5echm.kagangtuya.top"]
+    )
+
+    #: 页面抓取的最小请求间隔（秒）：两次实际外呼之间至少间隔这么多秒
+    #: （缓存命中不经过此处）。索引构建会连续抓取数十页，单独限流避免对
+    #: 个人站点突发轰炸。
+    dnddicer_query_page_interval: float = 0.5
+
+    #: 抓取页面的内存缓存时长（秒）：同一页在此时长内重复查询零外呼
+    #: （默认 24 小时；站点内容更新低频）。
+    dnddicer_query_page_cache_ttl: float = 86400.0
+
+    #: 「速查索引」启动构建开关：默认开启（仅当 dnddicer_query_enabled 开启时
+    #: 生效）。索引只存站点速查表的条目名与元数据（环阶/CR/稀有度/出处）及
+    #: 页面路径与锚点，存插件本地缓存目录、不随插件分发；站点内容更新低频，
+    #: 运行中不自动重建，需要时骰主用 .查询索引 手动刷新。
+    dnddicer_query_atlas_build_on_startup: bool = True
+
     # 注：更多配置项（第一期落地时逐步补充，例如连掷上限、暗骰私聊开关等）
     # 将在对应功能实现时按需追加，保持「全部有默认值」的零配置原则。
 
