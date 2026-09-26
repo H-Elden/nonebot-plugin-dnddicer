@@ -2,14 +2,18 @@ import { defineConfig } from 'vitepress'
 import { chatContainer } from './plugins/chat-container.mts'
 
 // 屠龙骰（DNDDicer）使用文档站配置。
-// 注意：站点发布在 GitHub Pages 的仓库子路径下，base 必须与实际部署路径一致，
+// 主站发布在 GitHub Pages 的仓库子路径下，base 必须与实际部署路径一致，
 // 本地开发地址也随之带前缀（http://localhost:5173/nonebot-plugin-dnddicer/）。
+// 国内镜像站（腾讯云 EdgeOne Makers）部署在根路径，构建时用环境变量覆盖 base：
+//   DOCS_BASE=/ npm run docs:build      （见 .github/workflows/docs.yml 的 mirror 任务）
+// 注意：Windows 的 Git Bash 会把「/」改写为 Windows 路径，本地复验镜像构建时写
+//   MSYS_NO_PATHCONV=1 DOCS_BASE=/ npm run docs:build
 export default defineConfig({
   lang: 'zh-CN',
   title: '屠龙骰 DNDDicer',
   description:
     '专精 DND5e/5r 的 QQ 跑团骰娘插件使用文档：掷骰表达式、角色卡与属性、检定与豁免、生命值管理、先攻列表与战斗轮、规则查询、DM 进阶与最佳实践',
-  base: '/nonebot-plugin-dnddicer/',
+  base: process.env.DOCS_BASE ?? '/nonebot-plugin-dnddicer/',
   cleanUrls: true,
   lastUpdated: true,
 

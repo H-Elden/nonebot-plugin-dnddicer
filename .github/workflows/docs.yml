@@ -1,17 +1,27 @@
-# 文档站部署（GitHub Pages）
+# 文档站部署（GitHub Pages 主站 + 腾讯云 EdgeOne Makers 国内镜像）
 #
 # 触发时机 = 发布时机：只有推 v* 标签（发版）或手动触发时才构建并部署。
 # 平时往 main 推送的文档改动只留在仓库里，不会改变线上页面——
 # 需要让某个改动上线时，要么随下一次发版，要么在 Actions 里手动运行本工作流。
 #
-# 首次使用：仓库 Settings → Pages → Source 选「GitHub Actions」。
-# 未启用前本工作流会自动跳过（保持绿色），启用后无需再改任何配置。
+# 主站（GitHub Pages，jobs：check / build / deploy）：
+#   - 首次使用：仓库 Settings → Pages → Source 选「GitHub Actions」。
+#     未启用前 build / deploy 会自动跳过（保持绿色），启用后无需再改任何配置。
+#   - 注意（tag 部署被拒时查这里）：启用 Pages 后 GitHub 会自动建 `github-pages` 环境，
+#     其「Deployment branches and tags」默认只允许默认分支部署——tag 推送会在 deploy 步
+#     被拒（annotations 提示 not allowed due to environment protection rules）。
+#     解法：Settings → Environments → github-pages → 放行标签（选 Selected branches and
+#     tags 加一条 Tag 规则 `v*`，并保留分支 main 供手动预览；或直接选 All branches and tags）。
 #
-# 注意（tag 部署被拒时查这里）：启用 Pages 后 GitHub 会自动建 `github-pages` 环境，
-# 其「Deployment branches and tags」默认只允许默认分支部署——tag 推送会在 deploy 步
-# 被拒（annotations 提示 not allowed due to environment protection rules）。
-# 解法：Settings → Environments → github-pages → 放行标签（选 Selected branches and
-# tags 加一条 Tag 规则 `v*`，并保留分支 main 供手动预览；或直接选 All branches and tags）。
+# 国内镜像（腾讯云 EdgeOne Makers，job：mirror）：
+#   - 站点地址：https://dnddicer.edgeone.app （项目名 dnddicer，根路径部署；
+#     首次部署若提示名称被占用，需改 -n 参数并同步文档里的镜像链接）。
+#   - 依赖仓库 Secrets 里的 EDGEONE_API_TOKEN：在 EdgeOne 控制台 Makers → 设置 → API Token
+#     创建（有效期可选 1 天 ~ 1 年，过期需重新生成并更新 Secret）；未配置时 mirror 自动跳过。
+#   - 项目由本工作流首次部署时自动创建（「直接上传」类型）；不要在控制台把它改成
+#     Git 仓库导入类型，否则 CLI 无法再更新（官方 CLI 文档的既有约束）。
+#   - 加速区域用 CLI 默认值 global（免备案）；启用中国大陆节点加速需绑定已备案域名，本项目不启用。
+#   - 平台行为已实测（2026-09-26，临时站）：支持无扩展名 URL（cleanUrls 保持开启）、目录索引与自定义 404。
 name: docs
 
 on:
@@ -34,6 +44,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       enabled: ${{ steps.pages.outputs.enabled }}
+      mirror_ready: ${{ steps.mirror_token.outputs.ready }}
     steps:
       - name: 检查 Pages 是否已启用
         id: pages
@@ -46,6 +57,17 @@ jobs:
           else
             echo "enabled=false" >> "$GITHUB_OUTPUT"
             echo "::notice title=文档站尚未启用::仓库 Settings → Pages 还没把 Source 选为 GitHub Actions，跳过本次部署；启用后手动运行本工作流、或等下一次发版即可。"
+          fi
+      - name: 检查国内镜像 Token 是否已配置
+        id: mirror_token
+        env:
+          EDGEONE_API_TOKEN: ${{ secrets.EDGEONE_API_TOKEN }}
+        run: |
+          if [ -n "$EDGEONE_API_TOKEN" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=国内镜像尚未配置::仓库 Secrets 里还没有 EDGEONE_API_TOKEN，跳过国内镜像部署；配置后手动运行本工作流、或等下一次发版即可。"
           fi
 
   build:
@@ -79,3 +101,27 @@ jobs:
       - name: 部署到 GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+  mirror:
+    needs: check
+    if: needs.check.outputs.mirror_ready == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: 安装文档站依赖
+        run: npm ci
+      # 与主站同一份源码，用 DOCS_BASE=/ 覆盖 base：镜像站部署在根路径
+      - name: 构建镜像站（根路径）
+        run: npm run docs:build
+        env:
+          DOCS_BASE: /
+      - name: 部署到腾讯云 EdgeOne Makers
+        # 锁 edgeone@1 大版本（当前实测 1.6.41），避免上游破坏性更新影响发版
+        run: npx --yes edgeone@1 makers deploy docs/.vitepress/dist -n dnddicer -t "$EDGEONE_API_TOKEN"
+        env:
+          EDGEONE_API_TOKEN: ${{ secrets.EDGEONE_API_TOKEN }}
