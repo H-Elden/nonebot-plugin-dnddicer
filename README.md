@@ -2,7 +2,7 @@
 
 > 专精 **DND5e / DND5r** 跑团的 [NoneBot2](https://nonebot.dev/) 骰娘插件（OneBot V11 适配器），致力于做功能最全面、体验最好的 DND 骰娘。
 >
-> 当前版本：**v0.4.0** · 完整使用手册见 **📖 [使用文档](https://h-elden.github.io/nonebot-plugin-dnddicer/)**
+> 当前版本：**v0.4.0** · 完整使用手册见 **📖 [使用文档](https://h-elden.github.io/nonebot-plugin-dnddicer/)**（[国内镜像](https://dnddicer.netlify.app/)，GitHub Pages 访问不畅时用）
 
 ## ✨ 简介
 
