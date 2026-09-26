@@ -14,11 +14,12 @@
 - 演示页面正文一律为自写短句；**刻意不用表格**：文字模式下表格行以 `` | ``
   连接（如 ``金币 | gp``），会撞上 ``::: chat`` 容器的「昵称 | 内容」行格式；
 - 构建时刻取固定值（``_DEMO_BUILT_AT``）：状态输出含构建时间，需固定
-  才能保证转录可复现。
+  且须时区无关（CI 为 UTC 环境，见该常量注释）。
 """
 
 from __future__ import annotations
 
+import time
 import urllib.parse
 from typing import Dict, List
 
@@ -28,8 +29,11 @@ from nonebot_plugin_dnddicer.data import get_data_file
 from nonebot_plugin_dnddicer.query.atlas import AtlasEntry, AtlasStore
 from nonebot_plugin_dnddicer.query.fetch import HtmlFetcher
 
-#: 演示索引的固定构建时刻（2026-09-26 12:00；状态输出含构建时间，须固定）
-_DEMO_BUILT_AT = 1790395200.0
+#: 演示索引的固定构建时刻（2026-09-26 12:00）。
+#: 状态输出按**本机时区**渲染（time.localtime），因此不能把 epoch 写死：
+#: CI 是 UTC 环境，写死的 epoch 会在那边渲染成另一个钟点，转录整体对不上。
+#: 这里用「本地时区的字面时刻」反算 epoch，任何时区下都渲染为同一行文本。
+_DEMO_BUILT_AT = time.mktime(time.strptime("2026-09-26 12:00", "%Y-%m-%d %H:%M"))
 
 # ── 演示详情页（结构照站点形态；正文为自写短句）─────────────────────────
 
