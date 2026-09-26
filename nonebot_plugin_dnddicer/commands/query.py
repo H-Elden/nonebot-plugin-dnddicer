@@ -2,6 +2,8 @@
 
 流程：解析关键词 → 数据源检索（多端点顺序回退，见 query/source.py）→ 候选列表
 → 回复数字查看词条正文（条目级定位，见 query/locating.py）、``+`` / ``-`` 翻页。
+展示形态（2026-09-26 用户要求）：**唯一候选**时跳过列表直接展示词条正文；
+候选只有一页时不显示页码与翻页提示（那两样只在多于一页时才有意义）。
 
 约定：
 - 候选记录只响应**发起者本人**、默认 60 秒有效（query/interaction.py）；
@@ -80,7 +82,7 @@ _HELP_QUERY = (
     "规则查询：.查询 <关键词>（.q）\n"
     "- 按名称检索规则内容（标题与词条名优先）\n"
     "- 多关键词用空格分隔（需同时满足），| 表示或（如 火焰|闪电）\n"
-    "- 返回候选后：回复数字查看详情，+ / - 翻页（60 秒内有效）\n"
+    "- 返回候选后：多条时回复数字查看详情，多于一页可 + / - 翻页（60 秒内有效）\n"
     "示例：.查询 火球术"
 )
 
@@ -420,6 +422,13 @@ async def _run_search(
             )
         await matcher.finish(text.TXT_QUERY_NO_RESULT.format(keyword=keyword))
 
+    if len(candidates) == 1:
+        # 唯一候选：跳过候选列表直接展示词条正文（选号失去意义，也不再写短时记录）
+        candidate = candidates[0]
+        entry_text, located = locate_entry(candidate.content, keyword)
+        await _send_entry(bot, event, candidate, keyword, entry_text, located)
+        await matcher.finish()
+
     record = default_store.put(
         event.get_session_id(),
         event.user_id,
@@ -464,10 +473,17 @@ async def handle_selection(bot: Bot, event: MessageEvent) -> None:
 
 
 def _render_list(record: SelectionRecord) -> str:
-    """渲染候选列表当前页。"""
+    """渲染候选列表当前页（只有一页时不显示页码与翻页提示，2026-09-26）。"""
+    items = record.page_slice()
+    page_count = record.page_count
     limited = (
         text.TXT_QUERY_LIST_LIMITED.format(count=len(record.candidates))
         if len(record.candidates) >= MAX_CANDIDATES
+        else ""
+    )
+    page_suffix = (
+        text.TXT_QUERY_LIST_PAGE_SUFFIX.format(page=record.page, pages=page_count)
+        if page_count > 1
         else ""
     )
     lines = [
@@ -475,12 +491,11 @@ def _render_list(record: SelectionRecord) -> str:
             keyword=record.keyword,
             count=len(record.candidates),
             limited=limited,
-            page=record.page,
-            pages=record.page_count,
+            page=page_suffix,
         )
     ]
     base_no = (record.page - 1) * PAGE_SIZE
-    for offset, candidate in enumerate(record.page_slice()):
+    for offset, candidate in enumerate(items):
         category = (
             text.TXT_QUERY_LIST_CATEGORY.format(category=candidate.category)
             if candidate.category
@@ -493,7 +508,12 @@ def _render_list(record: SelectionRecord) -> str:
                 category=category,
             )
         )
-    lines.append(text.TXT_QUERY_LIST_TAIL.format(seconds=int(DEFAULT_TTL)))
+    tail = (
+        text.TXT_QUERY_LIST_TAIL
+        if page_count > 1
+        else text.TXT_QUERY_LIST_TAIL_ONE_PAGE
+    )
+    lines.append(tail.format(seconds=int(DEFAULT_TTL)))
     return "\n".join(lines)
 
 

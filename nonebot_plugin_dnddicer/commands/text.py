@@ -292,13 +292,17 @@ TXT_QUERY_UNAVAILABLE = (
     "若你自建了查询服务，请确认它已启动。"
 )
 TXT_QUERY_NO_RESULT = "没有找到与「{keyword}」相关的内容。可换个关键词，或用 .搜索 全文检索。"
-#: 候选列表标题行（{limited} 为「仅显示前 N 条」提示片段，正常为空串）
-TXT_QUERY_LIST_HEAD = "「{keyword}」共 {count} 条候选{limited}（第 {page}/{pages} 页）："
+#: 候选列表标题行（{limited} 为「仅显示前 N 条」提示片段、{page} 为页码后缀，均为空串时可省略）
+TXT_QUERY_LIST_HEAD = "「{keyword}」共 {count} 条候选{limited}{page}："
 TXT_QUERY_LIST_LIMITED = "（候选较多，仅显示前 {count} 条）"
+#: 页码后缀（只有一页时不显示；2026-09-26）
+TXT_QUERY_LIST_PAGE_SUFFIX = "（第 {page}/{pages} 页）"
 TXT_QUERY_LIST_ITEM = "{no}. {title}{category}"
 #: 分类展示（候选条目后缀）
 TXT_QUERY_LIST_CATEGORY = "（{category}）"
 TXT_QUERY_LIST_TAIL = "回复数字查看详情，+ / - 翻页（{seconds} 秒内有效）"
+#: 只有一页时的收尾行（不提示翻页；2026-09-26）
+TXT_QUERY_LIST_TAIL_ONE_PAGE = "回复数字查看详情（{seconds} 秒内有效）"
 TXT_QUERY_BAD_INDEX = "没有编号 {no}（请输入 1~{max}）。"
 #: 词条正文的标题行（来源标注）
 TXT_QUERY_ENTRY_HEAD = "《5e不全书》· {category} · {title}"

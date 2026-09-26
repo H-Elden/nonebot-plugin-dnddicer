@@ -24,6 +24,7 @@ from fake_event import fake_group_message_event_v11, fake_private_message_event_
 from query_fakes import (
     PAGE_NARRATIVE,
     PAGE_SPELLS_2024,
+    PAGE_TERM_2014,
     FakeTransport,
     make_candidate,
     make_result,
@@ -54,6 +55,26 @@ _PNG_1PX = bytes.fromhex(
     "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4"
     "890000000a49444154789c6300010000050001"
     "0d0a2db40000000049454e44ae426082"
+)
+
+#: 镜影术条目正文（PAGE_SPELLS_2024 里「镜影术｜Mirror Image」的条目体）
+_MIRROR_BODY = (
+    "二环 幻术\n"
+    "施法时间：1 动作\n"
+    "距离：自身\n"
+    "成分：V、S\n"
+    "持续时间：1 分钟\n"
+    "三个镜像出现在你周围，用于迷惑攻击者。"
+)
+
+#: 火球术条目正文（PAGE_SPELLS_2024 里「火球术｜Fireball」的条目体）
+_FIREBALL_BODY = (
+    "三环 塑能\n"
+    "施法时间：1 动作\n"
+    "距离：150 尺\n"
+    "成分：V、S、M\n"
+    "持续时间：立即\n"
+    "一道亮光从你的指尖射出，在指定点炸成烈焰。"
 )
 
 
@@ -167,14 +188,21 @@ async def _expect_silence(app: App, matcher, event) -> None:
 
 
 def _expected_list(keyword: str, items, *, page: int = 1, pages: int = 1, count=None) -> str:
-    """按文案常量拼出候选列表期望文本（items 为 (标题, 分类) 序列）。"""
+    """按文案常量拼出候选列表期望文本（items 为 (标题, 分类) 序列）。
+
+    只有一页时不含页码后缀与翻页提示（2026-09-26 起）。
+    """
+    page_suffix = (
+        text.TXT_QUERY_LIST_PAGE_SUFFIX.format(page=page, pages=pages)
+        if pages > 1
+        else ""
+    )
     lines = [
         text.TXT_QUERY_LIST_HEAD.format(
             keyword=keyword,
             count=count if count is not None else len(items),
             limited="",
-            page=page,
-            pages=pages,
+            page=page_suffix,
         )
     ]
     base_no = (page - 1) * PAGE_SIZE
@@ -186,7 +214,10 @@ def _expected_list(keyword: str, items, *, page: int = 1, pages: int = 1, count=
                 category=text.TXT_QUERY_LIST_CATEGORY.format(category=category),
             )
         )
-    lines.append(text.TXT_QUERY_LIST_TAIL.format(seconds=int(DEFAULT_TTL)))
+    tail = (
+        text.TXT_QUERY_LIST_TAIL if pages > 1 else text.TXT_QUERY_LIST_TAIL_ONE_PAGE
+    )
+    lines.append(tail.format(seconds=int(DEFAULT_TTL)))
     return "\n".join(lines)
 
 
@@ -250,14 +281,23 @@ async def test_multi_keyword_passed_through(app: App, enabled_query):
     插件侧只做「最多 5 组」的截流，其余原样交给服务端——本用例锁定这一点。
     """
     transport = _install(
-        FakeTransport(_routes([make_result(1, "三环", PAGE_SPELLS_2024)]))
+        FakeTransport(
+            _routes(
+                [
+                    make_result(1, "三环", PAGE_SPELLS_2024),
+                    make_result(2, "二环", PAGE_SPELLS_2024),
+                ]
+            )
+        )
     )
     for keyword in ("火焰|闪电", "火焰 伤害", "火焰 伤害 闪电"):
         await _expect(
             app,
             query_cmd.query_matcher,
             _group_event(f".查询 {keyword}"),
-            _expected_list(keyword, [("三环", "玩家手册2024")]),
+            _expected_list(
+                keyword, [("三环", "玩家手册2024"), ("二环", "玩家手册2024")]
+            ),
         )
         expected_param = urllib.parse.urlencode({"keyword": keyword})
         assert any(expected_param in url for url in transport.calls), (
@@ -270,40 +310,71 @@ async def test_multi_keyword_passed_through(app: App, enabled_query):
 
 @pytest.mark.asyncio
 async def test_candidates_list_literal(app: App, enabled_query):
-    """.查询 命中标题精确：候选列表文本（逐字断言）。"""
-    _install(FakeTransport(_routes([make_result(1, "火球术", PAGE_SPELLS_2024)])))
-    event = _group_event(".查询 火球术")
+    """.查询 命中多条但只有一页：候选列表不显示页码与翻页提示（逐字断言）。"""
+    _install(
+        FakeTransport(
+            _routes(
+                [
+                    make_result(1, "火球术", PAGE_SPELLS_2024),
+                    make_result(2, "灼热射线", PAGE_SPELLS_2024),
+                ]
+            )
+        )
+    )
+    event = _group_event(".查询 火球")
     await _expect(
         app,
         query_cmd.query_matcher,
         event,
-        "「火球术」共 1 条候选（第 1/1 页）：\n"
+        "「火球」共 2 条候选：\n"
         "1. 火球术（玩家手册2024）\n"
-        "回复数字查看详情，+ / - 翻页（60 秒内有效）",
+        "2. 灼热射线（玩家手册2024）\n"
+        "回复数字查看详情（60 秒内有效）",
     )
 
 
 @pytest.mark.asyncio
+async def test_single_candidate_goes_straight_to_entry(app: App, enabled_query):
+    """唯一候选：跳过候选列表直接展示词条正文，且不生成短时记录。"""
+    _install(FakeTransport(_routes([make_result(1, "火球术", PAGE_SPELLS_2024)])))
+    await _expect(
+        app,
+        query_cmd.query_matcher,
+        _group_event(".查询 火球术"),
+        _expected_entry("火球术", "玩家手册2024", _FIREBALL_BODY),
+    )
+    # 未写候选记录：随后回复数字不被接管（走普通聊天，不出现「没有编号」提示）
+    assert default_store.size == 0
+    await _expect_silence(app, query_cmd.selection_matcher, _group_event("1"))
+
+
+@pytest.mark.asyncio
 async def test_alias_q(app: App, enabled_query):
-    """别名 .q：等同 .查询。"""
+    """别名 .q：等同 .查询（唯一候选直接出词条）。"""
     _install(FakeTransport(_routes([make_result(1, "火球术", PAGE_SPELLS_2024)])))
     await _expect(
         app,
         query_cmd.query_matcher,
         _group_event(".q 火球术"),
-        _expected_list("火球术", [("火球术", "玩家手册2024")]),
+        _expected_entry("火球术", "玩家手册2024", _FIREBALL_BODY),
     )
 
 
 @pytest.mark.asyncio
 async def test_alias_s_full_search(app: App, enabled_query):
-    """别名 .s：等同 .搜索（全文模式）。"""
-    _install(FakeTransport(_routes([], [make_result(2, "借机攻击", PAGE_NARRATIVE)])))
+    """别名 .s：等同 .搜索（全文模式；唯一候选直接出词条）。"""
+    _install(
+        FakeTransport(_routes([], [make_result(2, "借机攻击", PAGE_TERM_2014)]))
+    )
     await _expect(
         app,
         query_cmd.search_matcher,
         _group_event(".s 借机攻击"),
-        _expected_list("借机攻击", [("借机攻击", "玩家手册2024")]),
+        _expected_entry(
+            "借机攻击",
+            "玩家手册2024",
+            "当敌人离开你的触及范围时，你可以用反应发动一次近战攻击。",
+        ),
     )
 
 
@@ -316,7 +387,7 @@ async def test_private_chat_available(app: App, enabled_query):
         app,
         query_cmd.query_matcher,
         event,
-        _expected_list("火球术", [("火球术", "玩家手册2024")]),
+        _expected_entry("火球术", "玩家手册2024", _FIREBALL_BODY),
     )
 
 
@@ -364,7 +435,7 @@ async def test_fallback_endpoint_serves_query(app: App, enabled_query):
         app,
         query_cmd.query_matcher,
         _group_event(".查询 火球术"),
-        _expected_list("火球术", [("火球术", "玩家手册2024")]),
+        _expected_entry("火球术", "玩家手册2024", _FIREBALL_BODY),
     )
 
 
@@ -373,39 +444,55 @@ async def test_fallback_endpoint_serves_query(app: App, enabled_query):
 
 @pytest.mark.asyncio
 async def test_select_number_sends_entry(app: App, enabled_query):
-    """回复数字：发送词条正文（条目头定位成功）。"""
-    _install(FakeTransport(_routes([make_result(1, "二环", PAGE_SPELLS_2024)])))
+    """多条候选回复数字：发送词条正文（条目头定位成功）。"""
+    _install(
+        FakeTransport(
+            _routes(
+                [
+                    make_result(1, "二环", PAGE_SPELLS_2024),
+                    make_result(2, "三环", PAGE_SPELLS_2024),
+                ]
+            )
+        )
+    )
     await _expect(
         app,
         query_cmd.query_matcher,
         _group_event(".查询 镜影术"),
-        _expected_list("镜影术", [("二环", "玩家手册2024")]),
-    )
-    entry_body = (
-        "二环 幻术\n"
-        "施法时间：1 动作\n"
-        "距离：自身\n"
-        "成分：V、S\n"
-        "持续时间：1 分钟\n"
-        "三个镜像出现在你周围，用于迷惑攻击者。"
+        _expected_list(
+            "镜影术", [("二环", "玩家手册2024"), ("三环", "玩家手册2024")]
+        ),
     )
     await _expect(
         app,
         query_cmd.selection_matcher,
         _group_event("1"),
-        _expected_entry("二环", "玩家手册2024", entry_body),
+        _expected_entry("二环", "玩家手册2024", _MIRROR_BODY),
     )
 
 
 @pytest.mark.asyncio
 async def test_select_entry_fallback_note(app: App, enabled_query):
     """未定位到条目（叙述页）：给出页面片段 + 回退提示。"""
-    _install(FakeTransport(_routes([], [make_result(5, "优势与劣势", PAGE_NARRATIVE)])))
+    _install(
+        FakeTransport(
+            _routes(
+                [],
+                [
+                    make_result(5, "优势与劣势", PAGE_NARRATIVE),
+                    make_result(6, "优势与劣势速查", PAGE_NARRATIVE),
+                ],
+            )
+        )
+    )
     await _expect(
         app,
         query_cmd.query_matcher,
         _group_event(".查询 优势与劣势"),
-        _expected_list("优势与劣势", [("优势与劣势", "玩家手册2024")]),
+        _expected_list(
+            "优势与劣势",
+            [("优势与劣势", "玩家手册2024"), ("优势与劣势速查", "玩家手册2024")],
+        ),
     )
     await _expect(
         app,
@@ -418,18 +505,29 @@ async def test_select_entry_fallback_note(app: App, enabled_query):
 @pytest.mark.asyncio
 async def test_select_out_of_range(app: App, enabled_query):
     """编号越界：提示合法范围。"""
-    _install(FakeTransport(_routes([make_result(1, "火球术", PAGE_SPELLS_2024)])))
+    _install(
+        FakeTransport(
+            _routes(
+                [
+                    make_result(1, "火球术", PAGE_SPELLS_2024),
+                    make_result(2, "灼热射线", PAGE_SPELLS_2024),
+                ]
+            )
+        )
+    )
     await _expect(
         app,
         query_cmd.query_matcher,
-        _group_event(".查询 火球术"),
-        _expected_list("火球术", [("火球术", "玩家手册2024")]),
+        _group_event(".查询 火球"),
+        _expected_list(
+            "火球", [("火球术", "玩家手册2024"), ("灼热射线", "玩家手册2024")]
+        ),
     )
     await _expect(
         app,
         query_cmd.selection_matcher,
         _group_event("9"),
-        text.TXT_QUERY_BAD_INDEX.format(no=9, max=1),
+        text.TXT_QUERY_BAD_INDEX.format(no=9, max=2),
     )
 
 
@@ -503,26 +601,20 @@ async def test_plain_number_without_record_is_silent(app: App):
 
 @pytest.mark.asyncio
 async def test_long_entry_split_into_messages(app: App, enabled_query):
-    """超长词条：按 20 行分段发送（本例两段）。"""
+    """超长词条：唯一候选直接展示，按 20 行分段发送（本例两段）。"""
     body_lines = [f"第{i}行" for i in range(1, 26)]
     long_body = "长词条｜Long Entry\n" + "\n".join(body_lines)
     _install(FakeTransport(_routes([make_result(1, "长词条", long_body)])))
-    await _expect(
-        app,
-        query_cmd.query_matcher,
-        _group_event(".查询 长词条"),
-        _expected_list("长词条", [("长词条", "玩家手册2024")]),
-    )
 
     lines = [text.TXT_QUERY_ENTRY_HEAD.format(category="玩家手册2024", title="长词条")]
     lines.extend(body_lines)
     first = "\n".join(lines[:20])
     second = "\n".join(lines[20:])
 
-    async with app.test_matcher(query_cmd.selection_matcher) as ctx:
+    async with app.test_matcher(query_cmd.query_matcher) as ctx:
         adapter = ctx.create_adapter(base=OnebotV11Adapter)
         bot = ctx.create_bot(base=Bot, adapter=adapter)
-        event = _group_event("1")
+        event = _group_event(".查询 长词条")
         ctx.should_call_send(event, first)
         ctx.should_call_send(event, second)
         ctx.receive_event(bot, event)
@@ -534,12 +626,6 @@ async def test_overlong_entry_truncated_with_note(app: App, enabled_query):
     body_lines = [f"第{i}行" for i in range(1, 71)]
     long_body = "长词条｜Long Entry\n" + "\n".join(body_lines)
     _install(FakeTransport(_routes([make_result(1, "长词条", long_body)])))
-    await _expect(
-        app,
-        query_cmd.query_matcher,
-        _group_event(".查询 长词条"),
-        _expected_list("长词条", [("长词条", "玩家手册2024")]),
-    )
 
     # 定位层给到 60 行上限（正文以省略号结尾），发送层此时正好 3 段；
     # 加上标题行与省略号行共 62 行 → 第 4 段被裁掉并追加截断提示。
@@ -547,10 +633,10 @@ async def test_overlong_entry_truncated_with_note(app: App, enabled_query):
     lines.extend(body_lines[:60])
     lines.append("…")
 
-    async with app.test_matcher(query_cmd.selection_matcher) as ctx:
+    async with app.test_matcher(query_cmd.query_matcher) as ctx:
         adapter = ctx.create_adapter(base=OnebotV11Adapter)
         bot = ctx.create_bot(base=Bot, adapter=adapter)
-        event = _group_event("1")
+        event = _group_event(".查询 长词条")
         for start in (0, 20, 40):
             chunk = lines[start : start + 20]
             if start == 40:
@@ -594,28 +680,16 @@ def _setup_entry(transport_routes=None):
 @pytest.mark.asyncio
 async def test_image_mode_off_still_sends_text(app: App, enabled_query):
     """开关默认关闭：即便注入了渲染器，词条仍按文字发送（逐字不变）。"""
-    render.set_renderer(_fake_renderer())
+    calls: list = []
+    render.set_renderer(_fake_renderer(calls=calls))
     _setup_entry()
     await _expect(
         app,
         query_cmd.query_matcher,
         _group_event(".查询 镜影术"),
-        _expected_list("镜影术", [("二环", "玩家手册2024")]),
+        _expected_entry("二环", "玩家手册2024", _MIRROR_BODY),
     )
-    entry_body = (
-        "二环 幻术\n"
-        "施法时间：1 动作\n"
-        "距离：自身\n"
-        "成分：V、S\n"
-        "持续时间：1 分钟\n"
-        "三个镜像出现在你周围，用于迷惑攻击者。"
-    )
-    await _expect(
-        app,
-        query_cmd.selection_matcher,
-        _group_event("1"),
-        _expected_entry("二环", "玩家手册2024", entry_body),
-    )
+    assert calls == []
 
 
 @pytest.mark.asyncio
@@ -624,13 +698,22 @@ async def test_image_mode_sends_rendered_card(app: App, enabled_query, image_mod
     calls: list = []
     render.set_renderer(_fake_renderer(calls=calls))
     await _enable_image_here(_group_event("1"))
-    _setup_entry()
+    _setup_entry(
+        _routes(
+            [
+                make_result(1, "二环", PAGE_SPELLS_2024),
+                make_result(2, "三环", PAGE_SPELLS_2024),
+            ]
+        )
+    )
     # 候选列表仍为文字（候选列表不出图）
     await _expect(
         app,
         query_cmd.query_matcher,
         _group_event(".查询 镜影术"),
-        _expected_list("镜影术", [("二环", "玩家手册2024")]),
+        _expected_list(
+            "镜影术", [("二环", "玩家手册2024"), ("三环", "玩家手册2024")]
+        ),
     )
     await _expect_image(app, query_cmd.selection_matcher, _group_event("1"), _PNG_1PX)
 
@@ -650,12 +733,25 @@ async def test_image_mode_falls_back_when_title_missing(app: App, enabled_query,
     calls: list = []
     render.set_renderer(_fake_renderer(calls=calls))
     await _enable_image_here(_group_event("1"))
-    _install(FakeTransport(_routes([], [make_result(5, "优势与劣势", PAGE_NARRATIVE)])))
+    _install(
+        FakeTransport(
+            _routes(
+                [],
+                [
+                    make_result(5, "优势与劣势", PAGE_NARRATIVE),
+                    make_result(6, "优势与劣势速查", PAGE_NARRATIVE),
+                ],
+            )
+        )
+    )
     await _expect(
         app,
         query_cmd.query_matcher,
         _group_event(".查询 优势与劣势"),
-        _expected_list("优势与劣势", [("优势与劣势", "玩家手册2024")]),
+        _expected_list(
+            "优势与劣势",
+            [("优势与劣势", "玩家手册2024"), ("优势与劣势速查", "玩家手册2024")],
+        ),
     )
     await _expect_image(app, query_cmd.selection_matcher, _group_event("1"), _PNG_1PX)
     assert calls[0]["title"] == "优势与劣势"
@@ -676,21 +772,7 @@ async def test_image_render_error_falls_back_to_text(app: App, enabled_query, im
         app,
         query_cmd.query_matcher,
         _group_event(".查询 镜影术"),
-        _expected_list("镜影术", [("二环", "玩家手册2024")]),
-    )
-    entry_body = (
-        "二环 幻术\n"
-        "施法时间：1 动作\n"
-        "距离：自身\n"
-        "成分：V、S\n"
-        "持续时间：1 分钟\n"
-        "三个镜像出现在你周围，用于迷惑攻击者。"
-    )
-    await _expect(
-        app,
-        query_cmd.selection_matcher,
-        _group_event("1"),
-        _expected_entry("二环", "玩家手册2024", entry_body),
+        _expected_entry("二环", "玩家手册2024", _MIRROR_BODY),
     )
 
 
@@ -700,35 +782,21 @@ async def test_image_dependency_missing_hint_once(app: App, enabled_query, image
     monkeypatch.setattr(render, "render_available", lambda: False)
     await _enable_image_here(_group_event("1"))
     _setup_entry()
+    # 首次：文字 + 提示行
     await _expect(
         app,
         query_cmd.query_matcher,
         _group_event(".查询 镜影术"),
-        _expected_list("镜影术", [("二环", "玩家手册2024")]),
-    )
-    entry_body = (
-        "二环 幻术\n"
-        "施法时间：1 动作\n"
-        "距离：自身\n"
-        "成分：V、S\n"
-        "持续时间：1 分钟\n"
-        "三个镜像出现在你周围，用于迷惑攻击者。"
-    )
-    # 首次：文字 + 提示行
-    await _expect(
-        app,
-        query_cmd.selection_matcher,
-        _group_event("1"),
-        _expected_entry("二环", "玩家手册2024", entry_body)
+        _expected_entry("二环", "玩家手册2024", _MIRROR_BODY)
         + "\n"
         + text.TXT_QUERY_IMAGE_FALLBACK,
     )
     # 第二次：文字（不再附提示）
     await _expect(
         app,
-        query_cmd.selection_matcher,
-        _group_event("1"),
-        _expected_entry("二环", "玩家手册2024", entry_body),
+        query_cmd.query_matcher,
+        _group_event(".查询 镜影术"),
+        _expected_entry("二环", "玩家手册2024", _MIRROR_BODY),
     )
 
 
@@ -742,21 +810,7 @@ async def test_image_mode_off_no_hint_when_dependency_missing(app: App, enabled_
         app,
         query_cmd.query_matcher,
         _group_event(".查询 镜影术"),
-        _expected_list("镜影术", [("二环", "玩家手册2024")]),
-    )
-    entry_body = (
-        "二环 幻术\n"
-        "施法时间：1 动作\n"
-        "距离：自身\n"
-        "成分：V、S\n"
-        "持续时间：1 分钟\n"
-        "三个镜像出现在你周围，用于迷惑攻击者。"
-    )
-    await _expect(
-        app,
-        query_cmd.selection_matcher,
-        _group_event("1"),
-        _expected_entry("二环", "玩家手册2024", entry_body),
+        _expected_entry("二环", "玩家手册2024", _MIRROR_BODY),
     )
 
 
@@ -771,12 +825,6 @@ async def test_image_mode_skips_empty_body(app: App, enabled_query, image_mode):
         app,
         query_cmd.query_matcher,
         _group_event(".查询 空页"),
-        _expected_list("空页", [("空页", "玩家手册2024")]),
-    )
-    await _expect(
-        app,
-        query_cmd.selection_matcher,
-        _group_event("1"),
         _expected_entry(
             "空页", "玩家手册2024", text.TXT_QUERY_ENTRY_EMPTY, fallback=True
         ),
@@ -800,7 +848,7 @@ async def test_image_setting_view_default_text(app: App, enabled_query, image_mo
 
 @pytest.mark.asyncio
 async def test_image_setting_on_then_query_sends_image(app: App, enabled_query, image_mode):
-    """开启：成功提示 + 落盘生效——随后查询词条即出图。"""
+    """开启：成功提示 + 落盘生效——随后查询词条即出图（唯一候选直接出图）。"""
     render.set_renderer(_fake_renderer())
     _setup_entry()
     await _expect(
@@ -809,13 +857,7 @@ async def test_image_setting_on_then_query_sends_image(app: App, enabled_query, 
         _group_event(".查询图片 on"),
         text.TXT_QUERY_IMAGE_ON.format(where="本群"),
     )
-    await _expect(
-        app,
-        query_cmd.query_matcher,
-        _group_event(".查询 镜影术"),
-        _expected_list("镜影术", [("二环", "玩家手册2024")]),
-    )
-    await _expect_image(app, query_cmd.selection_matcher, _group_event("1"), _PNG_1PX)
+    await _expect_image(app, query_cmd.query_matcher, _group_event(".查询 镜影术"), _PNG_1PX)
 
 
 @pytest.mark.asyncio
@@ -834,21 +876,7 @@ async def test_image_setting_off_back_to_text(app: App, enabled_query, image_mod
         app,
         query_cmd.query_matcher,
         _group_event(".查询 镜影术"),
-        _expected_list("镜影术", [("二环", "玩家手册2024")]),
-    )
-    entry_body = (
-        "二环 幻术\n"
-        "施法时间：1 动作\n"
-        "距离：自身\n"
-        "成分：V、S\n"
-        "持续时间：1 分钟\n"
-        "三个镜像出现在你周围，用于迷惑攻击者。"
-    )
-    await _expect(
-        app,
-        query_cmd.selection_matcher,
-        _group_event("1"),
-        _expected_entry("二环", "玩家手册2024", entry_body),
+        _expected_entry("二环", "玩家手册2024", _MIRROR_BODY),
     )
 
 
@@ -876,21 +904,7 @@ async def test_image_setting_rejected_when_master_off(app: App, enabled_query):
         app,
         query_cmd.query_matcher,
         _group_event(".查询 镜影术"),
-        _expected_list("镜影术", [("二环", "玩家手册2024")]),
-    )
-    entry_body = (
-        "二环 幻术\n"
-        "施法时间：1 动作\n"
-        "距离：自身\n"
-        "成分：V、S\n"
-        "持续时间：1 分钟\n"
-        "三个镜像出现在你周围，用于迷惑攻击者。"
-    )
-    await _expect(
-        app,
-        query_cmd.selection_matcher,
-        _group_event("1"),
-        _expected_entry("二环", "玩家手册2024", entry_body),
+        _expected_entry("二环", "玩家手册2024", _MIRROR_BODY),
     )
     assert calls == []
 
@@ -960,17 +974,11 @@ async def test_image_setting_private_scoped_per_user(app: App, enabled_query, im
         private_event,
         text.TXT_QUERY_IMAGE_ON.format(where="你"),
     )
-    # 同一用户私聊已开启 → 私聊查询出图
-    await _expect(
+    # 同一用户私聊已开启 → 私聊查询（唯一候选）直接出图
+    await _expect_image(
         app,
         query_cmd.query_matcher,
         fake_private_message_event_v11(message=Message(".查询 镜影术")),
-        _expected_list("镜影术", [("二环", "玩家手册2024")]),
-    )
-    await _expect_image(
-        app,
-        query_cmd.selection_matcher,
-        fake_private_message_event_v11(message=Message("1")),
         _PNG_1PX,
     )
     # 群聊不受该私聊设置影响
@@ -1005,12 +1013,12 @@ async def test_image_setting_alias_and_bad_arg(app: App, enabled_query, image_mo
 @pytest.mark.asyncio
 async def test_image_setting_does_not_shadow_query(app: App, enabled_query, image_mode):
     """命令名不互吃：.查询图片 不被 .查询 抢走，.查询 图片 仍是关键词检索。"""
-    _install(FakeTransport(_routes([make_result(1, "图片", PAGE_SPELLS_2024)])))
+    _install(FakeTransport(_routes([make_result(1, "图片", PAGE_NARRATIVE)])))
     await _expect(
         app,
         query_cmd.query_matcher,
         _group_event(".查询 图片"),
-        _expected_list("图片", [("图片", "玩家手册2024")]),
+        _expected_entry("图片", "玩家手册2024", PAGE_NARRATIVE, fallback=True),
     )
 
 
