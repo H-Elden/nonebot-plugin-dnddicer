@@ -40,15 +40,50 @@ _BUILTIN_STARTS: tuple[str, ...] = (".", "。")
 #: 已注册命令名 → 说明文案（供匹配与 .帮助 使用）
 _REGISTRY: dict[str, str] = {}
 
+#: 隐藏命令名：注册进匹配表（命令照常可用），但不进 .帮助 列表与详情
+_HIDDEN: set[str] = set()
 
-def register_command(name: str, description: str = "") -> None:
-    """注册一条命令名（重复注册同名时保留先注册者）。"""
-    _REGISTRY.setdefault(name, description)
+
+def register_command(name: str, description: str = "", *, hidden: bool = False) -> None:
+    """注册一条命令名（重复注册同名时保留先注册者）。
+
+    ``hidden=True`` 的命令照常参与匹配，但 ``get_registered_commands`` 不返回，
+    因此不出现在 ``.帮助`` 列表与 ``.help <名>`` 详情里（骰主命令等内部命令用）。
+    """
+    if name not in _REGISTRY:
+        _REGISTRY[name] = description
+    if hidden:
+        _HIDDEN.add(name)
 
 
 def get_registered_commands() -> dict[str, str]:
-    """返回已注册命令名及其说明（副本）。"""
-    return dict(_REGISTRY)
+    """返回可在 .帮助 中展示的命令名及其说明（副本；隐藏命令不出现）。"""
+    return {name: doc for name, doc in _REGISTRY.items() if name not in _HIDDEN}
+
+
+def superusers() -> set[str]:
+    """宿主配置的骰主 QQ 集合（SUPERUSERS；未初始化或无配置时为空集）。"""
+    try:
+        configured = get_driver().config.superusers
+    except ValueError:
+        return set()
+    return {str(qq) for qq in (configured or set())}
+
+
+def is_superuser(event: MessageEvent) -> bool:
+    """事件的发送者是否为骰主（宿主 SUPERUSERS 配置）。"""
+    return str(getattr(event, "user_id", "")) in superusers()
+
+
+async def guard_superuser(matcher: Matcher, event: MessageEvent) -> None:
+    """骰主校验：非骰主时回一句提示并结束当前处理。
+
+    仅用于「骰主私聊」类命令（群聊由其规则层直接不命中、保持静默，见
+    ``on_dnd_command(private_superuser=True)``）；私聊非骰主给提示便于骰主
+    排查宿主 SUPERUSERS 配置问题。
+    """
+    if not is_superuser(event):
+        await matcher.finish(text.TXT_SUPERUSER_ONLY)
 
 
 @lru_cache(maxsize=1)
@@ -150,12 +185,27 @@ def group_service_rule(*manage_commands: str) -> Rule:
     return Rule(_checker)
 
 
+def private_rule() -> Rule:
+    """仅私聊命中的规则（群聊事件一律不响应，用于骰主私聊命令）。
+
+    群聊里该类命令静默不响应（不暴露命令存在）；私聊是否放行再由命令处理层
+    用 ``guard_superuser`` 判定骰主身份。
+    """
+
+    async def _checker(event: MessageEvent) -> bool:
+        return getattr(event, "group_id", None) is None
+
+    return Rule(_checker)
+
+
 def on_dnd_command(
     name: str,
     description: str = "",
     *,
     aliases: tuple[str, ...] = (),
     require_to_me: bool = False,
+    hidden: bool = False,
+    private_superuser: bool = False,
 ) -> Matcher:
     """创建一条 DNDDicer 点前缀命令的事件响应器并注册命令名。
 
@@ -166,18 +216,23 @@ def on_dnd_command(
         require_to_me: 群聊中是否必须 @ 机器人（to_me）才响应。onebot v11
             群聊仅开头/结尾 @ 机器人时为 to_me（at 段被适配器剥除后命令文本
             正常解析）；私聊事件 to_me 恒为 True，不受该选项影响。
+        hidden: 是否列入「隐藏命令」（照常匹配，但不进 .帮助 列表与详情）。
+        private_superuser: 是否仅私聊命中（群聊静默不响应）；命令处理层需
+            自行调用 ``guard_superuser`` 判定骰主身份并给非骰主提示。
 
     Returns:
         可直接挂 ``@matcher.handle()`` 的 Matcher。
     """
-    register_command(name, description)
+    register_command(name, description, hidden=hidden)
     for alias in aliases:
-        register_command(alias, description)
+        register_command(alias, description, hidden=hidden)
 
     names = (name, *aliases)
     rule = command_rule(*names)
     if require_to_me:
         rule = rule & to_me()
+    if private_superuser:
+        rule = rule & private_rule()
     # 群聊服务门禁：.bot 为服务开关管理命令，始终放行（见 commands/bot.py）
     manage = (name,) if name.lower() == "bot" else ()
     rule = rule & group_service_rule(*manage)
