@@ -1014,9 +1014,17 @@ quickstart_bot_off = Scene(
 
 query_search_select = Scene(
     id="query_search_select",
-    title="规则查询：名称检索 → 候选列表 → 回复数字看词条",
+    title="规则查询：名称检索（唯一命中时直接展示词条）",
     steps=[
         Step("阿茶", ".查询 镜影术"),
+    ],
+)
+
+query_pick_entry = Scene(
+    id="query_pick_entry",
+    title="候选选择：多条候选时回复编号查看词条正文",
+    steps=[
+        Step("阿茶", ".查询 火球"),
         Step("阿茶", "1"),
     ],
 )
@@ -1056,7 +1064,7 @@ query_scope_set = Scene(
     steps=[
         Step("白鸦", ".查询范围 PHB24,MM25,XGE"),
         Step("白鸦", ".查询范围"),
-        Step("阿茶", ".查询 镜影术"),          # 范围内命中：正常出候选
+        Step("阿茶", ".查询 火焰|闪电"),       # 范围内命中：正常出候选（单页列表）
         Step("阿茶", ".查询 法术位"),          # 范围内无结果：.查询 会附「改用 .搜索 全文检索」
         Step("阿茶", ".搜索 法术位"),          # 已用全文搜索：只说明范围，不建议改用 .搜索
         Step("白鸦", ".查询范围 Dk"),          # 合作内容书目：提示改用整目录键
@@ -1192,6 +1200,7 @@ TIMELINE = [
     faq_dset_denied,
     # 第八幕：规则查询（《规则查询》页）
     query_search_select,
+    query_pick_entry,
     query_multi_keyword,
     query_full_paging,
     query_image_switch,
