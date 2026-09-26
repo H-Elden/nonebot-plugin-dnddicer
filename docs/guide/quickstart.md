@@ -172,6 +172,7 @@ DNDDICER_QUERY_ENDPOINT_COOLDOWN=60.0
 专精 DND5e/5r 跑团的骰娘：掷骰表达式、角色卡与检定/豁免、自定义武器与攻击、属性生成、HP 管理、先攻列表、战斗轮、规则查询、群配置。
 本群服务已开启，可直接使用本插件的全部命令。
 用法：.bot on / .bot off——仅限群聊，需群主或管理员权限。
+详细帮助文档：https://dnddicer.netlify.app
 :::
 
 需要临时停用时（比如 DM 需要关闭骰娘服务），同权限发送 `.bot off`：
