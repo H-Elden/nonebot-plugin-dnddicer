@@ -4,7 +4,7 @@ import { chatContainer } from './plugins/chat-container.mts'
 // 屠龙骰（DNDDicer）使用文档站配置。
 // 主站发布在 GitHub Pages 的仓库子路径下，base 必须与实际部署路径一致，
 // 本地开发地址也随之带前缀（http://localhost:5173/nonebot-plugin-dnddicer/）。
-// 国内镜像站（腾讯云 EdgeOne Makers）部署在根路径，构建时用环境变量覆盖 base：
+// 国内镜像站（Netlify）部署在根路径，构建时用环境变量覆盖 base：
 //   DOCS_BASE=/ npm run docs:build      （见 .github/workflows/docs.yml 的 mirror 任务）
 // 注意：Windows 的 Git Bash 会把「/」改写为 Windows 路径，本地复验镜像构建时写
 //   MSYS_NO_PATHCONV=1 DOCS_BASE=/ npm run docs:build
