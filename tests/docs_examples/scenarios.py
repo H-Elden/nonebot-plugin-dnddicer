@@ -1080,6 +1080,35 @@ query_books_text = Scene(
     ],
 )
 
+# 速查子命令（.查询法术 等）：索引已换成演示数据（见 query_atlas_demo.py），
+# 候选列表、版本排序、回复数字与正文切分全部真实执行。
+
+query_atlas_versions = Scene(
+    id="query_atlas_versions",
+    title="速查子命令：同名条目按书目版本分列（回复编号查看正文）",
+    steps=[
+        Step("阿茶", ".查询法术 狂笑术"),   # 子串命中「塔莎狂笑术」；2024 / 2014 两条候选
+        Step("阿茶", "1"),
+    ],
+)
+
+query_atlas_unique = Scene(
+    id="query_atlas_unique",
+    title="速查子命令：唯一命中时直接展示词条正文",
+    steps=[
+        Step("阿茶", ".查询物品 龙珠"),
+    ],
+)
+
+query_atlas_feat_unit = Scene(
+    id="query_atlas_feat_unit",
+    title="速查子命令：专长条目与单位小节（页内定位）",
+    steps=[
+        Step("阿茶", ".查询专长 冲锋手"),
+        Step("阿茶", ".查询单位 货币"),
+    ],
+)
+
 dm_scope_setup = Scene(
     id="dm_scope_setup",
     title="开团前：DM 把本团可查书目收窄到核心三书",
@@ -1206,6 +1235,9 @@ TIMELINE = [
     query_image_switch,
     query_scope_set,
     query_books_text,
+    query_atlas_versions,   # 速查子命令（演示索引）：候选与版本
+    query_atlas_unique,     # 速查子命令：唯一命中直出
+    query_atlas_feat_unit,  # 速查子命令：专长 / 单位形态
     dm_scope_setup,      # DM 给本团定可查书目（核心三书；置尾以免影响上面的开放范围示例）
     quickstart_bot_off,  # 压轴：服务关闭后本群不再响应其他命令
 ]

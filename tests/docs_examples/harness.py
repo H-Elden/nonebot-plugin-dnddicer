@@ -168,9 +168,11 @@ class TimelineRunner:
     async def reset_group_state(self) -> None:
         """重置示例群状态（服务关闭、清空角色卡 / NPC 血量 / 先攻表 / 群配置 / 查询设置）。
 
-        规则查询场景另装**合成数据源**（见 query_demo.py）：查询行为真实执行，
-        词条内容为自写演示文本（文档页不能转录规则原文）。
+        规则查询场景另装**合成数据源**（见 query_demo.py）与**演示速查索引**
+        （见 query_atlas_demo.py）：查询行为真实执行，词条内容为自写演示文本
+        （文档页不能转录规则原文）。
         """
+        from nonebot_plugin_dnddicer.commands import atlas as atlas_cmd
         from nonebot_plugin_dnddicer.commands import query as query_cmd
         from nonebot_plugin_dnddicer.data import (
             characters,
@@ -182,6 +184,7 @@ class TimelineRunner:
         )
         from nonebot_plugin_dnddicer.query import default_store
 
+        import query_atlas_demo
         import query_demo
 
         await service_state.set_service_enabled(cast.GROUP_ID, False)
@@ -196,6 +199,8 @@ class TimelineRunner:
         await query_settings.set_scope(chat_key, None)
         default_store.reset()
         query_cmd.set_source(query_demo.build_demo_source())
+        # 速查子命令：装入演示索引（条目内置、详情页由假传输返回）
+        atlas_cmd.set_store(query_atlas_demo.build_demo_store())
 
     async def run_scene(self, scene: Scene) -> List[Line]:
         """跑一个场景，返回本场景产生的消息行。"""
