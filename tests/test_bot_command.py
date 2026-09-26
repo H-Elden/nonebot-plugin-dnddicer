@@ -73,6 +73,7 @@ def _info_lines(state_line: str) -> str:
             text.TXT_BOT_INTRO,
             state_line,
             text.TXT_BOT_USAGE,
+            text.TXT_DOCS_LINK,
         ]
     )
 

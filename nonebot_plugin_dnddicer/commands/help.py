@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from nonebot.adapters.onebot.v11 import MessageEvent
 
-from . import base
+from . import base, text
 
 _HELP = (
     "帮助：.help / .帮助\n"
@@ -47,6 +47,7 @@ async def handle_help(event: MessageEvent) -> None:
             seen_docs.add(description)
             summary = _summary_line(description)
             lines.append(f"· .{name}  {summary}" if summary else f"· .{name}")
+        lines.append(text.TXT_DOCS_LINK)
         await help_matcher.finish("\n".join(lines))
 
     # 带参数：查指定命令的完整帮助

@@ -66,7 +66,8 @@ _OVERVIEW = (
     "· .查询术语  查询术语：.查询术语 <名称>\n"
     "· .查询单位  查询单位：.查询单位 <名称>\n"
     "· .bot  查看插件信息或开关本群服务：.bot on / .bot off（仅群聊，需群主或管理员权限）\n"
-    "· .help  帮助：.help / .帮助"
+    "· .help  帮助：.help / .帮助\n"
+    "详细帮助文档：https://dnddicer.netlify.app"
 )
 
 

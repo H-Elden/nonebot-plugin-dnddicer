@@ -44,6 +44,7 @@ async def _build_info(event: MessageEvent) -> str:
     else:
         lines.append(text.TXT_BOT_STATE_PRIVATE)
     lines.append(text.TXT_BOT_USAGE)
+    lines.append(text.TXT_DOCS_LINK)
     return "\n".join(lines)
 
 
