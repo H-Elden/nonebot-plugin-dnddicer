@@ -176,6 +176,11 @@ def _category_of(page_path: str) -> str:
     return page_path.split("/", 1)[0] if page_path else ""
 
 
+def _page_stem(page_path: str) -> str:
+    """页面文件名（去目录与后缀）——专长条目的分类展示（如「通用专长」）。"""
+    return page_path.rsplit("/", 1)[-1].rsplit(".", 1)[0] if page_path else ""
+
+
 def _category_rank(category: str) -> int:
     """书目排序权重：按书架顺序（核心 2024 在前、旧版在后、整目录最后）。
 
@@ -283,10 +288,12 @@ def parse_feat_page(html: str, *, page_path: str) -> List[AtlasEntry]:
 
     站点专长不是独立页面（一页含多个专长），条目以
     ``<FONT color=#800000>中文名<BR>English</FONT>`` 形态标记；章节标题
-    （如「专长描述 Feat Descriptions」）按关键词与长度过滤。
+    （如「专长描述 Feat Descriptions」）按关键词与长度过滤。``meta`` 取页面
+    文件名作为**分类**（站点专长按类分页：通用专长 / 起源专长 / 战斗风格专长…）。
     """
     entries: List[AtlasEntry] = []
     seen: set = set()
+    meta = _page_stem(page_path)
     for match in _FEAT_HEAD_RE.finditer(html):
         text = _clean(re.sub(r"<BR\s*/?>", " ", match.group(1), flags=re.I))
         if not text or len(text) > 40:
@@ -304,6 +311,7 @@ def parse_feat_page(html: str, *, page_path: str) -> List[AtlasEntry]:
                 name_en=name_en,
                 category=_category_of(page_path),
                 page_path=page_path,
+                meta=meta,
             )
         )
     return entries

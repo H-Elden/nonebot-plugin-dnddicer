@@ -145,6 +145,7 @@ def demo_entries() -> Dict[str, List[AtlasEntry]]:
                 name_en="Charger",
                 category="玩家手册2024",
                 page_path="玩家手册2024/专长/通用专长.htm",
+                meta="通用专长",
             ),
         ],
         "unit": [

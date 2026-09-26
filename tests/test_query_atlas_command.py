@@ -198,6 +198,47 @@ async def test_candidates_list_literal(app: App, enabled_query, store):
 
 
 @pytest.mark.asyncio
+async def test_feat_candidates_show_category(app: App, enabled_query, tmp_path):
+    """专长候选：括号里带页面分类（如「通用专长」），不止书目。"""
+    instance = atlas_mod.AtlasStore(
+        _FakeFetcher({}), cache_file=tmp_path / "query_atlas.json"
+    )
+    instance.merge_and_save(
+        {
+            atlas_mod.KIND_FEAT: [
+                atlas_mod.AtlasEntry(
+                    kind=atlas_mod.KIND_FEAT,
+                    name="冲锋手",
+                    name_en="Charger",
+                    category="玩家手册2024",
+                    page_path="玩家手册2024/专长/通用专长.htm",
+                    meta="通用专长",
+                ),
+                atlas_mod.AtlasEntry(
+                    kind=atlas_mod.KIND_FEAT,
+                    name="冲锋手",
+                    name_en="Charger",
+                    category="玩家手册2024",
+                    page_path="玩家手册2024/专长/战斗风格专长.htm",
+                    meta="战斗风格专长",
+                ),
+            ]
+        }
+    )
+    atlas_cmd.set_store(instance)
+    # 同分排序按页面路径稳定排序（「战」先于「通」），分类随行展示
+    await _expect(
+        app,
+        query_atlas.feat_matcher,
+        _group_event(".查询专长 冲锋手"),
+        "「冲锋手」共 2 条专长候选：\n"
+        "1. 冲锋手（玩家手册2024 · 战斗风格专长）\n"
+        "2. 冲锋手（玩家手册2024 · 通用专长）\n"
+        "回复数字查看详情（60 秒内有效）",
+    )
+
+
+@pytest.mark.asyncio
 async def test_select_number_sends_entry(app: App, enabled_query, store):
     """回复数字：选择流程分流到速查正文（抓页解码）。"""
     await _expect(

@@ -119,13 +119,15 @@ def test_parse_terms() -> None:
 
 
 def test_parse_feat_page_filters_section_titles() -> None:
-    """专长页：紫红块取条目，「专长描述」这类章节标题被过滤。"""
+    """专长页：紫红块取条目，「专长描述」这类章节标题被过滤；meta 取页面分类。"""
     entries = atlas.parse_feat_page(
         _FEAT_PAGE, page_path="玩家手册2024/专长/通用专长.htm"
     )
     assert [entry.name for entry in entries] == ["冲锋手", "大厨"]
     assert entries[0].name_en == "Charger"
     assert entries[0].page_path == "玩家手册2024/专长/通用专长.htm"
+    # 分类展示（候选括号里的「通用专长」，2026-09-26 用户拍板补齐）
+    assert [entry.meta for entry in entries] == ["通用专长", "通用专长"]
 
 
 def test_toc_entries_and_feat_pages() -> None:
