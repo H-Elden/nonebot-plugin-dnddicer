@@ -1109,6 +1109,16 @@ query_atlas_feat_unit = Scene(
     ],
 )
 
+query_index_master = Scene(
+    id="query_index_master",
+    title="骰主命令：查看速查索引状态与按类刷新（仅骰主私聊）",
+    steps=[
+        Step("阿茶", ".查询索引", channel="private"),                    # 非骰主：提示
+        Step("白鸦", ".查询索引", channel="private", superuser=True),     # 骰主：状态
+        Step("白鸦", ".查询索引 刷新 法术", channel="private", superuser=True),
+    ],
+)
+
 dm_scope_setup = Scene(
     id="dm_scope_setup",
     title="开团前：DM 把本团可查书目收窄到核心三书",
@@ -1238,6 +1248,7 @@ TIMELINE = [
     query_atlas_versions,   # 速查子命令（演示索引）：候选与版本
     query_atlas_unique,     # 速查子命令：唯一命中直出
     query_atlas_feat_unit,  # 速查子命令：专长 / 单位形态
+    query_index_master,     # 骰主命令：索引状态与按类刷新（仅骰主私聊）
     dm_scope_setup,      # DM 给本团定可查书目（核心三书；置尾以免影响上面的开放范围示例）
     quickstart_bot_off,  # 压轴：服务关闭后本群不再响应其他命令
 ]

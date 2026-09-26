@@ -106,6 +106,16 @@ async def refresh_index(kinds: Optional[Sequence[str]] = None) -> dict:
     return await asyncio.to_thread(store.merge_and_save, built)
 
 
+async def wait_background_tasks() -> None:
+    """等待后台任务（启动构建 / 手动刷新）执行完毕。
+
+    手动刷新是「先回报、后台执行」：脚本化场景（示例时间线、回归脚本）需要
+    等任务跑完再继续，否则回报消息与后续步骤的转录顺序不稳定。
+    """
+    if _background_tasks:
+        await asyncio.gather(*tuple(_background_tasks), return_exceptions=True)
+
+
 # =========================================================================
 # 启动构建（后台、不阻塞启动）
 # =========================================================================

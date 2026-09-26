@@ -9,10 +9,12 @@
 说明：
 
 - 索引条目**直接注入**（不经网络构建），详情页由假传输按路径返回（全离线）；
-- 演示索引只覆盖示例用到的四类（法术 / 物品 / 专长 / 单位），其余类别未建，
-  示例时间线不会查询它们；
+- 索引八类都会建（骰主命令 `.查询索引` 的状态输出用），但只给示例查询用到的
+  四类（法术 / 物品 / 专长 / 单位）配了详情页；刷新演示另配了法术速查表页；
 - 演示页面正文一律为自写短句；**刻意不用表格**：文字模式下表格行以 `` | ``
-  连接（如 ``金币 | gp``），会撞上 ``::: chat`` 容器的「昵称 | 内容」行格式。
+  连接（如 ``金币 | gp``），会撞上 ``::: chat`` 容器的「昵称 | 内容」行格式；
+- 构建时刻取固定值（``_DEMO_BUILT_AT``）：状态输出含构建时间，需固定
+  才能保证转录可复现。
 """
 
 from __future__ import annotations
@@ -25,6 +27,9 @@ from query_fakes import FakeTransport
 from nonebot_plugin_dnddicer.data import get_data_file
 from nonebot_plugin_dnddicer.query.atlas import AtlasEntry, AtlasStore
 from nonebot_plugin_dnddicer.query.fetch import HtmlFetcher
+
+#: 演示索引的固定构建时刻（2026-09-26 12:00；状态输出含构建时间，须固定）
+_DEMO_BUILT_AT = 1790395200.0
 
 # ── 演示详情页（结构照站点形态；正文为自写短句）─────────────────────────
 
@@ -85,6 +90,21 @@ _PAGE_UNIT = """<html><body>
 <LI><DIV>1 银币（SP）= 10 铜币（CP）</DIV></LI></UL>
 </body></html>"""
 
+#: 速查表页（法术，官方表）：`.查询索引 刷新 法术` 演示用（两行，对应注入的两条）
+_PAGE_QUICKREF_SPELL = """<TABLE>
+<TR spell="塔莎狂笑术Tasha's Hideous Laughter">
+<TD><a href="../玩家手册2024/法术详述/1环.htm#Tasha's_Hideous_Laughter">塔莎狂笑术Tasha's Hideous Laughter</a></TD>
+<TD>一环</TD><TD>惑控</TD><TD>法</TD><TD>动作</TD><TD>V</TD><TD>S</TD><TD>M</TD><TD>×</TD><TD>×</TD><TD>PHB24</TD>
+</TR>
+<TR spell="塔莎狂笑术Tasha's Hideous Laughter">
+<TD><a href="../玩家手册/魔法/法术详述/1环.html#Tasha's_Hideous_Laughter">塔莎狂笑术Tasha's Hideous Laughter</a></TD>
+<TD>一环</TD><TD>惑控</TD><TD>法</TD><TD>动作</TD><TD>V</TD><TD>S</TD><TD>M</TD><TD>×</TD><TD>×</TD><TD>PHB14</TD>
+</TR>
+</TABLE>"""
+
+#: 合作速查表页（法术）：演示为空表（刷新演示只覆盖官方表）
+_PAGE_QUICKREF_SPELL_COOP = "<TABLE></TABLE>"
+
 #: 站内相对路径 → 演示页 HTML（假传输按此路由）
 _PAGES: Dict[str, str] = {
     "玩家手册2024/法术详述/1环.htm": _PAGE_SPELL_2024,
@@ -92,6 +112,8 @@ _PAGES: Dict[str, str] = {
     "城主指南2024/7.宝藏/魔法物品详述/奇物/其他物品/神器.htm": _PAGE_ARTIFACT,
     "玩家手册2024/专长/通用专长.htm": _PAGE_FEAT,
     "速查/单位转换.htm": _PAGE_UNIT,
+    "速查/法术速查/5E万法大全.html": _PAGE_QUICKREF_SPELL,
+    "速查/法术速查/合作方万法大全.html": _PAGE_QUICKREF_SPELL_COOP,
 }
 
 
@@ -157,6 +179,48 @@ def demo_entries() -> Dict[str, List[AtlasEntry]]:
                 meta="单位转换",
             ),
         ],
+        # 其余四类：只为骰主命令 `.查询索引` 的状态输出提供计数（示例查询不查它们）
+        "monster": [
+            AtlasEntry(
+                kind="monster",
+                name="食人魔",
+                name_en="Ogre",
+                category="怪物图鉴2025",
+                page_path="怪物图鉴2025/巨人/食人魔/食人魔.htm",
+                anchor="Ogre",
+                meta="大型 · 巨人 · CR2",
+            ),
+        ],
+        "class": [
+            AtlasEntry(
+                kind="class",
+                name="野蛮人",
+                name_en="Barbarian",
+                category="玩家手册2024",
+                page_path="玩家手册2024/角色职业/野蛮人/野蛮人.htm",
+                meta="职业",
+            ),
+        ],
+        "origin": [
+            AtlasEntry(
+                kind="origin",
+                name="士兵",
+                name_en="Soldier",
+                category="玩家手册2024",
+                page_path="玩家手册2024/角色起源/背景/士兵.htm",
+                meta="背景",
+            ),
+        ],
+        "term": [
+            AtlasEntry(
+                kind="term",
+                name="倒地",
+                name_en="Prone",
+                category="玩家手册2024",
+                page_path="玩家手册2024/术语汇编/状态.htm",
+                anchor="Prone",
+            ),
+        ],
     }
 
 
@@ -167,6 +231,10 @@ def build_demo_store() -> AtlasStore:
         transport=FakeTransport([("topics/", _respond_page)]),
         min_interval=0.0,
     )
-    store = AtlasStore(fetcher, cache_file=get_data_file("query_atlas_demo.json"))
+    store = AtlasStore(
+        fetcher,
+        cache_file=get_data_file("query_atlas_demo.json"),
+        clock=lambda: _DEMO_BUILT_AT,
+    )
     store.merge_and_save(demo_entries())
     return store

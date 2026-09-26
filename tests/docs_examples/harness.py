@@ -70,6 +70,7 @@ class Step:
     dice: List[int] = field(default_factory=list)  # 本步消费的骰值（恰好耗尽）
     gate: Literal["real", "bypass"] = "bypass"  # real=走真实群聊服务门禁
     channel: Literal["group", "private"] = "group"  # private=私聊（答复落「屠龙骰（私聊）」）
+    superuser: bool = False  # 本步期间把发言人设为骰主（SUPERUSERS）
 
 
 @dataclass
@@ -244,10 +245,15 @@ class TimelineRunner:
         runtime = SequenceRuntime(step.dice)
         token = set_runtime(runtime)
         try:
-            with self._gate(step.gate):
+            with self._gate(step.gate), self._as_superuser(step.superuser, persona):
                 await self.bot.handle_event(event)
         finally:
             reset_runtime(token)
+
+        # 后台任务（如 .查询索引 刷新）先跑完：回报消息要落在本步内，顺序才稳定
+        from nonebot_plugin_dnddicer.commands import atlas as atlas_cmd
+
+        await atlas_cmd.wait_background_tasks()
 
         remaining = runtime.get_remaining_count()
         if remaining:
@@ -285,6 +291,26 @@ class TimelineRunner:
             sender=sender,
             to_me=False,
         )
+
+    @contextmanager
+    def _as_superuser(self, enabled: bool, persona: "cast.Persona") -> Iterator[None]:
+        """本步期间把发言人设为骰主（SUPERUSERS 宿主配置，做法同测试夹具）。"""
+        if not enabled:
+            yield
+            return
+
+        from nonebot_plugin_dnddicer.commands import base
+
+        original = base.superusers
+
+        def _only() -> set:
+            return {str(persona.qq)}
+
+        base.superusers = _only  # type: ignore[assignment]
+        try:
+            yield
+        finally:
+            base.superusers = original  # type: ignore[assignment]
 
     @contextmanager
     def _gate(self, mode: str) -> Iterator[None]:
