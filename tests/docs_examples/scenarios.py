@@ -479,6 +479,22 @@ weapon_manage = Scene(
     ],
 )
 
+weapon_fuzzy_match = Scene(
+    id="weapon_fuzzy_match",
+    title="武器名模糊匹配：写一部分即可，多件候选时报歧义",
+    steps=[
+        # 临时加两件与「刺剑」互为子串的武器（用完即删，不影响后续场景）
+        Step("老猫", ".设置武器 精灵刺剑+8,1d8+5穿刺/刺剑投掷+7,1d6+4穿刺"),
+        Step("老猫", ".精灵攻击", dice=[12]),
+        Step("老猫", ".投掷伤害", dice=[3]),
+        Step("老猫", ".刺伤害"),
+        Step("老猫", ".刺剑伤害", dice=[6]),
+        Step("老猫", ".删除武器 投掷"),
+        Step("老猫", ".删除武器 剑"),
+        Step("老猫", ".删除武器 精灵刺剑"),
+    ],
+)
+
 # ── 第三幕：碎星隘口遭遇战（先攻列表） ──────────────────────────────────────
 
 battle_open = Scene(
@@ -1183,6 +1199,7 @@ TIMELINE = [
     weapon_spell_variants,
     weapon_sneak_reject,
     weapon_manage,
+    weapon_fuzzy_match,
     # 第三幕：碎星隘口遭遇战（先攻列表）
     battle_open,
     init_player_roll,
