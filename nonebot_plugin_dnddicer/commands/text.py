@@ -107,6 +107,8 @@ TXT_CHECK_RESULT = "{name}进行【{check}】：\n{hint}\n{result}"
 # 引导、天然1 → 必失），不使用 .r 的「大成功/大失败」文案
 TXT_WEAPON_ATTACK = "{name}进行【{check}】：\n{hint}\n{result}"
 TXT_WEAPON_NOT_FOUND = "未找到武器「{name}」。可用 .设置武器 查看已有武器或添加新武器。"
+#: 名称的一部分同时落在多件武器上（2026-09-27：武器名支持模糊匹配后的歧义提示）
+TXT_WEAPON_VAGUE = "武器名「{name}」匹配到多件武器: {weapons}（请写更完整的名称）"
 #: 天然 20/1 提示：单独一行（不加括号，2026-09-24 用户要求）
 TXT_WEAPON_NAT20 = "天然20：重击！伤害用 .{weapon}重击伤害 结算"
 TXT_WEAPON_NAT1 = "天然1：必失"
@@ -140,6 +142,10 @@ TXT_WEAPON_LIST_EMPTY = (
 TXT_WEAPON_DEL = "已删除武器: {deleted}"
 TXT_WEAPON_DEL_PARTIAL = "已删除武器: {deleted}；未找到: {missing}"
 TXT_WEAPON_DEL_MISS = "未找到武器: {missing}（可用 .设置武器 查看当前武器）"
+#: .删除武器 的名称不明确（单个条目：名称 + 候选武器）
+TXT_WEAPON_DEL_VAGUE_ITEM = "{name}（候选: {weapons}）"
+#: 同上（聚合行，{items} 为若干 TXT_WEAPON_DEL_VAGUE_ITEM 以「；」连接）
+TXT_WEAPON_DEL_VAGUE = "名称不明确: {items}（请写更完整的名称）"
 TXT_WEAPON_DEL_USAGE = "用法：.删除武器 名称（多个用 / 分隔）"
 
 # ── HP 管理 .hp 文案 ────────────────────────────────────────────────────

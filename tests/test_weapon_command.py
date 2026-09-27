@@ -989,3 +989,149 @@ async def test_weapon_manage_private_denied(app: App):
     for matcher, cmd in cases:
         event = fake_private_message_event_v11(message=Message(cmd))
         await _expect(app, matcher, event, "该指令仅在群聊中可用。")
+
+
+# ── 命令层：武器名模糊匹配（子串，2026-09-27 新增）────────────────────────
+
+#: 含互为子串的名称（短剑 / 精灵短剑）与英文名（大小写不敏感）
+_FUZZY_CARD = (
+    ".角色卡记录 $姓名$ 伊丽莎白\n"
+    "$职业$ 游荡者\n"
+    "$等级$ 5\n"
+    "$属性$ 15/14/13/12/10/8\n"
+    "$武器$ 短剑+6,1d4+4穿刺/精灵短剑+7,1d6+4穿刺/投石索+5,1d4+3钝击/Longbow+5,1d8+3穿刺"
+)
+
+
+@pytest.mark.asyncio
+async def test_weapon_fuzzy_match_unique(app: App):
+    """名称只写一部分：唯一命中即使用，回复里显示卡上的完整名称。"""
+    from nonebot_plugin_dnddicer.commands.weapon import weapon_matcher
+
+    await _record(app, card=_FUZZY_CARD)
+
+    token = set_runtime(SequenceRuntime([12]))
+    try:
+        await _expect(
+            app, weapon_matcher, _event(".投石攻击"),
+            "伊丽莎白进行【投石索攻击检定】：\n"
+            "武器命中加值:+5\n"
+            "1D20+5=[12]+5=17",
+        )
+    finally:
+        reset_runtime(token)
+
+    token = set_runtime(SequenceRuntime([3]))
+    try:
+        await _expect(
+            app, weapon_matcher, _event(".精灵伤害"),
+            "伊丽莎白用【精灵短剑】造成了 7 点穿刺伤害：\n"
+            "1D6+4=[3]+4=7",
+        )
+    finally:
+        reset_runtime(token)
+
+    # 大小写不敏感的子串匹配（Longbow ← longb）
+    token = set_runtime(SequenceRuntime([14]))
+    try:
+        await _expect(
+            app, weapon_matcher, _event(".longb命中"),
+            "伊丽莎白进行【Longbow攻击检定】：\n"
+            "武器命中加值:+5\n"
+            "1D20+5=[14]+5=19",
+        )
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_weapon_fuzzy_match_exact_wins(app: App):
+    """精确匹配优先：卡上同有「短剑」与「精灵短剑」时 .短剑攻击 打「短剑」。"""
+    from nonebot_plugin_dnddicer.commands.weapon import weapon_matcher
+
+    await _record(app, card=_FUZZY_CARD)
+
+    token = set_runtime(SequenceRuntime([10]))
+    try:
+        await _expect(
+            app, weapon_matcher, _event(".短剑攻击"),
+            "伊丽莎白进行【短剑攻击检定】：\n"
+            "武器命中加值:+6\n"
+            "1D20+6=[10]+6=16",
+        )
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_weapon_fuzzy_match_ambiguous(app: App):
+    """子串同时落在多件武器上 → 列候选、不猜（攻击与伤害同款）。"""
+    from nonebot_plugin_dnddicer.commands.weapon import weapon_matcher
+
+    await _record(app, card=_FUZZY_CARD)
+
+    await _expect(
+        app, weapon_matcher, _event(".剑攻击"),
+        "武器名「剑」匹配到多件武器: 短剑/精灵短剑（请写更完整的名称）",
+    )
+    # 后缀先被剥掉、名称段同样报歧义（伤害命令）
+    await _expect(
+        app, weapon_matcher, _event(".剑重击伤害"),
+        "武器名「剑」匹配到多件武器: 短剑/精灵短剑（请写更完整的名称）",
+    )
+
+
+@pytest.mark.asyncio
+async def test_del_weapon_fuzzy_and_vague(app: App):
+    """删除支持子串；命中多件列候选不删；精确优先；成功与歧义可同批。"""
+    from nonebot_plugin_dnddicer.commands.weapon import del_weapon_matcher
+
+    await _record(app, card=_FUZZY_CARD)
+
+    await _expect(
+        app, del_weapon_matcher, _event(".删除武器 投石"), "已删除武器: 投石索"
+    )
+    # 歧义：列候选、不删（「剑」同时落在 短剑 与 精灵短剑 上）
+    await _expect(
+        app, del_weapon_matcher, _event(".删除武器 剑"),
+        "名称不明确: 剑（候选: 短剑/精灵短剑）（请写更完整的名称）",
+    )
+    # 未找到与名称不明确同批（两类分别成行）
+    await _expect(
+        app, del_weapon_matcher, _event(".删除武器 投石/剑"),
+        "未找到武器: 投石（可用 .设置武器 查看当前武器）\n"
+        "名称不明确: 剑（候选: 短剑/精灵短剑）（请写更完整的名称）",
+    )
+    # 精确优先：.删除武器 短剑 删的是「短剑」本身
+    await _expect(
+        app, del_weapon_matcher, _event(".删除武器 短剑"),
+        "已删除武器: 短剑",
+    )
+    # 子串删除（英文名大小写不敏感）
+    await _expect(
+        app, del_weapon_matcher, _event(".删除武器 LONG"),
+        "已删除武器: Longbow",
+    )
+    # 同批先删「精灵短剑」后，「剑」已无候选（子串匹配基于删除后的列表）
+    await _expect(
+        app, del_weapon_matcher, _event(".删除武器 精灵短剑/剑"),
+        "已删除武器: 精灵短剑；未找到: 剑",
+    )
+
+
+@pytest.mark.asyncio
+async def test_set_weapon_not_fuzzy(app: App):
+    """设置只认精确同名覆盖：写名称的一部分会被当成新武器，不动已有条目。"""
+    from nonebot_plugin_dnddicer.commands.weapon import set_weapon_matcher
+
+    await _record(app, card=_FUZZY_CARD)
+
+    await _expect(
+        app, set_weapon_matcher, _event(".设置武器 剑+9,1d8+5挥砍"),
+        "已设置武器：剑（当前共 5 件）\n"
+        "1. 短剑+6,1d4+4穿刺\n"
+        "2. 精灵短剑+7,1d6+4穿刺\n"
+        "3. 投石索+5,1d4+3钝击\n"
+        "4. Longbow+5,1d8+3穿刺\n"
+        "5. 剑+9,1d8+5挥砍",
+    )

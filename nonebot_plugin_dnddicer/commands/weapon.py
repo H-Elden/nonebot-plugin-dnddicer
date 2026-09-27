@@ -24,6 +24,13 @@
   条目重名，两者天然互斥）。
 
 武器名对照发送者（或 @ 目标）当前角色卡的武器列表；查无该武器给出引导提示。
+
+名称匹配支持**模糊匹配（子串）**（2026-09-27 新增）：``.短剑攻击`` 可命中卡上
+的「精灵短剑」、``.匕首`` 可命中「+1匕首」——匹配顺序与 ``.init`` / ``.hp``
+的目标搜索一致，**精确匹配（大小写不敏感）优先**，其次子串匹配；子串同时落在
+多件武器上时报歧义并列出候选（``.长攻击`` 命中「长剑」「长弓」时不猜），
+``.删除武器`` 同样支持子串，``.设置武器`` 保持精确名称（同名覆盖判定不做模糊，
+避免「短剑」误覆盖「精灵短剑」）。
 """
 
 from __future__ import annotations
@@ -152,19 +159,57 @@ def _make_weapon_matcher() -> Matcher:
 weapon_matcher = _make_weapon_matcher()
 
 
-def find_weapon_in(
+def find_exact_weapon(
     weapons: List[WeaponInfo], name: str
 ) -> Optional[WeaponInfo]:
-    """在武器列表中按名称查找（大小写不敏感）。"""
+    """在武器列表中按名称精确查找（大小写不敏感）。
+
+    ``.设置武器`` 的同名覆盖判定专用——**不做模糊匹配**：写成名称的一部分时
+    （卡上「精灵短剑」、输入「短剑」）若按子串命中就会覆盖别人的条目。
+    """
+    lowered = name.lower()
     for weapon in weapons:
-        if weapon.name == name or weapon.name.lower() == name.lower():
+        if weapon.name.lower() == lowered:
             return weapon
     return None
 
 
-def find_weapon(character: DNDCharacter, name: str) -> Optional[WeaponInfo]:
-    """在角色卡武器列表中按名称查找（大小写不敏感）。"""
-    return find_weapon_in(character.weapons, name)
+def match_weapons(weapons: List[WeaponInfo], name: str) -> List[WeaponInfo]:
+    """按名称匹配武器项：精确（大小写不敏感）优先，其次子串模糊匹配。
+
+    2026-09-27 起 ``.X攻击`` / ``.X命中`` / ``.X伤害``、``.hp`` 的武器写法与
+    ``.删除武器`` 都可用名称的一部分发起（卡上「精灵短剑」→ ``.短剑攻击``）；
+    两级顺序与 ``.init`` / ``.hp`` 的目标搜索同款——先找完全相同的名字
+    （大小写不敏感），没有再找包含输入的名字。精确优先保证卡上同时有
+    「短剑」与「精灵短剑」时 ``.短剑攻击`` 打的是「短剑」。
+
+    返回候选列表：空 = 未找到、多项 = 歧义（由调用方提示、不猜）。
+    """
+    lowered = name.lower()
+    for weapon in weapons:
+        if weapon.name.lower() == lowered:
+            return [weapon]
+    return [weapon for weapon in weapons if lowered in weapon.name.lower()]
+
+
+async def resolve_weapon(
+    matcher: Matcher, character: DNDCharacter, name: str
+) -> WeaponInfo:
+    """按名称解析出唯一武器（精确 → 子串）；未找到 / 多件匹配时报错终止命令。
+
+    使用侧（``.X攻击`` / ``.X伤害`` / ``.hp`` 武器写法）共用本实现，
+    保证三处口径一致；提示文案里的名称一律用**用户输入**（更便于对照自己写了什么）。
+    """
+    candidates = match_weapons(character.weapons, name)
+    if not candidates:
+        await matcher.finish(text.TXT_WEAPON_NOT_FOUND.format(name=name))
+    if len(candidates) > 1:
+        await matcher.finish(
+            text.TXT_WEAPON_VAGUE.format(
+                name=name, weapons="/".join(item.name for item in candidates)
+            )
+        )
+    return candidates[0]
 
 
 def build_damage_expression(
@@ -255,9 +300,7 @@ async def _handle_attack(
     target_qq, mod_str = base.split_target_mention(mod_str)
     character = await _load_target_character(event, target_qq)
 
-    weapon = find_weapon(character, weapon_name)
-    if weapon is None:
-        await weapon_matcher.finish(text.TXT_WEAPON_NOT_FOUND.format(name=weapon_name))
+    weapon = await resolve_weapon(weapon_matcher, character, weapon_name)
     if weapon.no_attack:
         # x 标记：纯伤害法术（如 火球术），不做攻击检定
         await weapon_matcher.finish(
@@ -340,9 +383,7 @@ async def _handle_damage(
         await weapon_matcher.finish(text.TXT_WEAPON_DAMAGE_TAIL.format(tail=mod_str))
     character = await _load_target_character(event, target_qq)
 
-    weapon = find_weapon(character, weapon_name)
-    if weapon is None:
-        await weapon_matcher.finish(text.TXT_WEAPON_NOT_FOUND.format(name=weapon_name))
+    weapon = await resolve_weapon(weapon_matcher, character, weapon_name)
 
     is_off_hand = "副手" in suffixes
     is_crit = "重击" in suffixes
@@ -419,7 +460,9 @@ _HELP_SET_WEAPON = (
 )
 set_weapon_matcher = base.on_dnd_command("设置武器", _HELP_SET_WEAPON)
 
-_HELP_DEL_WEAPON = "删除自定义武器：.删除武器 短剑（多个用 / 分隔）"
+_HELP_DEL_WEAPON = (
+    "删除自定义武器：.删除武器 短剑（支持模糊匹配，多个用 / 分隔）"
+)
 del_weapon_matcher = base.on_dnd_command("删除武器", _HELP_DEL_WEAPON)
 
 
@@ -452,7 +495,8 @@ async def handle_set_weapon(event: MessageEvent) -> None:
     merged: List[WeaponInfo] = list(character.weapons)
     set_names: List[str] = []
     for weapon in new_weapons:
-        existing = find_weapon_in(merged, weapon.name)
+        # 同名覆盖判定走精确匹配（与使用/删除的模糊匹配区分，见 find_exact_weapon）
+        existing = find_exact_weapon(merged, weapon.name)
         if existing is not None:
             merged[merged.index(existing)] = weapon
         else:
@@ -474,7 +518,11 @@ async def handle_set_weapon(event: MessageEvent) -> None:
 
 @del_weapon_matcher.handle()
 async def handle_del_weapon(event: MessageEvent) -> None:
-    """处理 .删除武器（支持 / 分隔多个；仅操作本人角色卡）。"""
+    """处理 .删除武器（支持 / 分隔多个、名称可只写一部分；仅操作本人角色卡）。
+
+    名称匹配与使用侧同款（精确优先 → 子串）：三项结果分别聚合——已删除 /
+    未找到 / 名称不明确（命中多件，列候选、不删）；已有删除动作时才落盘。
+    """
     if not isinstance(event, GroupMessageEvent):
         await del_weapon_matcher.finish(text.TXT_GROUP_ONLY)
 
@@ -489,26 +537,35 @@ async def handle_del_weapon(event: MessageEvent) -> None:
     remained: List[WeaponInfo] = list(character.weapons)
     deleted: List[str] = []
     missing: List[str] = []
+    vague: List[str] = []
     for name in names:
-        target = find_weapon_in(remained, name)
-        if target is None:
+        candidates = match_weapons(remained, name)
+        if not candidates:
             missing.append(name)
+        elif len(candidates) > 1:
+            vague.append(text.TXT_WEAPON_DEL_VAGUE_ITEM.format(
+                name=name, weapons="/".join(item.name for item in candidates)
+            ))
         else:
-            remained.remove(target)
-            deleted.append(target.name)
+            remained.remove(candidates[0])
+            deleted.append(candidates[0].name)
 
-    if not deleted:
-        await del_weapon_matcher.finish(
-            text.TXT_WEAPON_DEL_MISS.format(missing="/".join(missing))
-        )
-    character.weapons = remained
-    await save_character(character)
-    if missing:
-        await del_weapon_matcher.finish(
-            text.TXT_WEAPON_DEL_PARTIAL.format(
+    lines: List[str] = []
+    if deleted:
+        if missing:
+            lines.append(text.TXT_WEAPON_DEL_PARTIAL.format(
                 deleted="/".join(deleted), missing="/".join(missing)
-            )
-        )
-    await del_weapon_matcher.finish(
-        text.TXT_WEAPON_DEL.format(deleted="/".join(deleted))
-    )
+            ))
+        else:
+            lines.append(text.TXT_WEAPON_DEL.format(deleted="/".join(deleted)))
+    elif missing:
+        lines.append(text.TXT_WEAPON_DEL_MISS.format(missing="/".join(missing)))
+    if vague:
+        lines.append(text.TXT_WEAPON_DEL_VAGUE.format(items="；".join(vague)))
+    if not lines:  # 理论不可达（names 非空时必有结论），防御性兜底
+        lines.append(text.TXT_WEAPON_DEL_MISS.format(missing="/".join(names)))
+
+    if deleted:
+        character.weapons = remained
+        await save_character(character)
+    await del_weapon_matcher.finish("\n".join(lines))

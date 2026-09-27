@@ -15,7 +15,8 @@ DM 掷伤害扩展：目标名后可带 抗性/易伤 后缀（伤害减半/加�
 角色名支持模糊匹配），回复与 ``.X伤害`` 同款（表头「用【武器】造成了 N 点X伤害」
 ＋各目标的 HP 结算行）；后缀变换与临时加值语义与 ``.X伤害`` 完全一致（共用
 commands/weapon.py 的 build_damage_expression）；写成 ``-武器名攻击/命中``
-（攻击检定）时引导改用「武器名伤害」。
+（攻击检定）时引导改用「武器名伤害」。武器名匹配同样支持**子串**（精确优先，
+2026-09-27 起与 ``.X伤害`` 共用 resolve_weapon）。
 
 @ 提及目标（2026-09-22 新增）：``.hp @玩家 -4d6`` 直连该玩家在本群的角色卡
 （不走名称模糊搜索），可查看（``.hp @玩家``）、设置/治疗、抗性/易伤后缀与
@@ -59,9 +60,9 @@ from . import base, text
 from .weapon import (
     build_damage_expression,
     build_damage_note,
-    find_weapon,
     parse_weapon_attack_entry,
     parse_weapon_damage_body,
+    resolve_weapon,
 )
 
 # =========================================================================
@@ -388,9 +389,7 @@ async def _resolve_hp_damage_expression(
         await hp_matcher.finish(text.TXT_HP_WEAPON_TAIL_BAD.format(expr=expr_text))
 
     owner_qq, character = await _resolve_weapon_owner(event, source_str)
-    weapon = find_weapon(character, name)
-    if weapon is None:
-        await hp_matcher.finish(text.TXT_WEAPON_NOT_FOUND.format(name=name))
+    weapon = await resolve_weapon(hp_matcher, character, name)
 
     expression, error, sneak_dice = build_damage_expression(
         weapon, suffixes, character.ability_info.level, character.char_class, tail

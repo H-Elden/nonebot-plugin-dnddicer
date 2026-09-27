@@ -1061,6 +1061,56 @@ async def test_hp_weapon_damage_basic(app: App):
 
 
 @pytest.mark.asyncio
+async def test_hp_weapon_damage_fuzzy_match(app: App):
+    """伤害位置的武器名同样支持子串（唯一命中即用、多件报歧义）。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    await _expect(
+        app, char_matcher,
+        _event(
+            _record_with_hp(
+                "爱丽丝", 22023, hp="40/40",
+                weapons="短剑+6,1d4+4穿刺/精灵短剑+7,1d6+4穿刺",
+            ),
+            user_id=22023,
+        ),
+        "角色卡已设置",
+    )
+
+    # 子串唯一命中：.精灵伤害 → 卡上「精灵短剑」
+    token = set_runtime(SequenceRuntime([3]))
+    try:
+        await _expect(
+            app, hp_matcher,
+            _event(".hp 爱丽丝 -精灵伤害", user_id=22023),
+            "爱丽丝用【精灵短剑】造成了 7 点穿刺伤害：\n"
+            "爱丽丝: 当前HP减少[3]+4=7\nHP:40/40 -> HP:33/40",
+        )
+    finally:
+        reset_runtime(token)
+
+    # 子串命中多件：列候选、不结算（也不扣血）
+    await _expect(
+        app, hp_matcher,
+        _event(".hp 爱丽丝 -剑伤害", user_id=22023),
+        "武器名「剑」匹配到多件武器: 短剑/精灵短剑（请写更完整的名称）",
+    )
+
+    # 精确优先：.短剑伤害 打的是「短剑」
+    token = set_runtime(SequenceRuntime([2]))
+    try:
+        await _expect(
+            app, hp_matcher,
+            _event(".hp 爱丽丝 -短剑伤害", user_id=22023),
+            "爱丽丝用【短剑】造成了 6 点穿刺伤害：\n"
+            "爱丽丝: 当前HP减少[2]+4=6\nHP:33/40 -> HP:27/40",
+        )
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
 async def test_hp_weapon_damage_suffixes(app: App):
     """.hp 伤害位置的重击 / 副手 / ±临时加值：后缀语义与 .X伤害 一致。"""
     from nonebot_plugin_dnddicer.commands.character import char_matcher
