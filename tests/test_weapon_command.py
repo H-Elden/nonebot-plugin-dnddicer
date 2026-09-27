@@ -1135,3 +1135,251 @@ async def test_set_weapon_not_fuzzy(app: App):
         "4. Longbow+5,1d8+3穿刺\n"
         "5. 剑+9,1d8+5挥砍",
     )
+
+
+# ── 多武器一次结算（2026-09-27）：分隔符 / 逐项后缀与加值 / 合计 ────────────
+
+#: 双武器卡：短剑（主手）+ 匕首（副手），另带火焰箭用于「不同伤害类型」用例
+_TWO_WEAPON_CARD = (
+    ".角色卡记录 $姓名$ 伊丽莎白\n"
+    "$职业$ 游荡者\n"
+    "$等级$ 5\n"
+    "$属性$ 15/14/13/12/10/8\n"
+    "$武器$ 短剑+6,1d4+4穿刺/匕首+6,1d4穿刺/火焰箭,2d10火焰"
+)
+
+
+def test_parse_weapon_multi_entries():
+    """多项写法解析：分隔符归一、逐项后缀剥离、各项加值各写各的。"""
+    from nonebot_plugin_dnddicer.commands.weapon import (
+        parse_weapon_attack_entries,
+        parse_weapon_damage_entries,
+    )
+
+    # 三种分隔符等价（、/，///）
+    for body in ("短剑伤害、匕首副手伤害", "短剑伤害，匕首副手伤害", "短剑伤害/匕首副手伤害"):
+        entries, error, tail = parse_weapon_damage_entries(body)
+        assert error is None and tail == ""
+        assert [(item.name, item.suffixes, item.tail) for item in entries] == [
+            ("短剑", [], ""),
+            ("匕首", ["副手"], ""),
+        ]
+    # 每项的 ±加值各写各的（写在各自「伤害」之后）
+    entries, error, tail = parse_weapon_damage_entries("短剑伤害+1d6、匕首副手伤害")
+    assert error is None and tail == ""
+    assert [(item.name, item.suffixes, item.tail) for item in entries] == [
+        ("短剑", [], "+1d6"),
+        ("匕首", ["副手"], ""),
+    ]
+    # 多项攻击：优劣势与加值也各写各的，N# 前缀单独摘出
+    entries, error, times, _tail = parse_weapon_attack_entries("刺剑攻击优势、匕首攻击+2")
+    assert error is None and times is None
+    assert [(item.name, item.suffixes, item.tail) for item in entries] == [
+        ("刺剑", ["优势"], ""),
+        ("匕首", [], "+2"),
+    ]
+    _entries, _error, times, _tail = parse_weapon_attack_entries("2#刺剑攻击、匕首攻击")
+    assert times == "2#"
+    # 单项写法仍归单项解析（返回 None：无分隔符 / 没有任何一项以「伤害」收尾）
+    assert parse_weapon_damage_entries("短剑伤害") is None
+    assert parse_weapon_damage_entries("四环火球术伤害") is None
+    # 末项带优劣势（伤害项不支持）：整项算不合法写法（不再误当成加值）
+    entries, error, _tail = parse_weapon_damage_entries("短剑伤害、匕首伤害优势")
+    assert entries == [] and error is not None
+    # 末项带非法加值：同样报写法不合法
+    entries, error, _tail = parse_weapon_damage_entries("短剑伤害、匕首伤害+abc")
+    assert entries == [] and error is not None
+    # @目标 写在命令末尾（无论落在哪一项之后）都会摘出为「剩余」，不进加值
+    entries, error, tail = parse_weapon_damage_entries("短剑伤害+1d6、匕首伤害 @123")
+    assert error is None and tail == "@123"
+    assert [(item.name, item.tail) for item in entries] == [
+        ("短剑", "+1d6"),
+        ("匕首", ""),
+    ]
+    # 末项自身带尾巴（如错写优劣势）时同样报写法无效
+    entries, error, _tail = parse_weapon_damage_entries("短剑伤害、匕首伤害优势")
+    assert entries == [] and error is not None
+    # 多项但写法不合法 → 显式错误（提示里带出错的项与正确写法示例）
+    entries, error, _tail = parse_weapon_damage_entries("短剑伤害、匕首")
+    assert entries == [] and error is not None and error.segment == "匕首"
+    assert "多武器写法无效: 匕首" in error.message
+    entries, error, _tail = parse_weapon_damage_entries("短剑伤害/匕首")
+    assert entries == [] and error is not None and error.segment == "匕首"
+
+
+@pytest.mark.asyncio
+async def test_weapon_multi_damage_same_type(app: App):
+    """多武器伤害（同类型）：逐项行 + 副手标注 + 合计行；副手仍计入总伤害。"""
+    from nonebot_plugin_dnddicer.commands.weapon import weapon_matcher
+
+    await _record(app, card=_TWO_WEAPON_CARD)
+
+    token = set_runtime(SequenceRuntime([3, 4]))
+    try:
+        expected = (
+            "伊丽莎白用【短剑、匕首】造成了 11 点穿刺伤害：\n"
+            "1. 伊丽莎白用【短剑】造成了 7 点穿刺伤害：\n"
+            "1D4+4=[3]+4=7\n"
+            "2. 伊丽莎白用【匕首】造成了 4 点穿刺伤害（副手：不加任何加值）：\n"
+            "1D4=[4]=4\n"
+            "\n"
+            "共计造成了 11 点穿刺伤害"
+        )
+        await _expect(app, weapon_matcher, _event(".短剑伤害、匕首副手伤害"), expected)
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_weapon_multi_damage_mixed_type(app: App):
+    """多武器伤害（类型不同）：标题报「多类型」，合计按类型列出再合计。"""
+    from nonebot_plugin_dnddicer.commands.weapon import weapon_matcher
+
+    await _record(app, card=_TWO_WEAPON_CARD)
+
+    token = set_runtime(SequenceRuntime([3, 6, 5]))
+    try:
+        expected = (
+            "伊丽莎白用【短剑、火焰箭】造成了 18 点多类型伤害：\n"
+            "1. 伊丽莎白用【短剑】造成了 7 点穿刺伤害：\n"
+            "1D4+4=[3]+4=7\n"
+            "2. 伊丽莎白用【火焰箭】造成了 11 点火焰伤害：\n"
+            "2D10=[6+5]=11\n"
+            "\n"
+            "共计造成了 7 点穿刺伤害、11 点火焰伤害，合计 18 点"
+        )
+        await _expect(app, weapon_matcher, _event(".短剑伤害、火焰箭伤害"), expected)
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_weapon_multi_damage_suffixes(app: App):
+    """多武器伤害：后缀（重击/偷袭/副手）与各项 ±加值互不干扰。"""
+    from nonebot_plugin_dnddicer.commands.weapon import weapon_matcher
+
+    await _record(app, card=_TWO_WEAPON_CARD)
+
+    # 主手「重击+偷袭」：2d4+4+6d6；副手匕首照常 1d4
+    token = set_runtime(SequenceRuntime([3, 2, 1, 2, 3, 4, 5, 6, 4]))
+    try:
+        expected = (
+            "伊丽莎白用【短剑、匕首】造成了 34 点穿刺伤害：\n"
+            "1. 伊丽莎白用【短剑】造成了 30 点穿刺伤害（重击，含偷袭6D6）：\n"
+            "2D4+4+6D6=[3+2]+4+[1+2+3+4+5+6]=30\n"
+            "2. 伊丽莎白用【匕首】造成了 4 点穿刺伤害（副手：不加任何加值）：\n"
+            "1D4=[4]=4\n"
+            "\n"
+            "共计造成了 34 点穿刺伤害"
+        )
+        await _expect(
+            app, weapon_matcher, _event(".短剑重击偷袭伤害、匕首副手伤害"), expected
+        )
+    finally:
+        reset_runtime(token)
+
+    # 第一项各写各的临时加值（并入该项表达式）；第二项保持副手剔除加值
+    token = set_runtime(SequenceRuntime([3, 6, 4]))
+    try:
+        expected = (
+            "伊丽莎白用【短剑、匕首】造成了 17 点穿刺伤害：\n"
+            "1. 伊丽莎白用【短剑】造成了 13 点穿刺伤害：\n"
+            "1D4+4+1D6=[3]+4+[6]=13\n"
+            "2. 伊丽莎白用【匕首】造成了 4 点穿刺伤害（副手：不加任何加值）：\n"
+            "1D4=[4]=4\n"
+            "\n"
+            "共计造成了 17 点穿刺伤害"
+        )
+        await _expect(
+            app, weapon_matcher, _event(".短剑伤害+1d6、匕首副手伤害"), expected
+        )
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_weapon_multi_attack(app: App):
+    """多武器攻击：逐武器命中行 + 掷骰块；天然 20 提示归到对应武器。"""
+    from nonebot_plugin_dnddicer.commands.weapon import weapon_matcher
+
+    await _record(app, card=_TWO_WEAPON_CARD)
+
+    token = set_runtime(SequenceRuntime([20, 7, 3]))
+    try:
+        expected = (
+            "伊丽莎白进行【短剑攻击检定、匕首攻击检定】：\n"
+            "1.【短剑】武器命中加值:+6 优势\n"
+            "2D20K1+6=MAX{[20], [7]}+6=26\n"
+            "天然20：重击！伤害用 .短剑重击伤害 结算\n"
+            "2.【匕首】武器命中加值:+6\n"
+            "1D20+6=[3]+6=9"
+        )
+        await _expect(app, weapon_matcher, _event(".短剑攻击优势、匕首攻击"), expected)
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_weapon_multi_damage_mention_target(app: App):
+    """多项写法的 @目标写在末尾：整段生效，逐项都用目标角色卡的武器项。"""
+    from nonebot_plugin_dnddicer.commands.weapon import weapon_matcher
+
+    await _record(app, card=_TWO_WEAPON_CARD, user_id=20013)  # 被 @ 的玩家有卡
+
+    token = set_runtime(SequenceRuntime([3, 4]))
+    try:
+        expected = (
+            "伊丽莎白用【短剑、匕首】造成了 11 点穿刺伤害：\n"
+            "1. 伊丽莎白用【短剑】造成了 7 点穿刺伤害：\n"
+            "1D4+4=[3]+4=7\n"
+            "2. 伊丽莎白用【匕首】造成了 4 点穿刺伤害（副手：不加任何加值）：\n"
+            "1D4=[4]=4\n"
+            "\n"
+            "共计造成了 11 点穿刺伤害"
+        )
+        await _expect(
+            app, weapon_matcher,
+            _mention_event(
+                ".短剑伤害、匕首副手伤害 ", MessageSegment.at(20013), user_id=20001
+            ),
+            expected,
+        )
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_weapon_multi_errors(app: App):
+    """多项写法的专门提示：不支持 N#、项未写全「伤害」、项内加值非法。"""
+    from nonebot_plugin_dnddicer.commands.weapon import weapon_matcher
+
+    await _record(app, card=_TWO_WEAPON_CARD)
+
+    await _expect(
+        app, weapon_matcher, _event(".2#短剑攻击、匕首攻击"),
+        "多武器写法不支持 2# 批量：请拆成两条命令（如 .2#刺剑攻击 与 .匕首攻击），"
+        "或去掉次数只掷一轮",
+    )
+    bad_usage = (
+        "（用法：.刺剑伤害、匕首副手伤害（多项用 、、，、/ 分隔；"
+        "除第一件外每件都要写全「武器名[副手/重击/偷袭]伤害[±加值]」，后缀与加值各写各的））"
+    )
+    await _expect(
+        app, weapon_matcher, _event(".短剑伤害、匕首"),
+        f"多武器写法无效: 匕首{bad_usage}",
+    )
+    # 伤害项写优劣势：不当加值，按写法无效拦下
+    await _expect(
+        app, weapon_matcher, _event(".短剑伤害、匕首伤害优势"),
+        f"多武器写法无效: 匕首伤害优势{bad_usage}",
+    )
+    # 加值本身不合法（+abc）：同样报写法无效
+    await _expect(
+        app, weapon_matcher, _event(".短剑伤害、匕首伤害+abc"),
+        f"多武器写法无效: 匕首伤害+abc{bad_usage}",
+    )
+    # 单项写法不受影响：仍是原来的错尾提示
+    await _expect(
+        app, weapon_matcher, _event(".短剑伤害优势"),
+        "伤害命令不支持的写法: 优势（用法：.武器名[副手/重击/偷袭]伤害[±加值]，可 @玩家）",
+    )

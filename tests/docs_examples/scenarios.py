@@ -495,6 +495,32 @@ weapon_fuzzy_match = Scene(
     ],
 )
 
+weapon_multi_damage = Scene(
+    id="weapon_multi_damage",
+    title="多武器：一条命令结算两把武器（主手 + 副手，报出合计）",
+    steps=[
+        # 塔莉 双武器：主手刺剑 + 副手匕首；后缀与加值各写各的，合计由骰娘算
+        Step("老猫", ".刺剑伤害、匕首副手伤害", dice=[6, 3]),
+    ],
+)
+
+weapon_multi_attack = Scene(
+    id="weapon_multi_attack",
+    title="多武器攻击：两把武器各掷一次命中（优劣势各写各的）",
+    steps=[
+        Step("老猫", ".刺剑攻击优势、匕首攻击+2", dice=[20, 4, 12]),
+    ],
+)
+
+weapon_multi_mixed = Scene(
+    id="weapon_multi_mixed",
+    title="多武器伤害（不同伤害类型）：合计行按类型分组",
+    steps=[
+        # 洛恩 一箭一刀：火焰 + 穿刺 → 合计行分类型报出后合计
+        Step("小满", ".火焰箭伤害、匕首伤害", dice=[6, 8, 2]),
+    ],
+)
+
 # ── 第三幕：碎星隘口遭遇战（先攻列表） ──────────────────────────────────────
 
 battle_open = Scene(
@@ -919,6 +945,17 @@ hp_weapon_source = Scene(
     ],
 )
 
+hp_weapon_multi = Scene(
+    id="hp_weapon_multi",
+    title="DM 一条命令代发双武器伤害（两把武器的伤害一起结算、一起扣血）",
+    steps=[
+        Step("白鸦", ".hp 骷髅b 13/13"),
+        # 塔莉 双武器：DM 代她一次掷两把（刺剑 1d8+4、匕首副手 1d4）并扣血；
+        # 白鸦 自己没有角色卡，多武器写法的武器来源用尾部括号指定（同单项写法）
+        Step("白鸦", ".hp 骷髅b -刺剑伤害、匕首副手伤害（塔莉）", dice=[4, 1]),
+    ],
+)
+
 dm_group_save = Scene(
     id="dm_group_save",
     title="DM 的省事写法：三只一起过豁免、数出几只顶住",
@@ -1200,6 +1237,9 @@ TIMELINE = [
     weapon_sneak_reject,
     weapon_manage,
     weapon_fuzzy_match,
+    weapon_multi_damage,
+    weapon_multi_mixed,
+    weapon_multi_attack,
     # 第三幕：碎星隘口遭遇战（先攻列表）
     battle_open,
     init_player_roll,
@@ -1244,6 +1284,7 @@ TIMELINE = [
     dm_player_hp,
     hp_weapon_redirect,
     hp_weapon_source,
+    hp_weapon_multi,
     dm_group_save,
     dm_aoe,
     dm_turn_push,

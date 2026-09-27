@@ -1411,3 +1411,172 @@ async def test_hp_weapon_damage_source_parentheses(app: App):
         Message(MessageSegment.at("39991"))
         + " 还没有在本群建立角色卡（可用 .角色卡记录 建卡后再试）",
     )
+
+
+# =========================================================================
+# .hp 伤害位置的多武器写法（-甲伤害、乙伤害，2026-09-27 新增）
+# =========================================================================
+
+
+_TWO_WEAPONS = "短剑+6,1d4+4穿刺/匕首+6,1d4穿刺/火焰箭,2d10火焰"
+
+
+@pytest.mark.asyncio
+async def test_hp_multi_weapon_damage(app: App):
+    """多项武器写法：标题 + 逐项行 + 合计行 + 目标 HP 行；副手只掷骰不加值。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    await _expect(
+        app, char_matcher,
+        _event(
+            _record_with_hp("爱丽丝", 22031, hp="40/40", weapons=_TWO_WEAPONS),
+            user_id=22031,
+        ),
+        "角色卡已设置",
+    )
+
+    token = set_runtime(SequenceRuntime([3, 4]))
+    try:
+        await _expect(
+            app, hp_matcher,
+            _event(".hp 爱丽丝 -短剑伤害、匕首副手伤害", user_id=22031),
+            "爱丽丝用【短剑、匕首】造成了 11 点穿刺伤害：\n"
+            "1. 爱丽丝用【短剑】造成了 7 点穿刺伤害：\n"
+            "1D4+4=[3]+4=7\n"
+            "2. 爱丽丝用【匕首】造成了 4 点穿刺伤害（副手：不加任何加值）：\n"
+            "1D4=[4]=4\n"
+            "\n"
+            "共计造成了 11 点穿刺伤害\n"
+            "爱丽丝: 当前HP减少[3]+4+[4]=11\nHP:40/40 -> HP:29/40",
+        )
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_hp_multi_weapon_mixed_type(app: App):
+    """多类型合计 + 抗性/易伤：表头为折算后总值、目标行折算、合计为掷出值。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    await _expect(
+        app, char_matcher,
+        _event(
+            _record_with_hp("爱丽丝", 22032, hp="40/40", weapons=_TWO_WEAPONS),
+            user_id=22032,
+        ),
+        "角色卡已设置",
+    )
+
+    # 易伤（单目标）：7+11=18 → 表头报 36、扣血 36；合计行报掷出的原始 18
+    token = set_runtime(SequenceRuntime([3, 6, 5]))
+    try:
+        await _expect(
+            app, hp_matcher,
+            _event(".hp 爱丽丝易伤 -短剑伤害、火焰箭伤害", user_id=22032),
+            "爱丽丝用【短剑、火焰箭】造成了 36 点多类型伤害：\n"
+            "1. 爱丽丝用【短剑】造成了 7 点穿刺伤害：\n"
+            "1D4+4=[3]+4=7\n"
+            "2. 爱丽丝用【火焰箭】造成了 11 点火焰伤害：\n"
+            "2D10=[6+5]=11\n"
+            "\n"
+            "共计造成了 7 点穿刺伤害、11 点火焰伤害，合计 18 点\n"
+            "爱丽丝: 当前HP减少[3]+4+[6+5]=18（易伤加倍→36）\n"
+            "HP:40/40 -> HP:4/40",
+        )
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_hp_multi_weapon_aoe_raw_header(app: App):
+    """AOE（多目标）：表头用掷出的原始总值，折算逐目标在各自行里。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    await _expect(
+        app, char_matcher,
+        _event(
+            _record_with_hp("爱丽丝", 22033, hp="40/40", weapons=_TWO_WEAPONS),
+            user_id=22033,
+        ),
+        "角色卡已设置",
+    )
+    await _expect(
+        app, char_matcher,
+        _event(_record_with_hp("莎白", 22034, hp="30/30"), user_id=22034),
+        "角色卡已设置",
+    )
+
+    token = set_runtime(SequenceRuntime([3, 4]))
+    try:
+        await _expect(
+            app, hp_matcher,
+            _event(".hp 爱丽丝;莎白易伤 -短剑伤害、匕首副手伤害", user_id=22033),
+            "爱丽丝用【短剑、匕首】造成了 11 点穿刺伤害：\n"
+            "1. 爱丽丝用【短剑】造成了 7 点穿刺伤害：\n"
+            "1D4+4=[3]+4=7\n"
+            "2. 爱丽丝用【匕首】造成了 4 点穿刺伤害（副手：不加任何加值）：\n"
+            "1D4=[4]=4\n"
+            "\n"
+            "共计造成了 11 点穿刺伤害\n"
+            "爱丽丝: 当前HP减少[3]+4+[4]=11; HP:40/40 -> HP:29/40\n"
+            "莎白: 当前HP减少[3]+4+[4]=11（易伤加倍→22）; HP:30/30 -> HP:8/30",
+        )
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_hp_weapon_multi_vs_fraction_guard(app: App):
+    """`/` 的歧义保护：含多项写法的形态不再落入「当前/最大」解析。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    await _expect(
+        app, char_matcher,
+        _event(
+            _record_with_hp("爱丽丝", 22035, hp="40/40", weapons=_TWO_WEAPONS),
+            user_id=22035,
+        ),
+        "角色卡已设置",
+    )
+
+    # 末项不是武器写法：判为多武器写法并报错——重要的是**不会**被当成
+    # `当前伤害/最大伤害` 静默改血（`/` 歧义保护的核心）
+    await _expect(
+        app, hp_matcher,
+        _event(".hp 爱丽丝 -短剑伤害/匕首", user_id=22035),
+        "多武器写法无效: 匕首（用法：-刺剑伤害、匕首副手伤害，"
+        "除第一件外每件都要写全「武器名伤害」）",
+    )
+
+    # 正常的多项写法照常结算（`/` 同样可用）
+    token = set_runtime(SequenceRuntime([3, 4]))
+    try:
+        await _expect(
+            app, hp_matcher,
+            _event(".hp 爱丽丝 -短剑伤害/匕首副手伤害", user_id=22035),
+            "爱丽丝用【短剑、匕首】造成了 11 点穿刺伤害：\n"
+            "1. 爱丽丝用【短剑】造成了 7 点穿刺伤害：\n"
+            "1D4+4=[3]+4=7\n"
+            "2. 爱丽丝用【匕首】造成了 4 点穿刺伤害（副手：不加任何加值）：\n"
+            "1D4=[4]=4\n"
+            "\n"
+            "共计造成了 11 点穿刺伤害\n"
+            "爱丽丝: 当前HP减少[3]+4+[4]=11\nHP:40/40 -> HP:29/40",
+        )
+    finally:
+        reset_runtime(token)
+
+    # 普通分数写法（两边都不是武器）行为不变
+    token = set_runtime(SequenceRuntime([]))
+    try:
+        await _expect(
+            app, hp_matcher,
+            _event(".hp 爱丽丝 20/30", user_id=22035),
+            "爱丽丝: HP=20/30\n当前HP:20/30",
+        )
+    finally:
+        reset_runtime(token)
