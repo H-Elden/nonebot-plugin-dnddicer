@@ -65,16 +65,16 @@ _RECORD = (
 
 @pytest.mark.asyncio
 async def test_char_template(app: App):
-    """.角色卡模板 → 示例角色卡文本 + 属性顺序/额外加值提示。"""
+    """.角色卡模板 → 示例角色卡文本 + 段落填写提示（含熟练段与先攻写法）。"""
     from nonebot_plugin_dnddicer.character.services import gen_template_char
     from nonebot_plugin_dnddicer.commands.character import _gen_template_feedback, char_matcher
 
     expected = _gen_template_feedback()
     assert "$" not in expected.split("——提示")[1], "提示说明文字不得含 $ 字符"
+    assert "熟练段 = 六属性/技能/豁免条目/先攻\n" in expected
     assert expected.endswith(
-        "额外加值段键 = 六属性/技能/豁免条目, 另有作用于全部豁免的全局键: 豁免\n"
-        "额外加值取值 = 可选 优势/劣势 前缀 + ±掷骰表达式, 如: 隐匿:优势+2\n"
-        "职业段填 12 职业名之一（如 游荡者），游荡者的偷袭后缀会按等级自动附加偷袭骰\n"
+        "额外加值段键 = 六属性/技能/豁免条目/豁免（作用于全部豁免）\n"
+        "额外加值取值 = 可选 优势/劣势 ±掷骰表达式, 如: 隐匿:优势+2\n"
         "武器段格式 = 名称+命中加值,伤害表达式+类型（多项用 / 分隔），如 短剑+4,1d4+2穿刺"
     )
     assert gen_template_char().get_char_info() in expected
