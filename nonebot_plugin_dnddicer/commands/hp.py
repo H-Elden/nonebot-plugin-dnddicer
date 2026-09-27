@@ -18,6 +18,12 @@ commands/weapon.py 的 build_damage_expression）；写成 ``-武器名攻击/�
 （攻击检定）时引导改用「武器名伤害」。武器名匹配同样支持**子串**（精确优先，
 2026-09-27 起与 ``.X伤害`` 共用 resolve_weapon）。
 
+多武器写法（2026-09-27 新增）：伤害位置也可一次写多件武器
+（``.hp 骷髅 -刺剑伤害、匕首副手伤害``），逐项掷骰后报总伤害。因 ``/`` 在本命令
+里另有「当前/最大」的含义，分批逻辑做了显式保护：**先判断首段是不是合法武器
+伤害写法**，是则整段按多武器解析（写法有误就报错，绝不回退成改血），不是才按
+原表达式处理（见 resolve_hp_damage_entries 的 has_multi_weapon_separator 判断）。
+
 @ 提及目标（2026-09-22 新增）：``.hp @玩家 -4d6`` 直连该玩家在本群的角色卡
 （不走名称模糊搜索），可查看（``.hp @玩家``）、设置/治疗、抗性/易伤后缀与
 AOE 混写（``.hp @玩家;地精 -d4``）；提及者无卡时以真 @ 消息段引导建卡。
@@ -58,11 +64,19 @@ from ..engine.roll.roll_utils import RollDiceError
 from ..platform import onebot_v11
 from . import base, text
 from .weapon import (
+    WeaponDamageRoll,
+    WeaponEntry,
+    append_multi_damage_lines,
     build_damage_expression,
     build_damage_note,
+    has_multi_weapon_separator,
+    multi_damage_head,
     parse_weapon_attack_entry,
     parse_weapon_damage_body,
+    parse_weapon_damage_entries,
+    parse_weapon_entry,
     resolve_weapon,
+    split_weapon_segments,
 )
 
 # =========================================================================
@@ -83,6 +97,7 @@ _HELP = (
     ".hp 队友A -4d6 -> 对队友A造成4d6点伤害\n"
     ".hp 队友A -战锤伤害 -> 用发送者角色卡上「战锤」的伤害项结算"
     "（同 .战锤伤害 写法: 支持 副手/重击/偷袭 后缀与 ±加值）\n"
+    ".hp 队友A -刺剑伤害、匕首副手伤害 -> 两件武器一起掷（逐件+合计，一次扣血）\n"
     ".hp 队友A -战锤伤害（布鲁姆） -> 括号指定武器来源"
     "（角色名或 @玩家; 不填即发送者本人）\n"
     "指定@玩家: .hp @玩家 -4d6 -> 对 @ 的玩家角色卡结算 (需该玩家已在本群建卡)\n"
@@ -303,15 +318,200 @@ _HP_SOURCE_PATTERN = re.compile(
 )
 
 
-class _WeaponDamageExpr(NamedTuple):
-    """`.hp` 武器伤害写法的解析结果（表头信息 + 掷骰表达式）。"""
+class _WeaponPart(NamedTuple):
+    """`.hp` 多武器写法的单项算式：武器名 / 掷骰表达式 / 类型 / 读数标注 / 是否无骰。"""
 
-    expression: str   # 最终掷骰表达式（含后缀变换与临时加值）
-    weapon_name: str  # 武器名（表头用）
-    damage_type: str  # 伤害类型（可为空）
-    note: str         # 后缀读数标注（如「（重击）」；无后缀为 ""）
-    owner_qq: str     # 武器来源者 QQ（表头落款）
-    owner_name: str   # 武器来源者角色名（表头落款首选）
+    weapon: str
+    expression: str
+    damage_type: str
+    note: str
+    no_dice: bool
+
+
+def _combine_weapon_rolls(rolls: List[WeaponDamageRoll]) -> RollResult:
+    """把逐项掷骰结果合成一个 RollResult（各项之和 + 逐项读数）。
+
+    供 ``.hp`` 的多武器写法复用既有的「一条表达式 = 一次扣血」结算路径：
+    逐项各掷一次（读数逐项展示），再合成一份总和结果交给 HP 结算，
+    避免「掷两遍」导致的读数与扣血值不一致（2026-09-27）。
+    """
+    combined = RollResult()
+    combined.val_list = [rolled.total for rolled in rolls]
+    combined.info = "+".join(rolled.result.get_info() for rolled in rolls)
+    return combined
+
+
+class _WeaponDamageExpr(NamedTuple):
+    """`.hp` 武器伤害写法的解析结果（表头信息 + 掷骰结果）。
+
+    ``multis`` 非空表示这是**多武器写法**（一项一次掷骰，见
+    ``.hp 骷髅 -刺剑伤害、匕首副手伤害``）：此时 ``expression`` 为空串、
+    ``rolls`` 为逐项结果、``combined`` 为合成后的总伤害结果（HP 结算用它，
+    与逐项行展示同源）；单项字段（``weapon_name``/``damage_type``/``note``）
+    不参与输出。
+    """
+
+    expression: str                       # 单武器：最终掷骰表达式；多武器：空串
+    weapon_name: str                      # 单武器：武器名（表头用）
+    damage_type: str                      # 单武器：伤害类型（可为空）
+    note: str                             # 单武器：后缀读数标注（无后缀为 ""）
+    owner_qq: str                         # 武器来源者 QQ（表头落款）
+    owner_name: str                       # 武器来源者角色名（表头落款首选）
+    multis: Optional[List[_WeaponPart]] = None      # 多武器：逐项算式与类型
+    rolls: Optional[List[WeaponDamageRoll]] = None  # 多武器：逐项掷骰结果
+    combined: Optional[RollResult] = None           # 多武器：各项之和（HP 结算用）
+
+
+def _looks_like_multi_weapon_damage(body: str) -> bool:
+    """伤害位置是否应当按**多武器写法**解析（而非普通表达式 / 当前·最大血量）。
+
+    分批的显式保护：``/`` 在本命令里另有「当前/最大」的含义
+    （``.hp 20/30``），因此只有在「含分隔符 **且** 首段就是合法武器伤害写法」
+    时才判定为多武器——是则整段交给逐项解析（写法有误就报错，**绝不**回退成
+    把 ``伤害/数值`` 当分数去静默改血）；不是则原样走原有表达式路径。
+    """
+    if not has_multi_weapon_separator(body):
+        return False
+    _times_part, segments = split_weapon_segments(body)
+    if len(segments) < 2:
+        return False
+    first = parse_weapon_entry(segments[0])
+    return first is not None and first[1] == "伤害"
+
+
+async def _resolve_hp_damage_expression(
+    event: GroupMessageEvent, expr_text: str
+) -> Optional[_WeaponDamageExpr]:
+    """解析伤害位置上的武器写法；非武器写法返回 None。
+
+    ``.hp 骷髅a易伤 -战锤重击伤害+1d4`` 与 ``.战锤伤害`` 同一套语义
+    （后缀变换、±临时加值，见 commands/weapon.py 的 build_damage_expression）；
+    武器项默认取**发送者本人**角色卡，用尾部括号可指定来源
+    （``-战锤伤害（布鲁姆）`` / ``-战锤伤害（@阿岩）``，角色名支持模糊匹配）。
+    多武器写法（``-刺剑伤害、匕首副手伤害``）逐项掷骰后返回多项结果。
+    武器写法出错时直接回复引导并结束命令，而写成 ``-武器名攻击/命中``
+    （攻击检定）时引导改用「武器名伤害」。
+    """
+    body, source_str = _split_weapon_source(expr_text)
+
+    # 多武器写法：先试逐项解析（写法有误即报错，不回退成表达式/血量分数）
+    if _looks_like_multi_weapon_damage(body):
+        multi = parse_weapon_damage_entries(body)
+        if multi is None:  # 理论不可达（_looks_like… 已保证首段合法），防御性兜底
+            return None
+        entries, error, _tail = multi
+        if error is not None:
+            await hp_matcher.finish(error.hp_message)
+        owner_qq, character = await _resolve_weapon_owner(event, source_str)
+        parts = await _plan_weapon_expressions(character, entries)
+        try:
+            rolls = _roll_weapon_parts(parts)
+        except _WeaponRollError as exc:
+            await hp_matcher.finish(
+                text.TXT_WEAPON_BAD_MOD.format(mod=exc.expression, reason=exc.reason)
+            )
+        return _WeaponDamageExpr(
+            expression="",
+            weapon_name="",
+            damage_type="",
+            note="",
+            owner_qq=owner_qq,
+            owner_name=character.name,
+            multis=parts,
+            rolls=rolls,
+            combined=_combine_weapon_rolls(rolls),
+        )
+
+    attack_entry = parse_weapon_attack_entry(body)
+    if attack_entry is not None:
+        name, kind = attack_entry
+        await hp_matcher.finish(
+            text.TXT_HP_WEAPON_ATTACK_ONLY.format(entry=f"{name}{kind}", weapon=name)
+        )
+
+    damage_entry = parse_weapon_damage_body(body)
+    if damage_entry is None:
+        return None
+    name, suffixes, tail = damage_entry
+    if tail and not WEAPON_BONUS_RE.match(tail):
+        await hp_matcher.finish(text.TXT_HP_WEAPON_TAIL_BAD.format(expr=expr_text))
+
+    owner_qq, character = await _resolve_weapon_owner(event, source_str)
+    weapon = await resolve_weapon(hp_matcher, character, name)
+
+    expression, error, sneak_dice = build_damage_expression(
+        weapon, suffixes, character.ability_info.level, character.char_class, tail
+    )
+    if error:
+        await hp_matcher.finish(error)
+    return _WeaponDamageExpr(
+        expression=expression,
+        weapon_name=weapon.name,
+        damage_type=weapon.damage_type,
+        note=build_damage_note(suffixes, sneak_dice, "重击" in suffixes),
+        owner_qq=owner_qq,
+        owner_name=character.name,
+    )
+
+
+class _WeaponRollError(Exception):
+    """逐项掷骰失败（携带表达式与引擎原因，由调用方转成用户提示）。"""
+
+    def __init__(self, expression: str, reason: str) -> None:
+        super().__init__(reason)
+        self.expression = expression
+        self.reason = reason
+
+
+async def _plan_weapon_expressions(
+    character: DNDCharacter, entries: List[WeaponEntry]
+) -> List[_WeaponPart]:
+    """多武器写法的逐项解析（解析武器 → 变换表达式）→ 单项算式列表。
+
+    任何一项出错即回复引导并结束命令（与 ``.X伤害`` 多武器同款：全部解析完成
+    后才开始掷骰，不会出现「前几项已掷、后面报错」的半截输出）。
+    """
+    parts: List[_WeaponPart] = []
+    for entry in entries:
+        weapon = await resolve_weapon(hp_matcher, character, entry.name)
+        expression, error, sneak_dice = build_damage_expression(
+            weapon, entry.suffixes, character.ability_info.level,
+            character.char_class, entry.tail,
+        )
+        if error:
+            await hp_matcher.finish(error)
+        parts.append(_WeaponPart(
+            weapon=weapon.name,
+            expression=expression,
+            damage_type=weapon.damage_type,
+            note=build_damage_note(entry.suffixes, sneak_dice, "重击" in entry.suffixes),
+            no_dice=re.search(r"\d*[dD]\d+", expression) is None,
+        ))
+    return parts
+
+
+def _roll_weapon_parts(parts: List[_WeaponPart]) -> List[WeaponDamageRoll]:
+    """按逐项算式掷骰（每项一次，顺序与 parts 一致）。
+
+    算式已在解析阶段被校验，这里只在掷骰本身失败时抛 _WeaponRollError。
+    """
+    rolls: List[WeaponDamageRoll] = []
+    for part in parts:
+        try:
+            roll_result = exec_roll_exp_unified(part.expression)
+        except RollDiceError as exc:
+            raise _WeaponRollError(part.expression, exc.info) from exc
+        rolls.append(WeaponDamageRoll(
+            weapon=part.weapon,
+            damage_type=part.damage_type,
+            note=part.note,
+            result=roll_result,
+            total=roll_result.get_val(),
+            no_dice=part.no_dice,
+        ))
+    return rolls
+
+
 
 
 def _split_weapon_source(expr_text: str) -> Tuple[str, str]:
@@ -361,49 +561,6 @@ async def _resolve_weapon_owner(
     await hp_matcher.finish(text.TXT_HP_WEAPON_SOURCE_MISS.format(name=source_str))
 
 
-async def _resolve_hp_damage_expression(
-    event: GroupMessageEvent, expr_text: str
-) -> Optional[_WeaponDamageExpr]:
-    """解析伤害位置上的武器写法；非武器写法返回 None。
-
-    ``.hp 骷髅a易伤 -战锤重击伤害+1d4`` 与 ``.战锤伤害`` 同一套语义
-    （后缀变换、±临时加值，见 commands/weapon.py 的 build_damage_expression）；
-    武器项默认取**发送者本人**角色卡，用尾部括号可指定来源
-    （``-战锤伤害（布鲁姆）`` / ``-战锤伤害（@阿岩）``，角色名支持模糊匹配）。
-    武器写法出错时直接回复引导并结束命令，而写成 ``-武器名攻击/命中``
-    （攻击检定）时引导改用「武器名伤害」。
-    """
-    body, source_str = _split_weapon_source(expr_text)
-    attack_entry = parse_weapon_attack_entry(body)
-    if attack_entry is not None:
-        name, kind = attack_entry
-        await hp_matcher.finish(
-            text.TXT_HP_WEAPON_ATTACK_ONLY.format(entry=f"{name}{kind}", weapon=name)
-        )
-
-    damage_entry = parse_weapon_damage_body(body)
-    if damage_entry is None:
-        return None
-    name, suffixes, tail = damage_entry
-    if tail and not WEAPON_BONUS_RE.match(tail):
-        await hp_matcher.finish(text.TXT_HP_WEAPON_TAIL_BAD.format(expr=expr_text))
-
-    owner_qq, character = await _resolve_weapon_owner(event, source_str)
-    weapon = await resolve_weapon(hp_matcher, character, name)
-
-    expression, error, sneak_dice = build_damage_expression(
-        weapon, suffixes, character.ability_info.level, character.char_class, tail
-    )
-    if error:
-        await hp_matcher.finish(error)
-    return _WeaponDamageExpr(
-        expression=expression,
-        weapon_name=weapon.name,
-        damage_type=weapon.damage_type,
-        note=build_damage_note(suffixes, sneak_dice, "重击" in suffixes),
-        owner_qq=owner_qq,
-        owner_name=character.name,
-    )
 
 
 # =========================================================================
@@ -589,15 +746,25 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
     if cmd_type == "-":
         weapon_damage = await _resolve_hp_damage_expression(event, arg_str)
         if weapon_damage is not None:
-            arg_str = weapon_damage.expression
-    hp_cur, hp_max, hp_temp, error = _parse_hp_args(arg_str)
+            if weapon_damage.combined is not None:
+                # 多武器写法：各项已分别掷骰，直接用合成结果参与 HP 结算
+                # （不再解析表达式，避免同一批骰子被掷第二遍）
+                hp_cur = weapon_damage.combined
+                hp_max = hp_temp = None
+                error = None
+                arg_str = ""
+            else:
+                arg_str = weapon_damage.expression
+    if weapon_damage is None or weapon_damage.combined is None:
+        hp_cur, hp_max, hp_temp, error = _parse_hp_args(arg_str)
     if error:
         await hp_matcher.finish(text.TXT_HP_MOD_ERR.format(error=error))
 
     # 应用调整
     feedback = ""
     # 武器伤害写法的表头（与 .X伤害 回复同款：掷伤与扣血一条命令）——单目标用
-    # 实际结算值（含抗性/易伤折算），多目标用掷出的原始值（折算逐目标显示）
+    # 实际结算值（含抗性/易伤折算），多目标用掷出的原始值（折算逐目标显示）；
+    # 多武器写法（2026-09-27）改由逐项行 + 合计行输出（与 .X伤害 同一套组装）
     if weapon_damage is not None and hp_cur is not None:
         raw_total = hp_cur.get_val()
         total = (
@@ -608,13 +775,30 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
         owner_name = await base.resolve_display_name(
             bot, event, weapon_damage.owner_qq, char_name=weapon_damage.owner_name
         )
-        feedback += text.TXT_HP_WEAPON_DAMAGE_HEAD.format(
-            name=owner_name,
-            weapon=weapon_damage.weapon_name,
-            total=total,
-            type=weapon_damage.damage_type,
-            note=weapon_damage.note,
-        ) + "\n"
+        if weapon_damage.multis:
+            # 多武器：逐项行沿用 .X伤害 的同一套组装（weapon.append_multi_damage_lines），
+            # 逐项读数即解析阶段掷出的结果（与参与扣血的合成值同源）
+            parts = weapon_damage.multis
+            damage_types = {part.damage_type for part in parts}
+            feedback += text.TXT_HP_MULTI_WEAPON_DAMAGE_HEAD.format(
+                name=owner_name,
+                weapons="、".join(part.weapon for part in parts),
+                total=total,
+                type=(
+                    next(iter(damage_types)) if len(damage_types) == 1 else "多类型"
+                ),
+            ) + "\n"
+            lines: List[str] = []
+            append_multi_damage_lines(lines, owner_name, weapon_damage.rolls or [])
+            feedback += "\n".join(lines) + "\n"
+        else:
+            feedback += text.TXT_HP_WEAPON_DAMAGE_HEAD.format(
+                name=owner_name,
+                weapon=weapon_damage.weapon_name,
+                total=total,
+                type=weapon_damage.damage_type,
+                note=weapon_damage.note,
+            ) + "\n"
     for source_key, target_id, damage_factor in target_list:
         if source_key == "npc":
             # NPC/怪物：血量条目按需创建（目标经先攻表/已有记录解析而来）

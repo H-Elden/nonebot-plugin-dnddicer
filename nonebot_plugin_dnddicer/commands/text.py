@@ -116,6 +116,43 @@ TXT_WEAPON_BAD_MOD = "攻击掷骰表达式无效: {mod}（{reason}）"
 #: x 标记（不可攻击检定）的武器被用于攻击命令时的提示
 TXT_WEAPON_NO_ATTACK = "【{weapon}】不可进行攻击检定！"
 
+# ── 自定义武器：多武器一次结算（2026-09-27 新增）──────────────────────────
+# 写法：一条命令写多件武器、用 、、，、/ 分隔；除第一项外每项写全
+# 「武器名[副手/重击/偷袭]伤害[±加值]」（攻击同理），后缀与加值各写各的。
+#: 多项伤害的标题行（类型不同时报「多类型」，明细见逐项行与合计行）
+TXT_WEAPON_MULTI_DAMAGE_HEAD = "{name}用【{weapons}】造成了 {total} 点{type}伤害："
+#: 多项伤害的逐项行（{no} 编号、{note} 后缀标注，行尾结果随其后一行）
+TXT_WEAPON_DAMAGE_ITEM = "{no}. {name}用【{weapon}】造成了 {total} 点{type}伤害{note}：\n{result}"
+#: 多项攻击的标题行（{check} 形如「刺剑攻击检定、匕首攻击检定」）
+TXT_WEAPON_MULTI_ATTACK = "{name}进行【{check}】：\n{result}"
+#: 多项攻击的逐武器行（{no} 编号、{hint} 与单项同款，如「武器命中加值:+7 优势」；
+#: 编号与掷骰行、天然 20/1 提示连成一块，武器之间不空行——2026-09-27 用户定稿）
+TXT_WEAPON_MULTI_ATTACK_ITEM = "{no}.【{weapon}】{hint}"
+#: 合计行：类型相同（一句合计）
+TXT_WEAPON_MULTI_TOTAL_ONE = "共计造成了 {total} 点{type}伤害"
+#: 合计行：类型不同（逐类型列出再合计；{parts} 形如「7 点钝击伤害、4 点穿刺伤害」）
+TXT_WEAPON_MULTI_TOTAL_MIXED = "共计造成了 {parts}，合计 {total} 点"
+#: 合计行：没有可计入类型的项（后手后缀剔除全部加值后只剩常数）时只报总伤害
+TXT_WEAPON_MULTI_TOTAL_PLAIN = "共计造成了 {total} 点伤害"
+#: 逐类型分项的片段（合计行与逐类型文案共用）
+TXT_DAMAGE_PART = "{total} 点{type}伤害"
+#: 多项写法里某一项写错时的提示（{usage} 为正确写法说明，见 commands/weapon.py）
+TXT_WEAPON_MULTI_BAD_ENTRY = "多武器写法无效: {entry}（{usage}）"
+#: 同上（`.hp` 的伤害位置：写法要带 `-`，故单独一条而非复用上面的句式）
+TXT_HP_WEAPON_MULTI_BAD_ENTRY = (
+    "多武器写法无效: {entry}（用法：-刺剑伤害、匕首副手伤害，"
+    "除第一件外每件都要写全「武器名伤害」）"
+)
+#: 多项写法的命令体末尾有不支持的内容（仅支持末尾的 @玩家）
+TXT_WEAPON_MULTI_TAIL = (
+    "多武器命令末尾只支持 @玩家: {tail}（示例：.刺剑伤害、匕首副手伤害 @玩家）"
+)
+#: 多项写法不支持 N# 批量（次数与每项的加值/优劣势无法一一对应）
+TXT_WEAPON_MULTI_TIMES = (
+    "多武器写法不支持 {times} 批量：请拆成两条命令（如 .2#刺剑攻击 与 .匕首攻击），"
+    "或去掉次数只掷一轮"
+)
+
 # ── 自定义武器：伤害（.X伤害，2026-09-24 新增）─────────────────────────────
 # {type} 为空时自然读作「造成了 8 点伤害」；{note} 为后缀标注（重击/副手/偷袭）
 TXT_WEAPON_DAMAGE = "{name}用【{weapon}】造成了 {total} 点{type}伤害{note}：\n{result}"
@@ -184,6 +221,8 @@ TXT_HP_WEAPON_NO_CHAR = (
 )
 #: 武器伤害写法的表头（与 .X伤害 回复同款，随后接各目标的 HP 结算行）
 TXT_HP_WEAPON_DAMAGE_HEAD = "{name}用【{weapon}】造成了 {total} 点{type}伤害{note}："
+#: 多武器写法的表头（随后接逐项行 + 合计行，再接各目标的 HP 结算行；2026-09-27）
+TXT_HP_MULTI_WEAPON_DAMAGE_HEAD = "{name}用【{weapons}】造成了 {total} 点{type}伤害："
 #: 括号来源未命中玩家角色卡（名称模糊搜索失败或命中 NPC 条目）
 TXT_HP_WEAPON_SOURCE_MISS = (
     "找不到角色卡「{name}」：括号中请填玩家角色名（或直接 @玩家）"
@@ -523,6 +562,22 @@ def join_roll_state_text(content: str, state: str, own_line: bool) -> str:
     if own_line:
         return f"{content}\n{state}"
     return f"{content} {state}"
+
+
+def format_weapon_attack_hint(attack_bonus: str, advantage: int) -> str:
+    """武器攻击检定的过程说明行（单项 ``.X攻击`` 与多武器逐项行共用）。
+
+    ``advantage``：1 优势 / -1 劣势 / 0 无。2026-09-27 由单项攻击抽出，
+    保证多武器写法的每项命中行与单项口径逐字一致。
+    """
+    parts: List[str] = [
+        f"武器命中加值:{attack_bonus}" if attack_bonus else "无命中加值"
+    ]
+    if advantage > 0:
+        parts.append("优势")
+    elif advantage < 0:
+        parts.append("劣势")
+    return " ".join(parts)
 
 
 def format_nat_attack_state(res_list: List[RollResult], weapon_name: str) -> str:
