@@ -14,8 +14,9 @@
 from __future__ import annotations
 
 import re
-import unicodedata
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
+
+from .. import card_geometry
 
 #: 行首禁则标点（不允许出现在行首）
 _LINE_START_FORBIDDEN = set("。，、；：！？）」』】》…·")
@@ -134,10 +135,8 @@ def _split_lead(text: str) -> Tuple[str, str]:
 
 
 def _char_width(char: str, font_size: int) -> float:
-    """估算单字符宽度（px）：全角 1em、半角 0.5em。"""
-    if unicodedata.east_asian_width(char) in ("F", "W"):
-        return float(font_size)
-    return font_size * 0.5
+    """估算单字符宽度（px）——口径集中在 ``card_geometry``。"""
+    return card_geometry.char_width(char, font_size)
 
 
 def _text_width(text: str, font_size: int) -> float:
@@ -145,18 +144,28 @@ def _text_width(text: str, font_size: int) -> float:
     return sum(_char_width(c, font_size) for c in text)
 
 
-def wrap_cjk(text: str, *, width_em: float = 39, font_size: int = 16) -> str:
+def wrap_cjk(
+    text: str,
+    *,
+    width_em: Optional[float] = None,
+    font_size: int = card_geometry.FONT_SIZE,
+) -> str:
     """按宽度折行，避免行首标点、行尾开括号与西文/数字拆词。
 
     Args:
         text: 待折行文本（可含换行——原换行保留）。
-        width_em: 可用宽度（em）。
+        width_em: 可用宽度（em）；留空时取 ``card_geometry`` 的
+            「卡片内容宽 × 安全比例」（默认预算必须小于容器宽，否则 litehtml
+            会二次折行、把末尾一两个字挤成孤行）。
         font_size: 字号（px），用于 em→px 换算。
 
     Returns:
         折行后文本（行以 ``\\n`` 分隔，渲染时用 ``white-space: pre-wrap``）。
     """
-    max_width = width_em * font_size
+    if width_em is None:
+        max_width = card_geometry.flat_budget(font_size=font_size)
+    else:
+        max_width = width_em * font_size
     out: List[str] = []
     for segment in text.split("\n"):
         if not segment:

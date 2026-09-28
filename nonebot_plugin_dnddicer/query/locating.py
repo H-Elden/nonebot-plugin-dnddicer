@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import re
 from typing import List, Optional, Tuple
-
 #: 条目头行的最大长度（超过视为正文，避免把含英文的长句当条目头）
 _HEAD_MAX_LENGTH = 60
 
@@ -261,3 +260,82 @@ def find_entry_head(content: str, keyword: str) -> Optional[Tuple[str, str]]:
     if head_index is not None:
         return head_at(lines, head_index)
     return None
+
+
+# ── 文字模式显示用：段内合并（站点正文按固定列硬折行的还原）─────────────
+
+#: 标签行（如「施法时间：动作」）：自成一块，不与上下行合并
+_DISPLAY_LABEL_RE = re.compile(r"^[^：:\s]{1,12}[：:]")
+
+#: 列表项行首（站点正文用小圆点/短横线列举）
+_DISPLAY_BULLET_RE = re.compile(r"^[·•\-*]\s*")
+
+#: 句末标点：以它结尾的行视为一个段落的结束
+_DISPLAY_END_CHARS = set("。！？…；”’\"）】》」』")
+
+
+def _is_display_block(line: str) -> bool:
+    """该行是否自成一块（标签行 / 条目头 / 列表项）。"""
+    return bool(
+        _DISPLAY_LABEL_RE.match(line) or _DISPLAY_BULLET_RE.match(line) or split_entry_head(line)
+    )
+
+
+def join_wrapped_lines(text: str) -> str:
+    """把「按固定列硬折行」留下的断行合并（文字模式显示用）。
+
+    站点正文多数条目已是完整行（标签行 + 整段正文），少数条目仍带着源文档的硬
+    折行（实测「…操纵距离你 / 60 / 尺内…」）。判据取**最保守的信号**：只有上一行
+    **以空格结尾**（在空白处断行）且两行都不是结构行（标签 / 条目头 / 列表项）时才
+    合并；其余一律原样保留，避免把刻意分行的内容粘成一行。
+
+    只改换行与空白，不改动任何文字内容。
+    """
+    out: List[str] = []
+    buffer = ""
+    wrapped_prev = False
+    # 注意：这里不能用 `_normalize_lines`（它会 rstrip，把「尾随空格」这一判据抹掉）
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    for raw in normalized.split("\n"):
+        line = raw.strip()
+        if not line:
+            if buffer:
+                out.append(buffer)
+                buffer = ""
+            if out and out[-1] != "":
+                out.append("")
+            wrapped_prev = False
+            continue
+        ends_with_space = raw.endswith(" ") or raw.endswith("\u3000")
+        if not buffer:
+            buffer = line
+            wrapped_prev = ends_with_space
+            continue
+        if (
+            wrapped_prev
+            and not _is_display_block(buffer)
+            and not _is_display_block(line)
+        ):
+            left = buffer.rstrip()
+            joiner = "" if _is_cjk_edge(left[-1], line[0]) else " "
+            buffer = f"{left}{joiner}{line}"
+            wrapped_prev = ends_with_space
+            continue
+        out.append(buffer)
+        buffer = line
+        wrapped_prev = ends_with_space
+    if buffer:
+        out.append(buffer)
+    while out and not out[-1]:
+        out.pop()
+    return "\n".join(out)
+
+
+def _is_cjk_edge(before: str, after: str) -> bool:
+    """两侧都是全角字符时，合并处不加空格（中文之间不需要空格）。"""
+    import unicodedata
+
+    def _wide(char: str) -> bool:
+        return bool(char) and unicodedata.east_asian_width(char) in ("F", "W")
+
+    return _wide(before) and _wide(after)

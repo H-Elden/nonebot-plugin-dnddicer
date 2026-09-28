@@ -4,23 +4,18 @@
 <meta charset="utf-8">
 <style>
 {{ css }}
+{{ font_rule }}
 </style>
 </head>
 <body>
 <div class="card">
   <div class="title">{{ title }}</div>
-  <div class="meta">
-    {% if category %}<span class="chip">{{ category }}</span>{% endif %}
-    <span class="source">5E 不全书</span>
-  </div>
+  <div class="meta">{% if category %}<span class="chip">{{ category }}</span>{% endif %}<span class="source">5E 不全书</span></div>
   <div class="divider"></div>
-  <div class="content">
-    {% if fallback_note %}<div class="note">{{ fallback_note }}</div>{% endif %}
-    {{ body_html | safe }}
-  </div>
-  <div class="footer">
-    <span class="footer-source">《5e不全书》</span>{% if source_path %}<span class="footer-path">{{ source_path }}</span>{% endif %}
-  </div>
+  {# 容器设了 white-space: pre-wrap，模板自身的换行/缩进会被当成内容各占一行空行，
+     因此正文与容器必须写在同一行（2026-09-27 修复，实测每张卡多出 140+px 空白）。 #}
+  <div class="content">{% if fallback_note %}<div class="note">{{ fallback_note }}</div>{% endif %}{{ body_html | safe }}</div>
+  <div class="footer"><span class="footer-source">《5e不全书》</span>{% if source_path %}<span class="footer-path">{{ source_path }}</span>{% endif %}</div>
 </div>
 </body>
 </html>

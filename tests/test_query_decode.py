@@ -10,6 +10,9 @@
 
 from __future__ import annotations
 
+import re
+
+from nonebot_plugin_dnddicer import card_geometry
 from nonebot_plugin_dnddicer.query import decode
 
 _SPELL_PAGE = """<html><body>
@@ -276,3 +279,83 @@ def test_decode_entry_end_to_end() -> None:
     assert '<span class="dx-hl">冲锋</span>' in entry.fragment
     assert "· 属性值提升" in entry.text
     assert "大厨" not in entry.text
+
+
+# ── 折行预算（列表感知 / 尾行再平衡）──────────────────────────────────
+
+
+def _est(text: str) -> float:
+    return card_geometry.text_width(text)
+
+
+def test_wrap_fragment_default_budget_below_card_width() -> None:
+    """默认预算必须小于卡片内容宽，否则 litehtml 会二次折行、挤出孤字行。"""
+    fragment = "<p>" + "汉" * 200 + "</p>"
+    wrapped = decode.wrap_fragment(fragment)
+    lines = re.sub(r"<[^>]+>", "", wrapped).split("\n")
+    budget = card_geometry.flat_budget()
+    assert budget < card_geometry.content_width()
+    assert all(_est(line) <= budget for line in lines)
+    assert len(lines) > 1
+
+
+def test_wrap_fragment_list_budget_is_narrower() -> None:
+    """列表项内预算更窄：<ul> 缩进与行标记会吃掉可用宽度。"""
+    body = "汉" * 120
+    outside = decode.wrap_fragment(f"<p>{body}</p>")
+    inside = decode.wrap_fragment(f"<ul><li><div>{body}</div></li></ul>")
+    outside_max = max(_est(line) for line in re.sub(r"<[^>]+>", "", outside).split("\n"))
+    inside_max = max(_est(line) for line in re.sub(r"<[^>]+>", "", inside).split("\n"))
+    assert inside_max < outside_max
+    assert card_geometry.list_budget() < card_geometry.flat_budget()
+
+
+def test_wrap_fragment_rebalances_tiny_tail() -> None:
+    """尾行再平衡：末行只剩一两个字时收紧预算重折（行只变短，不会超预算）。"""
+    # 39 个汉字 + 2 个汉字：默认预算下末行只剩 2 字
+    body = "汉" * 37 + "。" + "尾字"
+    wrapped = decode.wrap_fragment(f"<p>{body}</p>")
+    lines = [line for line in re.sub(r"<[^>]+>", "", wrapped).split("\n") if line]
+    assert len(lines) >= 2
+    assert len(lines[-1]) >= card_geometry.MIN_TAIL_CHARS
+    assert all(_est(line) <= card_geometry.flat_budget() for line in lines)
+
+
+# ── 站内硬折行合并（清洗阶段）─────────────────────────────────────────
+
+
+def test_collapse_soft_wraps_joins_cjk() -> None:
+    """中文之间的硬折行直接连起来（「本\\n法术」→「本法术」）。"""
+    assert decode.collapse_soft_wraps("本法\n术的伤害") == "本法术的伤害"
+    assert decode.collapse_soft_wraps("一行\n二行") == "一行二行"
+
+
+def test_collapse_soft_wraps_drops_next_to_punctuation() -> None:
+    """标点旁的硬折行不留空格（「…）\\n。」→「…）。」）。"""
+    assert decode.collapse_soft_wraps("（无论它在哪里）\n。") == "（无论它在哪里）。"
+    assert decode.collapse_soft_wraps("魂器\n（无论它在哪里）") == "魂器（无论它在哪里）"
+
+
+def test_collapse_soft_wraps_keeps_plain_space() -> None:
+    """不含换行的空格原样保留（站内用「四环 塑能」这种空格分隔）。"""
+    assert decode.collapse_soft_wraps("四环 塑能（德鲁伊）") == "四环 塑能（德鲁伊）"
+    # 中英/数字交界的硬折行折叠成一个空格（站内写法「不过 1 尺」）
+    assert decode.collapse_soft_wraps("不过 1 \n尺的直线") == "不过 1 尺的直线"
+    assert decode.collapse_soft_wraps("受到 5d8 \n火焰伤害") == "受到 5d8 火焰伤害"
+
+
+# ── 文字模式不带图片折行 ───────────────────────────────────────────────
+
+
+def test_decode_entry_text_has_no_image_wrapping() -> None:
+    """文字模式的正文不得带图片排版插入的折行（客户端自己会按气泡宽折行）。"""
+    long_paragraph = "这是一段很长的正文，" * 8 + "结尾。"
+    page = f'<H4 id="Long">长条目｜Long</H4><P>{long_paragraph}</P><H4 id="Next">下一个</H4>'
+    entry = decode.decode_entry(page, anchor="Long")
+    # 图片片段被折成多行
+    fragment_lines = [line for line in re.sub(r"<[^>]+>", "", entry.fragment).split("\n") if line]
+    assert len(fragment_lines) > 2
+    # 文字模式：整段一行（不含图片折行留下的断行）
+    text_lines = [line for line in entry.text.splitlines() if line]
+    assert len(text_lines) == 1
+    assert text_lines[0] == long_paragraph

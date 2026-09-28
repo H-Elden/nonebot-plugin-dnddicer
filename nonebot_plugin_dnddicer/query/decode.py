@@ -25,6 +25,8 @@ from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from typing import Dict, List, Optional, Sequence, Tuple
 
+from .. import card_geometry
+
 # ── 白名单 ─────────────────────────────────────────────────────────────
 
 #: 保留的标签（其余标签去掉、保留其文字）
@@ -262,6 +264,51 @@ def _retreat_to_block_start(html: str, position: int) -> int:
 
 # ── 清洗器 ─────────────────────────────────────────────────────────────
 
+#: 中文标点（硬折行落在标点旁时不留空格）
+_CJK_PUNCT = set("。，、；：！？（）「」『』【】《》〈〉…·—～")
+
+#: 空白串（含换行/全角空格）
+_WHITESPACE_RE = re.compile(r"[ \t\r\n\u3000]+")
+
+
+def _is_cjk(char: str) -> bool:
+    """是否全角字符（汉字、中文标点、全角符号）。"""
+    import unicodedata
+
+    return bool(char) and unicodedata.east_asian_width(char) in ("F", "W")
+
+
+def collapse_soft_wraps(data: str) -> str:
+    """折叠文本节点里的空白，并合并「站内硬折行」。
+
+    - 普通空格（不含换行）原样折叠成一个空格（站内用「四环 塑能」这种空格
+      分隔，不能吃掉）；
+    - **含换行的空白串**是站内按固定列硬折行的产物：两侧都是中文时直接连起来
+      （「本\\n法术」→「本法术」），有一侧是中文标点时直接丢掉（「…）\\n。」
+      →「…）。」），其余情形折叠成一个空格（「不过 1 \\n尺」→「不过 1 尺」）。
+    """
+    out: List[str] = []
+    index = 0
+    length = len(data)
+    while index < length:
+        match = _WHITESPACE_RE.match(data, index)
+        if match is None:
+            out.append(data[index])
+            index += 1
+            continue
+        run = match.group(0)
+        before = data[index - 1] if index > 0 else ""
+        after = data[match.end()] if match.end() < length else ""
+        has_newline = "\n" in run or "\r" in run
+        if has_newline and (before in _CJK_PUNCT or after in _CJK_PUNCT):
+            pass  # 标点旁的硬折行：不留空格
+        elif has_newline and _is_cjk(before) and _is_cjk(after):
+            pass  # 中文词被折开：直接连起来
+        else:
+            out.append(" ")
+        index = match.end()
+    return "".join(out)
+
 
 class _Sanitizer(HTMLParser):
     """把条目 HTML 清洗为卡片可渲染的片段（保留语义标签与站点类名）。"""
@@ -371,8 +418,11 @@ class _Sanitizer(HTMLParser):
         if self.skip:
             return
         # 折叠源 HTML 的原始空白（缩进/换行）：渲染侧用 pre-wrap 呈现我们
-        # 自己插入的折行，若保留原始换行会到处多出空行
-        data = re.sub(r"[ \t\r\n\u3000]+", " ", data)
+        # 自己插入的折行，若保留原始换行会到处多出空行。
+        # 站内正文按固定列硬折行，换行常落在句子中间甚至词中间：这类**含换行的
+        # 空白**在中文之间直接连起来、在标点旁直接丢掉（否则会留下「本 法术」
+        # 这类词中空格与行首缩进）。
+        data = collapse_soft_wraps(data)
         if not data:
             return
         if self._hl_re is None:
@@ -453,14 +503,16 @@ _BLOCK_TAGS = {
     "h1", "h2", "h3", "h4", "h5", "h6", "blockquote",
 }
 
+#: 块边界标签（切「折行块」用：块内折行 + 尾行再平衡；与 _BLOCK_TAGS 同口径 + br）
+_TOKEN_RE = re.compile(r"<[^>]+>|\n|.", re.S)
+_BLOCK_BOUNDARY_RE = re.compile(
+    r"</?(?:p|div|li|ul|ol|table|tr|td|th|hr|blockquote|h[1-6])\b|^<br\s*/?>$", re.I
+)
+
 
 def _char_width_px(char: str, font_size: int) -> float:
-    """单字符宽度估算（全角 1em、半角 0.5em；与 render/layout.py 同口径）。"""
-    import unicodedata
-
-    if unicodedata.east_asian_width(char) in ("F", "W"):
-        return float(font_size)
-    return font_size * 0.5
+    """单字符宽度估算（px）——口径集中在 ``card_geometry``。"""
+    return card_geometry.char_width(char, font_size)
 
 
 class _FragmentWrapper(HTMLParser):
@@ -469,12 +521,15 @@ class _FragmentWrapper(HTMLParser):
     litehtml 无避头尾规则（实测 ``white-space: nowrap`` 不生效），行首标点
     （如一行以「。」开头）需在 Python 侧规避：按可见宽度累计折行，行首禁则
     标点拉回上一行（宁可略超宽），ASCII 词整体不拆。
+
+    预算由调用方给出（**小于**卡片内容宽，见 ``card_geometry``）：越界会让
+    litehtml 再折一次、把末尾一两个字挤成孤行；列表项内另给更窄的预算。
     """
 
-    def __init__(self, *, width_em: float, font_size: int) -> None:
+    def __init__(self, *, budget: float, font_size: int) -> None:
         super().__init__(convert_charrefs=True)
         self.out: List[str] = []
-        self.max_width = width_em * font_size
+        self.budget = budget
         self.font_size = font_size
         self.line_width = 0.0
 
@@ -496,7 +551,7 @@ class _FragmentWrapper(HTMLParser):
                     end += 1
                 word = text[index:end]
                 width = sum(_char_width_px(c, self.font_size) for c in word)
-                if self.line_width > 0 and self.line_width + width > self.max_width:
+                if self.line_width > 0 and self.line_width + width > self.budget:
                     self.out.append("\n")
                     self.line_width = 0.0
                 self.out.append(word)
@@ -506,7 +561,7 @@ class _FragmentWrapper(HTMLParser):
             width = _char_width_px(char, self.font_size)
             if (
                 self.line_width > 0
-                and self.line_width + width > self.max_width
+                and self.line_width + width > self.budget
                 and char not in _LINE_START_FORBIDDEN
             ):
                 self.out.append("\n")
@@ -541,16 +596,97 @@ class _FragmentWrapper(HTMLParser):
         self._emit_text(data)
 
 
-def wrap_fragment(fragment: str, *, width_em: float = 39, font_size: int = 16) -> str:
-    """对清洗后的片段做「Python 侧折行」（跨标签累计宽度、避头尾、整词保护）。
+def _split_segments(fragment: str) -> List[Tuple[str, str]]:
+    """把片段切成「块级标签」与「文本块」（文本块内含行内标签）。"""
+    segments: List[Tuple[str, str]] = []
+    buffer: List[str] = []
+    for token in _TOKEN_RE.findall(fragment):
+        if token.startswith("<") and _BLOCK_BOUNDARY_RE.match(token):
+            if buffer:
+                segments.append(("text", "".join(buffer)))
+                buffer = []
+            segments.append(("tag", token))
+        else:
+            buffer.append(token)
+    if buffer:
+        segments.append(("text", "".join(buffer)))
+    return segments
 
-    渲染侧以 ``white-space: pre-wrap`` 呈现（换行即所见）；宽度预算与
-    ``render/layout.py`` 的文案卡片一致（默认 39em × 16px）。
-    """
-    wrapper = _FragmentWrapper(width_em=width_em, font_size=font_size)
-    wrapper.feed(fragment)
+
+def _wrap_once(chunk: str, *, budget: float, font_size: int) -> str:
+    wrapper = _FragmentWrapper(budget=budget, font_size=font_size)
+    wrapper.feed(chunk)
     wrapper.close()
     return "".join(wrapper.out)
+
+
+def _plain_lines(wrapped: str) -> List[str]:
+    return re.sub(r"<[^>]+>", "", wrapped).split("\n")
+
+
+def _has_tiny_tail(wrapped: str) -> bool:
+    """末行不足 ``MIN_TAIL_CHARS`` 字、且上一行够长（不是标题式短行）。"""
+    lines = _plain_lines(wrapped)
+    if len(lines) < 2:
+        return False
+    tail = lines[-1].strip()
+    return (
+        0 < len(tail) < card_geometry.MIN_TAIL_CHARS
+        and len(lines[-2].strip()) >= card_geometry.TAIL_PREV_MIN_CHARS
+    )
+
+
+def _wrap_block(chunk: str, *, budget: float, font_size: int) -> str:
+    """块内折行；末行过短时逐次收紧预算重折（只让行更短，不会越界）。"""
+    best = _wrap_once(chunk, budget=budget, font_size=font_size)
+    for step in range(1, card_geometry.MAX_TAIL_SHIFT + 1):
+        if not _has_tiny_tail(best):
+            break
+        candidate = _wrap_once(
+            chunk, budget=budget - step * font_size, font_size=font_size
+        )
+        if len(_plain_lines(candidate)) > len(_plain_lines(best)) + 1:
+            break  # 收紧过头（多出一行以上）就回退到上一次结果
+        best = candidate
+    return best
+
+
+def wrap_fragment(
+    fragment: str,
+    *,
+    width_em: Optional[float] = None,
+    font_size: int = card_geometry.FONT_SIZE,
+) -> str:
+    """对清洗后的片段做「Python 侧折行」（跨标签、避头尾、整词保护、列表感知）。
+
+    渲染侧以 ``white-space: pre-wrap`` 呈现（换行即所见）。预算：
+
+    - 默认取 ``card_geometry`` 的「内容宽 × 0.93」（列表项内再扣缩进与行标记）；
+    - 显式传入 ``width_em`` 时按 ``width_em × font_size`` 作为普通段落预算
+      （供测试与特殊版式使用），列表内仍额外扣缩进。
+    """
+    if width_em is None:
+        flat = card_geometry.flat_budget(font_size=font_size)
+        listed = card_geometry.list_budget(font_size=font_size)
+    else:
+        flat = float(width_em) * font_size
+        indent = (card_geometry.LIST_INDENT_EM + card_geometry.LIST_MARKER_EM) * font_size
+        listed = max(1.0, flat - indent)
+
+    out: List[str] = []
+    depth = 0
+    for kind, chunk in _split_segments(fragment):
+        if kind == "tag":
+            low = chunk.lower()
+            if re.match(r"<(ul|ol)\b", low):
+                depth += 1
+            elif re.match(r"</(ul|ol)\b", low):
+                depth = max(0, depth - 1)
+            out.append(chunk)
+            continue
+        budget = listed if depth > 0 else flat
+        out.append(_wrap_block(chunk, budget=budget, font_size=font_size))
+    return "".join(out)
 
 
 # ── 对外主入口 ─────────────────────────────────────────────────────────
@@ -584,13 +720,13 @@ def decode_entry(
     fragment_html = html[sliced.start : sliced.end]
     if sliced.drop_first_head:
         fragment_html = _strip_first_heading(fragment_html)
-    # 清洗 → 折行（Python 侧避头尾；图片模式以 pre-wrap 呈现换行）
-    fragment = wrap_fragment(
-        sanitize_html(fragment_html, highlight=keyword)
-    )
+    # 清洗只做一次：文字用**未折行**的清洗结果，图片用折行结果。
+    # 文字消息里不能带图片排版的折行（客户端会按气泡宽度自己折，硬换行会
+    # 在句中留下一两个字独占一行的残行，2026-09-27 用户实测反馈）。
+    cleaned = sanitize_html(fragment_html, highlight=keyword)
     return DecodedEntry(
         title=sliced.title or name,
-        fragment=fragment,
-        text=fragment_to_text(fragment),
+        fragment=wrap_fragment(cleaned),
+        text=fragment_to_text(cleaned),
         located=sliced.located,
     )

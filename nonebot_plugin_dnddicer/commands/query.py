@@ -55,7 +55,7 @@ from ..query import (
     locate_entry,
     parse_selection_token,
 )
-from ..query import books
+from ..query import books, locating
 from . import base, query_common, text
 
 #: 单次查询允许的最大关键词组数（与服务端语义一致：空格分隔为 AND）
@@ -560,7 +560,9 @@ async def _send_entry(
     ]
     if not located:
         lines.append(text.TXT_QUERY_ENTRY_FALLBACK)
-    body = entry_text.strip()
+    # 回退正文来自检索服务的整页纯文本，站点按固定列硬折行（换行落在句中甚至词中），
+    # 客户端会按气泡宽度自己折行，故发送前按段落合并（只动换行与空白）。
+    body = locating.join_wrapped_lines(entry_text).strip()
     lines.extend(body.splitlines() if body else [text.TXT_QUERY_ENTRY_EMPTY])
     if image_hint:
         lines.append(image_hint)

@@ -4,33 +4,18 @@
 <meta charset="utf-8">
 <style>
 {{ css }}
+{{ font_rule }}
 </style>
 </head>
 <body>
 <div class="card">
   <div class="title">{{ title }}</div>
-  <div class="meta">
-    {% if category %}<span class="chip">{{ category }}</span>{% endif %}
-    <span class="source">5E 不全书</span>
-  </div>
+  <div class="meta">{% if category %}<span class="chip">{{ category }}</span>{% endif %}<span class="source">5E 不全书</span></div>
   <div class="divider"></div>
-  <div class="content">
-    {% if fallback_note %}<div class="note">{{ fallback_note }}</div>{% endif %}
-    {% for block in blocks %}
-    {% if block.type == 'sub' %}
-    <div class="sub">{{ block.text }}</div>
-    {% elif block.type == 'label' %}
-    <div class="label"><span class="strong">{{ block.prefix }}</span>{{ block.text }}</div>
-    {% elif block.type == 'lead' %}
-    <div class="lead"><span class="strong">{{ block.prefix }}</span>{{ block.text }}</div>
-    {% else %}
-    <div class="para">{{ block.text }}</div>
-    {% endif %}
-    {% endfor %}
-  </div>
-  <div class="footer">
-    <span class="footer-source">《5e不全书》</span>{% if source_path %}<span class="footer-path">{{ source_path }}</span>{% endif %}
-  </div>
+  {# 正文块之间不留模板空白：块元素自身不设 pre-wrap，但保持「容器内无裸空白」
+     的统一纪律，避免日后给容器加 pre-wrap 时复现空行（2026-09-27）。 #}
+  <div class="content">{% if fallback_note %}<div class="note">{{ fallback_note }}</div>{% endif %}{% for block in blocks %}{% if block.type == 'sub' %}<div class="sub">{{ block.text }}</div>{% elif block.type == 'label' %}<div class="label"><span class="strong">{{ block.prefix }}</span>{{ block.text }}</div>{% elif block.type == 'lead' %}<div class="lead"><span class="strong">{{ block.prefix }}</span>{{ block.text }}</div>{% else %}<div class="para">{{ block.text }}</div>{% endif %}{% endfor %}</div>
+  <div class="footer"><span class="footer-source">《5e不全书》</span>{% if source_path %}<span class="footer-path">{{ source_path }}</span>{% endif %}</div>
 </div>
 </body>
 </html>
