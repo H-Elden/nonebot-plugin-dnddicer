@@ -49,6 +49,24 @@ _UNIT_PAGE = """<html><body>
 <P>1金币(GP)=10银币(SP)</P>
 </body></html>"""
 
+#: 2024 召唤类法术页形态：法术正文之后紧跟它自带的生物数据卡，
+#: 卡内名称是比法术标题低一级的 H5（切分口径的回归夹具）
+_SUMMON_PAGE = """<html><body>
+<H4 id="Summon_Elemental">元素召唤术｜Summon Elemental</H4>
+<P><STRONG>施法时间：</STRONG>动作<BR>你唤来一个元素灵魄，其资料卡见下文。</P>
+<div class="stat-block">
+<H5 id="Elemental_Spirit">元素灵魄Elemental Spirit</H5>
+<div class="sub-line">中型元素，中立</div>
+<table><tr><td><strong>AC </strong>11</td></tr></table>
+<H6>特质Traits</H6>
+<p>灵魄特质段落。</p>
+<H6>动作Actions</H6>
+<p>灵魄动作段落。</p>
+</div>
+<H4 id="Wall_of_Fire">火墙术｜Wall of Fire</H4>
+<P><STRONG>施法时间：</STRONG>动作<BR>你创造出一面火墙。</P>
+</body></html>"""
+
 
 # ── 切分 ───────────────────────────────────────────────────────────────
 
@@ -82,6 +100,59 @@ def test_slice_by_red_title() -> None:
     assert "冲锋手" in fragment
     assert "属性值提升" in fragment
     assert "大厨" not in fragment
+
+
+def test_slice_anchor_ignores_earlier_stat_block() -> None:
+    """数据卡之后的条目：锚点命中自己的标题，不得切成前面那张生物卡。
+
+    回归：旧实现只要「标题之前出现过 stat-block」就整块取最后一张卡，实测
+    2024 法术详述页有 130 条条目被切成别的生物卡。
+    """
+    sliced = decode.slice_entry(_SUMMON_PAGE, anchor="Wall_of_Fire")
+    assert sliced.located is True
+    assert "火墙术" in sliced.title
+    fragment = decode.sanitize_html(_SUMMON_PAGE[sliced.start : sliced.end])
+    assert "你创造出一面火墙" in fragment
+    assert "元素灵魄" not in fragment
+    assert 'class="stat-block"' not in fragment
+
+
+def test_slice_summon_spell_keeps_nested_stat_block() -> None:
+    """召唤类法术：法术正文与它自带的生物卡一起带出（正文写着「见下文」）。"""
+    sliced = decode.slice_entry(_SUMMON_PAGE, anchor="Summon_Elemental")
+    assert sliced.located is True
+    assert "元素召唤术" in sliced.title
+    fragment = decode.sanitize_html(_SUMMON_PAGE[sliced.start : sliced.end])
+    assert "你唤来一个元素灵魄" in fragment  # 法术正文在前
+    assert 'class="stat-block"' in fragment  # 自带的生物卡在后
+    assert "灵魄动作段落" in fragment
+    assert "火墙术" not in fragment
+    # 按条目名走同一区间（锚点 / 名字两条分支口径一致）
+    by_name = decode.slice_entry(_SUMMON_PAGE, name="元素召唤术")
+    assert (by_name.start, by_name.end) == (sliced.start, sliced.end)
+
+
+def test_slice_creature_card_keeps_name() -> None:
+    """生物卡条目：整卡切出并**保留卡内名称行**（站点卡片本来就有名字）。"""
+    sliced = decode.slice_entry(_SUMMON_PAGE, name="元素灵魄")
+    assert sliced.located is True
+    assert "元素灵魄" in sliced.title
+    raw = _SUMMON_PAGE[sliced.start : sliced.end]
+    assert raw.startswith('<div class="stat-block">')
+    fragment = decode.sanitize_html(raw)
+    assert "元素灵魄Elemental Spirit" in fragment  # 卡名保留
+    assert "AC " in fragment and "灵魄动作段落" in fragment
+    assert "火墙术" not in fragment
+    # 锚点分支同样命中整卡
+    by_anchor = decode.slice_entry(_SUMMON_PAGE, anchor="Elemental_Spirit")
+    assert (by_anchor.start, by_anchor.end) == (sliced.start, sliced.end)
+
+
+def test_slice_plain_entry_range_unchanged() -> None:
+    """普通条目：区间仍是「标题之后 → 下一个同级标题之前」（修正不改动正常行为）。"""
+    sliced = decode.slice_entry(_SPELL_PAGE, anchor="Sample_Spell")
+    assert sliced.start == _SPELL_PAGE.index("</H4>") + len("</H4>")
+    assert sliced.end == _SPELL_PAGE.index('<H4 id="Other_Spell">')
 
 
 def test_slice_page_level_heading() -> None:

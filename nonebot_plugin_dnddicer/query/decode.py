@@ -137,10 +137,76 @@ def _strip_first_heading(fragment: str) -> str:
     return fragment[: match.start()] + fragment[match.end() :]
 
 
+def _enclosing_stat_block(html: str, position: int) -> Optional[Tuple[int, int]]:
+    """标题所在的 2024 数据卡容器区间；不在任何容器内返回 ``None``。
+
+    判据必须是「标题落在容器**内部**」——只看「标题之前出现过数据卡」会把排在
+    任意数据卡之后的词条全切成那张卡（实测 4 环页 20/41 条切错，见专项分析文档）。
+    """
+    found: Optional[Tuple[int, int]] = None
+    for match in _STAT_BLOCK_RE.finditer(html, 0, position):
+        end = _div_end(html, match.start())
+        if match.start() < position < end:
+            found = (match.start(), end)  # 取最靠后的那个（嵌套时取内层）
+    return found
+
+
+def _find_heading_by_anchor(html: str, anchor: str):
+    """按锚点找标题**开标签**（返回 ``re.Match`` 或 ``None``）。"""
+    return re.search(
+        rf"<H([1-6])\b[^>]*\bid=\"{re.escape(anchor)}\"[^>]*>", html, re.I
+    )
+
+
+def _match_heading(
+    html: str, *, anchor: str = "", name: str = ""
+) -> Tuple[Optional["re.Match"], int, str]:
+    """定位条目标题：返回 ``(标题匹配, 正文起点, 标题文字)``。
+
+    锚点优先（在开标签上匹配，正文起点取 ``</H?>`` 之后）；无锚点或锚点未命中时
+    按标题文字匹配（此时匹配已含闭合标签，正文起点就是匹配末尾）。
+    """
+    if anchor:
+        match = _find_heading_by_anchor(html, anchor)
+        if match is not None:
+            return match, _head_end(html, match.end()), _head_text(html, match)
+    if name:
+        found = _find_heading(html, name)
+        if found is not None:
+            return found[0], found[0].end(), found[1]
+    return None, 0, ""
+
+
+def _slice_from_heading(
+    html: str, match: "re.Match", body_start: int, title: str
+) -> Slice:
+    """普通标题分支：切到下一个**同级或更高级**标题（或页尾）。
+
+    口径必须与名字分支一致：2024 召唤类法术自带的数据卡，其名称是低一级的
+    ``<H5>``，若按「下一个任意标题」截断就会把法术自带的生物卡丢掉。
+    """
+    level = int(match.group(1))
+    end = len(html)
+    for nxt in _HEADING_RE.finditer(html, body_start):
+        if int(nxt.group(1)) <= level:
+            end = nxt.start()
+            break
+    return Slice(body_start, end, title, True)
+
+
 def slice_entry(
     html: str, *, anchor: str = "", name: str = ""
 ) -> Slice:
     """按锚点 / 数据卡容器 / 红标题切出条目区间。
+
+    三级判据（2026-09-27 修订）：
+
+    1. **数据卡容器**：锚点或条目名命中的标题落在某个 ``stat-block`` 容器内部
+       （2024 怪物卡、召唤生物卡）时整块切出，并**保留卡内名称行**（站点卡片本来
+       就带名字，删掉会让读者不知道这是谁的卡）；
+    2. **普通标题**：切到下一个同级或更高级标题，因此召唤类法术的「法术正文 +
+       它自带的生物卡」会一起带出（正文里写着「参考下面的生物卡」）；
+    3. **红标题块**：专长 / 单位小节这类页内条目（仅名字分支）。
 
     Args:
         html: 整页 HTML。
@@ -150,40 +216,15 @@ def slice_entry(
     Returns:
         ``Slice``；未命中时返回整页区间且 ``located=False``。
     """
-    if anchor:
-        match = re.search(
-            rf"<H[1-6]\b[^>]*\bid=\"{re.escape(anchor)}\"[^>]*>", html, re.I
-        )
-        if match is not None:
-            # 2024 怪物数据卡：条目在 stat-block 容器内，整块切出（条目头随后去掉）
-            containers = list(_STAT_BLOCK_RE.finditer(html, 0, match.start()))
-            if containers:
-                start = containers[-1].start()
-                end = _div_end(html, start)
-                return Slice(
-                    start, end, _head_text(html, match), True, drop_first_head=True
-                )
-            start = _head_end(html, match.end())
-            end = len(html)
-            nxt = _HEAD_TAG_RE.search(html, start)
-            if nxt is not None:
-                end = nxt.start()
-            return Slice(start, end, _head_text(html, match), True)
+    match, body_start, text = _match_heading(html, anchor=anchor, name=name)
+    if match is not None:
+        container = _enclosing_stat_block(html, match.start())
+        if container is not None:
+            start, end = container
+            return Slice(start, end, text or _head_text(html, match), True)
+        return _slice_from_heading(html, match, body_start, text)
 
     if name:
-        # ② 页面级条目（职业 / 起源等）：标题标签文字与条目名匹配，切到下一个
-        #    同级或更高级标题（或页尾）
-        found = _find_heading(html, name)
-        if found is not None:
-            match, text = found
-            level = int(match.group(1))
-            end = len(html)
-            for nxt in _HEADING_RE.finditer(html, match.end()):
-                if int(nxt.group(1)) <= level:
-                    end = nxt.start()
-                    break
-            return Slice(match.end(), end, text, True)
-
         # ③ 页内条目（专长 / 单位小节）：紫红加粗标题块
         for match in _RED_BLOCK_RE.finditer(html):
             text = _clean_text(match.group(1))
