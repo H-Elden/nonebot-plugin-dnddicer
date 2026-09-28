@@ -51,6 +51,15 @@ pip install "nonebot-plugin-dnddicer[render]"
 >     - Ubuntu 22.04+ / Debian 12+ 可用；
 >     - CentOS 7/8、Ubuntu 20.04 等不可用。
 > - 成图需要系统字体（fontconfig），请确认系统已装有中文字体（如 `fonts-noto-cjk`），否则中文可能显示为方框。
+> - 推荐装完整的中文字体家族：卡片字体栈中文优先（`Noto Sans CJK SC` 等），中西文取自同一字体，同一行里中英文的字重与基线才一致；缺字体时可用下面的命令自查，也可以用 `dnddicer_query_image_font_family` 指定服务器上实际存在的家族。
+
+```bash
+fc-list :lang=zh family          # 应能看到 Noto Sans CJK SC（或思源黑体 / 文泉驿）
+fc-match ':charset=0041'         # 拉丁字母落到哪个文件
+fc-match ':charset=56fd'         # 汉字落到哪个文件（两者同族即为正常）
+```
+
+Ubuntu / Debian 安装：`apt install fonts-noto-cjk`。
 
 该依赖由插件按需加载，不必写进宿主 `[tool.nonebot]` 的 `plugins` 列表；装好后还需把 `dnddicer_query_image_enabled` 设为 `true` 才会出图，详见下文「[规则查询](#规则查询)」一节。
 
@@ -81,6 +90,7 @@ pip install "nonebot-plugin-dnddicer[render]"
 | `dnddicer_query_base_urls` | `list` | 在线服务 | 查询服务端点，按顺序尝试，失败则自动尝试下一个 |
 | `dnddicer_query_site_urls` | `list` | 站点主站 | 词条正文的**页面抓取**地址（速查子命令与样式化正文用）；<br>自建部署时改为你的站点地址 |
 | `dnddicer_query_image_enabled` | `bool` | `false` | 图片模式总开关，决定各处**能不能**出图；<br>需先安装[可选依赖项](#可选依赖项)中的 `[render]` |
+| `dnddicer_query_image_font_family` | `str` | 空（内置字体栈） | 图片卡片的字体家族（CSS `font-family` 列表）。留空用内置栈（中文优先且中西文同源，如 `"Noto Sans CJK SC", "Microsoft YaHei", sans-serif`）；服务器缺少中文字体或想换一套字时用它覆盖 |
 | `dnddicer_query_timeout` | `float` | `8.0` | 单个端点的请求超时（秒） |
 | `dnddicer_query_page_cache_ttl` | `float` | `86400.0` | 页面缓存时长（秒）：同一页面在此时长内重复查询不重复抓取 |
 | `dnddicer_query_page_interval` | `float` | `0.5` | 页面抓取的最小间隔（秒）：连续抓取时的礼貌限流 |
