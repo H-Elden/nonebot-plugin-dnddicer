@@ -13,7 +13,11 @@ body {
 
 .card {
   padding: 22px 28px 16px 28px;
-  font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "Segoe UI", sans-serif;
+  /* 中文优先且中西文同源：Noto Sans CJK / 思源黑体自带完整拉丁（与汉字同源同基线），
+     避免服务器上「拉丁回退到 DejaVu Sans、汉字回退到 Noto CJK」导致同句中英文的
+     字重与基线不一致（2026-09-27 实机取证）。Windows 上仍回退到微软雅黑。 */
+  font-family: "Noto Sans CJK SC", "Source Han Sans SC", "Microsoft YaHei",
+    "PingFang SC", "WenQuanYi Zen Hei", sans-serif;
   font-size: 16px;
   color: #242629;
   background: #ffffff;

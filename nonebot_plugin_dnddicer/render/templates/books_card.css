@@ -10,7 +10,9 @@ body {
 
 .card {
   padding: 22px 28px 16px 28px;
-  font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "Segoe UI", sans-serif;
+  /* 字体栈与 rich_card.css 同口径：中文优先且中西文同源（2026-09-27）。 */
+  font-family: "Noto Sans CJK SC", "Source Han Sans SC", "Microsoft YaHei",
+    "PingFang SC", "WenQuanYi Zen Hei", sans-serif;
   font-size: 16px;
   color: #242629;
   background: #ffffff;

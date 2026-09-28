@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
@@ -23,7 +24,8 @@ from nonebot import logger
 if TYPE_CHECKING:
     from . import Renderer
 
-#: 卡片渲染宽度（px）——与实测的推荐默认一致
+#: 卡片渲染宽度（px）——与 `card_geometry.CARD_WIDTH` 同值（版式常量集中在
+#: `card_geometry`，此处保留别名避免调用点全量改写）
 CARD_WIDTH = 700
 
 #: 模板目录与模板名
@@ -32,11 +34,33 @@ _TEMPLATE_NAME = "rule_card.html"
 _RICH_TEMPLATE_NAME = "rich_card.html"
 _BOOKS_TEMPLATE_NAME = "books_card.html"
 
+#: 自定义字体家族允许的字符（只放行 CSS font-family 列表本身，杜绝注入）
+_FONT_FAMILY_SAFE_RE = re.compile(r"^[A-Za-z0-9 ,\"'\-_]+$")
+
 #: 可用性判定结果（None = 尚未判定；未初始化时会话下不缓存，留待下次重试）
 _ready: Optional[bool] = None
 
 _env: Any = None
 _css_cache: Dict[str, str] = {}
+
+
+def font_rule() -> str:
+    """自定义字体家族 → 追加一条 CSS 规则（留空返回空串，用样式表内置字体栈）。
+
+    配置项 ``dnddicer_query_image_font_family`` 供服务器缺少中文字体、或想换一套
+    字时使用；含非法字符（``;{}()<>`` 等）时忽略并记一条警告，避免样式注入。
+    """
+    from ..config import get_config
+
+    family = (get_config().dnddicer_query_image_font_family or "").strip()
+    if not family:
+        return ""
+    if not _FONT_FAMILY_SAFE_RE.match(family):
+        logger.warning(
+            "DNDDicer 配置的图片卡片字体家族含非法字符，已忽略：{!r}", family
+        )
+        return ""
+    return f".card {{ font-family: {family}; }}"
 
 
 def htmlkit_installed() -> bool:
@@ -146,6 +170,7 @@ async def _render(
         fallback_note="" if located else "（未精确定位到词条，以下为页面片段）",
         source_path=source_path,
         css=_css_text("rule_card.css"),
+        font_rule=font_rule(),
     )
     return await html_to_pic(
         html,
@@ -180,6 +205,7 @@ async def _render_rich(
         fallback_note="" if located else "（未精确定位到词条，以下为页面片段）",
         source_path=source_path,
         css=_css_text("rich_card.css"),
+        font_rule=font_rule(),
     )
     return await html_to_pic(
         html,
@@ -206,6 +232,7 @@ async def _render_books(
         footer=footer,
         sections=sections,
         css=_css_text("books_card.css"),
+        font_rule=font_rule(),
     )
     return await html_to_pic(
         html,

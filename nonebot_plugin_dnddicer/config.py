@@ -68,6 +68,11 @@ class Config(BaseModel):
     #: （nonebot-plugin-htmlkit），未装时自动回退文字。
     dnddicer_query_image_enabled: bool = False
 
+    #: 图片卡片的字体家族（CSS font-family 列表，如 ``"Noto Sans CJK SC", sans-serif``）。
+    #: 留空用样式表内置字体栈（中文优先且中西文同源）。服务器缺少中文字体、或想换
+    #: 一套字时用它覆盖，无需改插件：留空即内置行为。
+    dnddicer_query_image_font_family: str = ""
+
     # ── 规则查询：速查索引（.查询法术 等子命令，2026-09-26）──────────────
     #: **页面抓取**的站点地址（正文层抓 HTML 用；与上面的检索端点分开）。
     #: 实测（2026-09-26）：在线检索服务域名只覆盖部分静态页，正文抓取须用
