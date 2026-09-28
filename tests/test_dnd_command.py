@@ -6,7 +6,8 @@
 
 用例覆盖：基本生成（格式与合计）、4D6K3 取最低与降序、次数（含无空格 .dnd2）、
 原因（跟在次数后 / 无空格粘连 / 不给次数直接给出——2026-09-14 修订）、
-次数越界回退 1、私聊可用、reason 截断；
+次数越界（0 / 负数 / 超过上限 20）提示且**不掷点**（2026-09-28 修订：早先静默
+回退为 1 次）、私聊可用、reason 截断；
 .dndx（2026-09-21 新增）：属性名绑定不排序、标题后缀、次数/原因/私聊与 .dnd 同规则。
 """
 
@@ -19,9 +20,12 @@ from fake_event import fake_group_message_event_v11, fake_private_message_event_
 
 from nonebot_plugin_dnddicer.commands.dnd import (
     MAX_DND_REASON_LEN,
+    MAX_DND_TIMES,
+    DndTimesOutOfRange,
     dnd_matcher,
     dndx_matcher,
     format_dnd_line,
+    format_dnd_times_error,
     format_dndx_line,
     generate_ability_scores,
     parse_dnd_args,
@@ -198,33 +202,76 @@ async def test_dnd_times_with_reason(app: App):
 
 
 @pytest.mark.asyncio
-async def test_dnd_times_out_of_range(app: App):
-    """次数越界（>10）回退 1 次。"""
-    token = set_runtime(SequenceRuntime(_ALL_SIX))
+async def test_dnd_times_at_limit(app: App):
+    """`.dnd 20`（恰好等于上限）照常掷 20 组。"""
+    line = "108 : [18, 18, 18, 18, 18, 18]"
+    token = set_runtime(SequenceRuntime(_ALL_SIX * MAX_DND_TIMES))
     try:
-        event = _group_event(".dnd 11")
+        event = _group_event(f".dnd {MAX_DND_TIMES}")
         await _expect(
             app,
             dnd_matcher,
             event,
-            "test DND人物作成:\n108 : [18, 18, 18, 18, 18, 18]",
+            "test DND人物作成:\n" + "\n".join([line] * MAX_DND_TIMES),
         )
     finally:
         reset_runtime(token)
 
 
 @pytest.mark.asyncio
+async def test_dnd_times_out_of_range(app: App):
+    """次数超过上限：提示上限（不掷点、不静默回退 1 次）。
+
+    骰值序列故意留空：一旦实现回退成「照掷 1 组」，取骰子会 IndexError、
+    回复就会变成内部错误文案，本用例即失败。
+    """
+    runtime = SequenceRuntime([])
+    token = set_runtime(runtime)
+    try:
+        event = _group_event(".dnd 21")
+        await _expect(
+            app,
+            dnd_matcher,
+            event,
+            "次数超出上限：最多 20 次",
+        )
+        assert runtime.get_consumed_count() == 0
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
 async def test_dnd_times_zero(app: App):
-    """次数 0 回退 1 次。"""
-    token = set_runtime(SequenceRuntime(_ALL_SIX))
+    """次数 0：提示下限（不掷点）。"""
+    runtime = SequenceRuntime([])
+    token = set_runtime(runtime)
     try:
         event = _group_event(".dnd 0")
         await _expect(
             app,
             dnd_matcher,
             event,
-            "test DND人物作成:\n108 : [18, 18, 18, 18, 18, 18]",
+            "次数至少为 1",
         )
+        assert runtime.get_consumed_count() == 0
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_dnd_times_negative(app: App):
+    """次数为负数：与 0 同口径（提示下限、不掷点）。"""
+    runtime = SequenceRuntime([])
+    token = set_runtime(runtime)
+    try:
+        event = _group_event(".dnd -3")
+        await _expect(
+            app,
+            dnd_matcher,
+            event,
+            "次数至少为 1",
+        )
+        assert runtime.get_consumed_count() == 0
     finally:
         reset_runtime(token)
 
@@ -348,21 +395,59 @@ async def test_dndx_private(app: App):
         reset_runtime(token)
 
 
+@pytest.mark.asyncio
+async def test_dndx_times_out_of_range(app: App):
+    """.dndx 次数越界与 .dnd 同口径（同一解析入口、同一提示、同样不掷点）。"""
+    runtime = SequenceRuntime([])
+    token = set_runtime(runtime)
+    try:
+        event = _group_event(".dndx 30")
+        await _expect(
+            app,
+            dndx_matcher,
+            event,
+            "次数超出上限：最多 20 次",
+        )
+        assert runtime.get_consumed_count() == 0
+    finally:
+        reset_runtime(token)
+
+
 # ── 纯函数单测（不依赖 nonebug）──────────────────────────────────────────
 
 
 def test_parse_dnd_args():
-    """参数解析：次数/原因/回退规则。"""
+    """参数解析：次数/原因/越界规则。"""
     assert parse_dnd_args("") == (1, "")
+    assert parse_dnd_args("1") == (1, "")
     assert parse_dnd_args("5") == (5, "")
+    assert parse_dnd_args("20") == (MAX_DND_TIMES, "")  # 上限本身合法
     assert parse_dnd_args("2 为了勇者") == (2, "为了勇者")
-    assert parse_dnd_args("11") == (1, "")     # 越界回退
-    assert parse_dnd_args("0") == (1, "")      # 越界回退
+    # 2026-09-28 修订：越界不再静默回退 1 次，改为抛出由命令层转成提示
+    with pytest.raises(DndTimesOutOfRange) as over:
+        parse_dnd_args("21")
+    assert over.value.times == 21
+    with pytest.raises(DndTimesOutOfRange) as zero:
+        parse_dnd_args("0")
+    assert zero.value.times == 0
+    with pytest.raises(DndTimesOutOfRange) as negative:
+        parse_dnd_args("-1")
+    assert negative.value.times == -1
+    with pytest.raises(DndTimesOutOfRange) as over_with_reason:
+        parse_dnd_args("21 为了勇者")
+    assert over_with_reason.value.times == 21
     # 2026-09-14 修订：首词非数字时整段视为原因（原实现丢弃原因、回退 1）
     assert parse_dnd_args("abc") == (1, "abc")
     assert parse_dnd_args("为了勇者") == (1, "为了勇者")
     assert parse_dnd_args("为了勇者 开卡") == (1, "为了勇者 开卡")  # 整段（含空格）
-    assert parse_dnd_args("11 为了勇者") == (1, "为了勇者")  # 越界数字：回退 1、其余为原因
+
+
+def test_format_dnd_times_error():
+    """越界提示：超过上限报上限、低于下限报下限（2026-09-28 用户复核后不回显输入）。"""
+    assert format_dnd_times_error(21) == "次数超出上限：最多 20 次"
+    assert format_dnd_times_error(999) == "次数超出上限：最多 20 次"
+    assert format_dnd_times_error(0) == "次数至少为 1"
+    assert format_dnd_times_error(-1) == "次数至少为 1"
 
 
 def test_parse_dnd_args_reason_truncated():

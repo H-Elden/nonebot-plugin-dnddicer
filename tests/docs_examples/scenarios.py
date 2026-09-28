@@ -295,6 +295,16 @@ dndx_record = Scene(
     ],
 )
 
+dnd_times_over_limit = Scene(
+    id="dnd_times_over_limit",
+    title="次数越界：提示上限且不掷点（不再静默回退 1 次）",
+    steps=[
+        # 骰值留空：越界本就不该掷点（真掷了这一步会因骰值耗尽而失败）
+        Step("白鸦", ".dnd30"),
+        Step("白鸦", ".dndx 0"),
+    ],
+)
+
 char_record_error = Scene(
     id="char_record_error",
     title="记录失败：漏必填、属性个数不对、额外加值少冒号",
@@ -1216,6 +1226,7 @@ TIMELINE = [
     hp_set,
     dnd_roll,
     dndx_record,
+    dnd_times_over_limit,
     char_record_error,
     check_skill_expertise,
     check_cancel,

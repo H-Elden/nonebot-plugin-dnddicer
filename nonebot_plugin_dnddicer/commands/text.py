@@ -52,6 +52,11 @@ TXT_DSET_NO_PERMISSION = "仅群主或管理员可以设置群默认骰面。"
 # ── .dnd 属性生成文案 ───────────────────────────────────────────────────
 TXT_DND_RES = "{name} DND人物作成——{reason}:\n{result}"
 TXT_DND_RES_NOREASON = "{name} DND人物作成:\n{result}"
+# 次数越界（2026-09-28：上限 10 → 20，且越界不再静默回退为 1 次）
+# 两个命令（.dnd / .dndx）共用；文案只说明上限/下限本身（2026-09-28 经用户复核：
+# 不回显玩家输入、不加「本次未掷点」尾句）
+TXT_DND_TIMES_OVER_LIMIT = "次数超出上限：最多 {max} 次"
+TXT_DND_TIMES_TOO_SMALL = "次数至少为 1"
 
 # ── .dndx 属性生成（属性名绑定，2026-09-21 新增；标题加后缀便于区分）──────
 TXT_DNDX_RES = "{name} DND人物作成(属性绑定)——{reason}:\n{result}"

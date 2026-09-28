@@ -2,7 +2,9 @@
 
 ``.dnd`` 语义：
 - 一次生成 6 项属性，每项为 4D6K3（掷 4 个 d6、去最低、取 3 个和）；
-- ``.dnd [次数] [原因]``：次数默认 1、上限 10（越界回退 1）；
+- ``.dnd [次数] [原因]``：次数默认 1、上限 20；**次数越界不再静默回退**
+  （2026-09-28 修订：早先越界回退为 1 次、玩家看不出参数被改过）——小于 1
+  或大于上限时回复「超出上限 / 至少为 1」的提示并终止，不掷点；
   原因截断 50 字符——给次数时跟在次数之后（``.dnd 1 开卡``），不给次数时
   直接给出（``.dnd 开卡``；2026-09-14 有意 UX 修正：早先仅取第二段，
   会把原因静默丢弃）；
@@ -30,13 +32,14 @@ from random import randint
 from typing import List, Tuple
 
 from nonebot.adapters.onebot.v11 import Bot, MessageEvent
+from nonebot.matcher import Matcher
 
 from ..character.constants import ABILITY_LIST
 from ..engine.roll.karma_runtime import get_runtime
 from . import base, text
 
-#: 单次 .dnd 最多重复掷组数
-MAX_DND_TIMES = 10
+#: 单次 .dnd / .dndx 最多重复掷组数（2026-09-28 由 10 提高到 20）
+MAX_DND_TIMES = 20
 #: 原因截断长度
 MAX_DND_REASON_LEN = 50
 
@@ -44,8 +47,8 @@ _HELP = (
     "DND5e 属性生成（4D6K3 掷点）\n"
     "用法：.dnd [次数] [原因]（如 .dnd、.dnd 5 开卡、.dnd 开卡）\n"
     "每次生成 6 项属性：每项掷 4D6 去最低（4D6K3），按降序展示并附六项合计；\n"
-    "次数默认 1、最大 10（.dnd5 或 .dnd 5）；原因（可选）可跟在次数之后，"
-    "省略次数时直接给出。\n"
+    "次数默认 1、最大 20（.dnd5 或 .dnd 5），次数越界会提示、不掷点；"
+    "原因（可选）可跟在次数之后，省略次数时直接给出。\n"
     "掷出的 6 个数值不绑定属性，自行分配给 力量/敏捷/体质/智力/感知/魅力 后，"
     "可用 .角色卡记录 建卡。\n"
     "另有绑定属性名的版本：.dndx（数值按固定顺序直接对应六属性、不降序）。"
@@ -58,11 +61,31 @@ _HELP_DNDX = (
     "用法：.dndx [次数] [原因]（如 .dndx、.dndx 5 开卡）\n"
     "与 .dnd 同为 4D6K3，但六项数值按固定顺序直接对应 力量/敏捷/体质/智力/感知/"
     "魅力（不降序排列，掷出即定配对），可直接抄进角色卡的 $属性$ 行。\n"
-    "次数默认 1、最大 10；原因规则与 .dnd 相同。\n"
+    "次数默认 1、最大 20（次数越界会提示、不掷点）；原因规则与 .dnd 相同。\n"
     "需要自行分配数值给属性（掷值降序展示）请用 .dnd。"
 )
 
 dndx_matcher = base.on_dnd_command("dndx", _HELP_DNDX)
+
+
+class DndTimesOutOfRange(ValueError):
+    """次数参数越界：小于 1 或超过 ``MAX_DND_TIMES``。
+
+    2026-09-28 起越界不再静默回退为 1 次——解析层抛出本异常，命令层据此回复
+    「超出上限 / 至少为 1」的提示并终止（不掷点）。异常携带玩家原输入的次数，
+    供命令层区分「超过上限」与「低于下限」两种提示。
+    """
+
+    def __init__(self, times: int) -> None:
+        super().__init__(str(times))
+        self.times = times
+
+
+def format_dnd_times_error(times: int) -> str:
+    """次数越界的提示文案：超过上限与低于下限两种（文案见 ``commands/text.py``）。"""
+    if times > MAX_DND_TIMES:
+        return text.TXT_DND_TIMES_OVER_LIMIT.format(max=MAX_DND_TIMES)
+    return text.TXT_DND_TIMES_TOO_SMALL
 
 
 def _roll_d6() -> int:
@@ -106,10 +129,15 @@ def format_dndx_line(scores: List[int]) -> str:
 def parse_dnd_args(rest: str) -> Tuple[int, str]:
     """解析 ``.dnd`` 命令体 → (次数, 原因)。
 
-    解析规则：首个空白词尝试解析为次数（1..10，越界回退 1），
+    解析规则：首个空白词尝试解析为次数（1..``MAX_DND_TIMES``），
     其余文本（如果有）为原因并截断 50 字符；首个词不是数字时整段视为原因
     （2026-09-14 有意 UX 修正：早先仅取第二段，``.dnd 开卡`` 的原因会被静默
     丢弃，而 ``.dnd5 开卡`` 因数字在前反而正常——修正后两种写法行为一致）。
+
+    Raises:
+        DndTimesOutOfRange: 次数小于 1 或超过 ``MAX_DND_TIMES``（2026-09-28
+            修订：早先越界静默回退为 1 次、不给任何提示，玩家只会以为自己
+            掷出的就是 1 组）。
     """
     text = rest.strip()
     if not text:
@@ -121,15 +149,26 @@ def parse_dnd_args(rest: str) -> Tuple[int, str]:
     except ValueError:
         return 1, text[:MAX_DND_REASON_LEN]
     if not 1 <= times <= MAX_DND_TIMES:
-        times = 1
+        raise DndTimesOutOfRange(times)
     return times, tail[:MAX_DND_REASON_LEN]
+
+
+async def _resolve_dnd_args(matcher: Matcher, event: MessageEvent) -> Tuple[int, str]:
+    """取命令体并解析为 (次数, 原因)；次数越界时提示并终止（不掷点）。
+
+    ``.dnd`` 与 ``.dndx`` 共用本入口，保证两个命令的次数口径与提示完全一致。
+    """
+    rest = base.get_command_rest(event) or ""
+    try:
+        return parse_dnd_args(rest)
+    except DndTimesOutOfRange as exc:
+        await matcher.finish(format_dnd_times_error(exc.times))
 
 
 @dnd_matcher.handle()
 async def handle_dnd(bot: Bot, event: MessageEvent) -> None:
     """处理 .dnd（群聊/私聊均可用）。"""
-    rest = base.get_command_rest(event) or ""
-    times, reason = parse_dnd_args(rest)
+    times, reason = await _resolve_dnd_args(dnd_matcher, event)
 
     lines = []
     for _ in range(times):
@@ -147,8 +186,7 @@ async def handle_dnd(bot: Bot, event: MessageEvent) -> None:
 @dndx_matcher.handle()
 async def handle_dndx(bot: Bot, event: MessageEvent) -> None:
     """处理 .dndx（4D6K3 掷点并绑定属性名；群聊/私聊均可用）。"""
-    rest = base.get_command_rest(event) or ""
-    times, reason = parse_dnd_args(rest)
+    times, reason = await _resolve_dnd_args(dndx_matcher, event)
 
     lines = [format_dndx_line(generate_ability_scores()) for _ in range(times)]
     result = "\n".join(lines)
