@@ -78,6 +78,26 @@ Ubuntu / Debian 安装：`apt install fonts-noto-cjk`。
 | `dnddicer_enabled` | `bool` | `true` | 插件功能总开关。设为 `false` 时只加载骨架、不注册任何命令<br>（供开发者临时禁用本插件） |
 | `dnddicer_use_host_command_starts` | `bool` | `false` | 是否兼容宿主 `COMMAND_START` 起始符，详见下文「[命令起始符](#命令起始符)」一节 |
 
+### 骰主联系（可选）
+
+三项都与「骰主」相关，**默认全空**：不配置时 `.master` 提示骰主未配置，`.help 联系` 也不显示对应行，插件照常可用。
+
+| 配置项 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `dnddicer_master_qq` | `str` | 空 | **骰主 QQ 号（单个）**：`.master` 反馈的唯一收件人。留空时 `.master` 回「骰主未配置」，不会转发<br>（不复用宿主 `SUPERUSERS`：那是骰主集合、可能有多个号，与「发给骰主本人」不是一回事） |
+| `dnddicer_master_contact` | `str` | 空 | 骰主联系方式（自由文本，如 `QQ 12345678`），仅用于 `.help 联系` 展示；留空不显示该行 |
+| `dnddicer_master_group` | `str` | 空 | 骰主交流群群号（如 `87654321`），仅用于 `.help 联系` 展示；留空不显示该行 |
+
+配置示例：
+
+```bash
+DNDDICER_MASTER_QQ=12345678
+DNDDICER_MASTER_CONTACT="QQ 12345678"
+DNDDICER_MASTER_GROUP=87654321
+```
+
+`dnddicer_master_qq` 是 `.master` 的投递地址，**不会展示给玩家**；想让玩家看到联系方式，把 `dnddicer_master_contact` 填上即可。玩家侧用法与转达格式见[群管理与 FAQ - 联系骰主](./faq.md#联系骰主)。
+
 ### 规则查询
 
 规则查询功能**默认关闭**：开启后群聊仍受本群服务开关管辖，私聊直接可用。命令使用方式见[规则查询](./query.md)页面。
@@ -132,6 +152,14 @@ DNDDICER_DEFAULT_FACE=20
 DNDDICER_ENABLED=TRUE
 # # 是否兼容宿主 COMMAND_START 起始符
 DNDDICER_USE_HOST_COMMAND_STARTS=FALSE
+
+# 骰主联系
+# # 骰主 QQ 号（单个）：.master 反馈的收件人
+DNDDICER_MASTER_QQ=
+# # 骰主联系方式（仅 .help 联系 展示）
+DNDDICER_MASTER_CONTACT=
+# # 骰主交流群（仅 .help 联系 展示）
+DNDDICER_MASTER_GROUP=
 
 # 规则查询
 # # 规则查询总开关

@@ -55,6 +55,9 @@ plugins = ["nonebot_plugin_dnddicer"]
 | `dnddicer_default_face` | `int` | `20` | 全局默认骰面（DND 惯例 D20；已配置 `.dset` 的群以群配置为准，此项作兜底） |
 | `dnddicer_enabled` | `bool` | `true` | 功能总开关，`false` 时只加载骨架、不注册命令 |
 | `dnddicer_use_host_command_starts` | `bool` | `false` | 是否兼容宿主 `COMMAND_START` 起始符（NoneBot 默认 `/`，开启后 `/.help` 等亦可触发）。默认只匹配 `.` / `。`，避免 `/help`、`/bot` 等常见单词命令与其他插件同时命中（冲突） |
+| `dnddicer_master_qq` | `str` | 空 | 骰主 QQ 号（**单个**）：`.master` 反馈的收件人，留空则 `.master` 回「骰主未配置」（不复用宿主 `SUPERUSERS`） |
+| `dnddicer_master_contact` | `str` | 空 | 骰主联系方式（自由文本），仅用于 `.help 联系` 展示，留空不显示该行 |
+| `dnddicer_master_group` | `str` | 空 | 骰主交流群群号，仅用于 `.help 联系` 展示，留空不显示该行 |
 
 ## 🎲 用法
 
@@ -151,6 +154,7 @@ plugins = ["nonebot_plugin_dnddicer"]
 | `.dset [表达式]` | 设置/查看群默认骰面（群主/管理员） |
 | `.bot [on/off]` | 插件信息查询 / 本群服务开关（群主/管理员，需 @） |
 | `.帮助` / `.help [命令 \| 分组 \| 链接 \| 关于 \| 骰主 \| 联系]` | 帮助入口：总览 / 命令目录 / 分组清单 / 命令详情 / 相关链接 / 插件信息 / 骰主指令 / 联系方式 |
+| `.master <消息>` | 把问题或建议发给骰主：骰娘私聊转达（附群号与 QQ 号；单条 200 字、同一人 60 秒一条；骰主 QQ 号由 `dnddicer_master_qq` 配置） |
 
 > 一期范围外功能会**显式提示而非静默**：`.r exp` 期望值采样、`.r a/n` 特殊判定；牌堆/随机表（T2）与法术位/死亡豁免/BUFF 表（T3 候选）见下方路线。
 

@@ -1193,6 +1193,19 @@ dm_scope_setup = Scene(
     ],
 )
 
+master_forward = Scene(
+    id="master_forward",
+    title="联系骰主：反馈交由骰娘私聊转达（群聊与私聊都可用）",
+    # 骰主 QQ 是配置项（默认空 = 未配置）：场景内临时配置，演示转达行为
+    master_qq="76000002",
+    steps=[
+        # 群聊：骰娘先把反馈私聊转给骰主，再在群里回执
+        Step("小鹿", ".master 先攻列表的顺序好像不对，能看看吗"),
+        # 私聊：同样可以发（私聊里没有群号，来源行写「私聊」）
+        Step("小满", ".master 火球术的伤害好像少算了一次", channel="private"),
+    ],
+)
+
 #: 时间线（顺序执行；后续按页补场景，注意保持剧情顺序）
 TIMELINE = [
     quickstart_bot_on,
@@ -1319,5 +1332,6 @@ TIMELINE = [
     query_atlas_feat_unit,  # 速查子命令：专长 / 单位形态
     query_index_master,     # 骰主命令：索引状态与按类刷新（仅骰主私聊）
     dm_scope_setup,      # DM 给本团定可查书目（核心三书；置尾以免影响上面的开放范围示例）
+    master_forward,      # 反馈给骰主（私聊转达；需临时配置骰主 QQ）
     quickstart_bot_off,  # 压轴：服务关闭后本群不再响应其他命令
 ]

@@ -80,6 +80,8 @@ class Scene:
     id: str
     title: str
     steps: List[Step]
+    #: 本场景期间的骰主 QQ 配置（空 = 不配置，等价默认值）；`.master` 场景用它
+    master_qq: str = ""
 
 
 class Recorder:
@@ -206,10 +208,31 @@ class TimelineRunner:
     async def run_scene(self, scene: Scene) -> List[Line]:
         """跑一个场景，返回本场景产生的消息行。"""
         start = len(self.recorder.lines)
-        for index, step in enumerate(scene.steps, start=1):
-            with self._query_enabled():
-                await self.run_step(step, label=f"{scene.id}#{index}")
+        with self._master_configured(scene.master_qq):
+            for index, step in enumerate(scene.steps, start=1):
+                with self._query_enabled():
+                    await self.run_step(step, label=f"{scene.id}#{index}")
         return self.recorder.lines[start:]
+
+    @contextmanager
+    def _master_configured(self, master_qq: str) -> Iterator[None]:
+        """场景执行期间配置骰主 QQ（`.master` 的收件人）；结束后还原。
+
+        `.master` 的收件人是配置项（默认空 = 未配置），文档要演示转达行为，
+        故在场景内临时写入；顺带清空频率限制记录（模块级状态，跨场景共享）。
+        """
+        from nonebot_plugin_dnddicer.commands import master as master_cmd
+        from nonebot_plugin_dnddicer.config import get_config
+
+        config = get_config()
+        original = config.dnddicer_master_qq
+        config.dnddicer_master_qq = master_qq
+        master_cmd.reset_rate_limit()
+        try:
+            yield
+        finally:
+            config.dnddicer_master_qq = original
+            master_cmd.reset_rate_limit()
 
     @contextmanager
     def _query_enabled(self) -> Iterator[None]:
