@@ -376,9 +376,9 @@ async def test_contact_without_config(app: App):
 
 
 def _patch_master_config(
-    monkeypatch: pytest.MonkeyPatch, **fields: str
+    monkeypatch: pytest.MonkeyPatch, **fields: str | int
 ) -> None:
-    """把插件配置替换为带指定骰主字段的真实 ``Config`` 实例。"""
+    """把插件配置替换为带指定骰主字段的真实 ``Config`` 实例（值可用数字写法）。"""
     from nonebot_plugin_dnddicer import config as config_module
 
     monkeypatch.setattr(
@@ -412,6 +412,21 @@ async def test_contact_with_config(app: App, monkeypatch: pytest.MonkeyPatch):
         app,
         ".help 联系",
         f"{_CONTACT}\n骰主联系方式：QQ 12345678\n骰主交流群：87654321",
+    )
+
+
+@pytest.mark.asyncio
+async def test_contact_with_numeric_config(app: App, monkeypatch: pytest.MonkeyPatch):
+    """.help 联系：群号 / 联系方式写纯数字（NoneBot 解析为 int）时照常展示。"""
+    _patch_master_config(
+        monkeypatch,
+        dnddicer_master_contact=12345678,
+        dnddicer_master_group=87654321,
+    )
+    await _expect_group(
+        app,
+        ".help 联系",
+        f"{_CONTACT}\n骰主联系方式：12345678\n骰主交流群：87654321",
     )
 
 

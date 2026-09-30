@@ -34,8 +34,12 @@ def _clean_rate_limit():
     master_cmd.reset_rate_limit()
 
 
-def _patch_master_qq(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
-    """把 .master 读到的配置替换为带指定骰主 QQ 的真实 ``Config`` 实例。"""
+def _patch_master_qq(monkeypatch: pytest.MonkeyPatch, value: str | int) -> None:
+    """把 .master 读到的配置替换为带指定骰主 QQ 的真实 ``Config`` 实例。
+
+    ``value`` 允许 int：``.env`` 里写数字的 QQ 经 NoneBot 的 JSON 解码到手
+    就是 int，配置模型按文本读入（2026-09-30 容错）。
+    """
     from nonebot_plugin_dnddicer import config as config_module
 
     monkeypatch.setattr(
@@ -92,6 +96,24 @@ async def test_master_group_forward(app: App, monkeypatch: pytest.MonkeyPatch):
     await _expect(
         app,
         _group_event(".master 先攻列表顺序好像不对"),
+        reply=cmd_text.TXT_MASTER_SENT,
+        forwarded=forwarded,
+    )
+
+
+@pytest.mark.asyncio
+async def test_master_group_forward_numeric_config(app: App, monkeypatch: pytest.MonkeyPatch):
+    """骰主 QQ 在配置里写成数字（NoneBot 解析为 int）时照常转发。"""
+    _patch_master_qq(monkeypatch, _MASTER_QQ)
+    forwarded = cmd_text.TXT_MASTER_FORWARD.format(
+        source=cmd_text.TXT_MASTER_SOURCE_GROUP.format(
+            group=_GROUP, name="小鹿", qq=_PLAYER
+        ),
+        body="配置写数字也能用",
+    )
+    await _expect(
+        app,
+        _group_event(".master 配置写数字也能用"),
         reply=cmd_text.TXT_MASTER_SENT,
         forwarded=forwarded,
     )

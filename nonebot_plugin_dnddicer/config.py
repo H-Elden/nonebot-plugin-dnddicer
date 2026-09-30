@@ -12,7 +12,7 @@
 from typing import List
 
 from nonebot import get_plugin_config
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class Config(BaseModel):
@@ -21,7 +21,16 @@ class Config(BaseModel):
     说明：NoneBot 会在插件加载期读取这些配置；获取方式统一走本模块底部的
     ``get_config()``（首次调用时执行 ``get_plugin_config`` 并缓存），
     业务子模块请勿在模块顶层调用（彼时 NoneBot 可能尚未初始化）。
+
+    ``coerce_numbers_to_str``（2026-09-30）：NoneBot 对插件自定义配置项统一做
+    JSON 解码（``json.loads`` 成功即采用解码结果），所以 ``.env`` 里写
+    ``dnddicer_master_qq=12345678`` 到手是 ``int``、写 ``"12345678"`` 时外层
+    引号会先被 dotenv 剥掉、结果仍是 ``int``；而 pydantic v2 的 ``str`` 字段
+    默认拒绝数字，会让**整个插件**加载失败。开启此开关后数字自动按文本读入，
+    QQ 号 / 群号 / 联系方式这类「写数字很自然」的字段直接填即可。
     """
+
+    model_config = ConfigDict(coerce_numbers_to_str=True)
 
     #: 命令事件响应器的基础优先级（越小越优先；NoneBot 默认 1000）。
     #: 与其他插件（如宿主机器人的 AIchat）在同一消息上竞争时按需调整。
