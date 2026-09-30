@@ -6,7 +6,7 @@
 
 > 专精 **DND5e / DND5r** 跑团的 [NoneBot2](https://nonebot.dev/) 骰娘插件（OneBot V11 适配器），致力于做功能最全面、体验最好的 DND 骰娘。
 >
-> 当前版本：**v0.4.2** · 完整使用手册见 **📖 [使用文档](https://h-elden.github.io/nonebot-plugin-dnddicer/)**（[国内镜像](https://dnddicer.netlify.app/)，GitHub Pages 访问不畅时用）
+> 当前版本：**v0.4.3** · 完整使用手册见 **📖 [使用文档](https://h-elden.github.io/nonebot-plugin-dnddicer/)**（[国内镜像](https://dnddicer.netlify.app/)）
 >
 > 交流反馈 QQ 群：[![QQ群](https://img.shields.io/badge/QQ%E7%BE%A4-1107879441-12B7F5?logo=tencentqq&logoColor=white)](https://qun.qq.com/universal-share/share?ac=1&authKey=eUFiLk5ktomkYgDWCMnJnLNQW%2FJwmfR7wXKRrYyQeJy5uaYtwDsm4ABDiofKx6%2BN&busi_data=eyJncm91cENvZGUiOiIxMTA3ODc5NDQxIiwidG9rZW4iOiIvWHlQbDlNeUdBOVpQSnB1WU1RNUFmRCtBNlgwTXpnN2VOSlh6UkJ1YTFUdmREdEExYmEwSXo4SXFiR21zb0tsIiwidWluIjoiMjk4NDQ5NTc3NCJ9&data=JWJQw7qsywgzyHnQ-HJ_PzqF_Y1otBjTRkehoSmk6faB87xzjGf4PA_p1KNPhLvkkOwlLEuNH9jTN8XxNbxRPQ&svctype=4&tempid=h5_group_info)
 
@@ -174,8 +174,9 @@ plugins = ["nonebot_plugin_dnddicer"]
 6. ✅ **v0.4.0**：**规则查询**（`.查询` / `.搜索` 两种检索、候选选择与翻页、`.查询图片` 图片模式、`.查询范围` 书目限定与 `.规则书`）；**文档站按前置条件重排为四章**（基础操作 / 玩家进阶 / DM 进阶 / 最佳实践）；大成功/大失败播报另起一行、修饰符回显加括号；
 7. ✅ **v0.4.1**：**规则查询速查子命令**（8 条 `.查询法术` 等，推荐优先使用）与**骰主命令 `.查询索引`**（状态 / 按类刷新）；词条正文升级为站点样式渲染（卡片 / 数据卡 / 关键词高亮）；**文档站新增国内镜像**（GitHub Pages 访问不畅时用）；
 8. ✅ **v0.4.2**：`.bot` 插件信息与 `.help` 命令总览的回复末尾新增「详细帮助文档」链接（指向文档站国内镜像），群内可直达使用手册；
-9. ⏳ **第二期余下**：牌堆/随机表；
-10. ⏳（可选）**T3 增强期**：法术位管理（`.ss/.cast`）、死亡豁免闭环（`.ds`）、BUFF/临时加值表（`.buff`）等。
+9. ✅ **v0.4.3**：**`.help` 帮助体系重做**（总览 / 七组目录 / 组清单 / 简版详情，另设链接、关于、骰主、联系四入口）；**武器名模糊匹配**与**一条命令结算多件武器**；**`.master` 反馈骰主**与三个骰主配置项；`.dnd` / `.dndx` 次数上限提到 20；规则查询速查切片、图片卡片排版与字体三项修复；
+10. ⏳ **第二期余下**：牌堆/随机表；
+11. ⏳（可选）**T3 增强期**：法术位管理（`.ss/.cast`）、死亡豁免闭环（`.ds`）、BUFF/临时加值表（`.buff`）等。
 
 每版完整变更（新增 / 变更 / 修复 / 文档）见 [CHANGELOG.md](./CHANGELOG.md)。
 
