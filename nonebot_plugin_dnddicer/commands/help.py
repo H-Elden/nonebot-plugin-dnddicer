@@ -1,63 +1,176 @@
 """帮助命令：``.帮助`` / ``.help``（别名，均注册）。
 
-- 无参数：列出本插件已注册命令（名称 + 首行说明）；
-- 带参数：``.help r`` / ``.帮助 dset`` —— 显示指定命令的完整帮助文本
-  （大小写不敏感，中文命令名直接输入即可）。
+入口（2026-09-28 重做，版式表见 ``commands/help_layout.py``）：
+
+- 无参数：总览（版本 + 简介 + 开关骰娘 + 四个入口）；
+- ``.help 命令``：7 组目录（``列表`` / ``指令`` / ``菜单`` / ``list`` 为静默别名）；
+- ``.help <组名>``：该组命令清单（掷骰 / 角色 / 武器 / 生命 / 先攻 / 查询 / 管理；
+  另接受少量静默别名，如 ``血量`` → 生命）；
+- ``.help <命令名 / 别名>``：命令详情；
+- ``.help <写法>``：只进帮助的条目（检定点 / 豁免 / 先攻检定 / 武器命令族），
+  如 ``.help 力量检定``、``.help 刺剑伤害``；
+- ``.help 链接 [on|off]``：相关链接与该处「文档站链接行」开关；
+- ``.help 关于`` / ``.help 骰主`` / ``.help 联系``：插件信息 / 骰主指令 / 联系方式；
+- 未命中：一行提示 + 指向 ``.help 命令``。
+
+匹配顺序：专用入口 → 组名（含别名）→ 命令名（含别名，大小写不敏感）→
+只进帮助的条目（先精确、再取最长包含）→ 未命中。组名优先于命令名，
+因此 ``.help 查询`` 给「查询」组清单、``.help q`` 才是 ``.查询`` 命令详情。
+
+回复末尾的文档站链接行由 ``.help 链接 on/off`` 控制：**群聊默认关、私聊默认开**，
+按群 / 私聊分别持久（见 ``data/help_settings.py``）；``关于`` / ``联系`` / ``链接``
+三个入口自身带链接或联系方式，不再追加这一行。
 """
 
 from __future__ import annotations
 
 from nonebot.adapters.onebot.v11 import MessageEvent
 
-from . import base, text
+from ..data import help_settings
+from ..version import __version__
+from . import base, help_layout, text
+
+#: 插件元数据取不到时的仓库地址兜底（与 pyproject / __init__.py 同值）
+_REPO_URL_FALLBACK = "https://github.com/H-Elden/nonebot-plugin-dnddicer"
 
 _HELP = (
-    "帮助：.help / .帮助\n"
-    "- 无参数：列出全部命令\n"
-    "- .help <命令名>：查看指定命令的详细用法\n"
-    "示例：.help r"
+    ".help [命令 | 分组 | 链接 | 关于 | 骰主 | 联系]\n"
+    "  无参数：帮助总览；.help 命令：命令分组目录\n"
+    "  .help <分组>：该组命令清单\n"
+    "  .help <命令>：命令详情（如 .help r、.help hp）"
 )
 
-help_matcher = base.on_dnd_command(
-    "help",
-    _HELP,
-    aliases=("帮助",),
-)
+help_matcher = base.on_dnd_command("help", _HELP, aliases=("帮助",))
 
 
-def _summary_line(description: str) -> str:
-    """取帮助全文的第一行作为总览说明。"""
-    first = description.strip().splitlines()[0] if description.strip() else ""
-    return first
+def _chat_key(event: MessageEvent) -> str:
+    """本处设置键（群聊按群、私聊按用户），与规则查询的按处键同一约定。"""
+    group_id = getattr(event, "group_id", None)
+    if group_id is not None:
+        return help_settings.group_key(group_id)
+    return help_settings.private_key(event.user_id)
+
+
+def _repo_url() -> str:
+    """项目仓库地址（取插件元数据 homepage；取不到时退回常量）。"""
+    try:
+        from .. import __plugin_meta__
+    except Exception:  # noqa: BLE001 - 元数据不可用不应影响 .help 回复
+        return _REPO_URL_FALLBACK
+    return getattr(__plugin_meta__, "homepage", "") or _REPO_URL_FALLBACK
+
+
+async def _doc_line(event: MessageEvent) -> str:
+    """末尾的文档站链接行；本处开关关闭时返回空串（群聊默认关、私聊默认开）。"""
+    group_id = getattr(event, "group_id", None)
+    enabled = await help_settings.is_link_enabled(
+        _chat_key(event), default=group_id is None
+    )
+    if not enabled:
+        return ""
+    return text.TXT_HELP_DOC_LINE.format(url=text.TXT_HELP_DOCS_BASE)
+
+
+async def _with_doc_line(body: str, event: MessageEvent) -> str:
+    """按本处开关给回复补上文档站链接行。"""
+    line = await _doc_line(event)
+    return f"{body}\n{line}" if line else body
+
+
+async def _handle_link(event: MessageEvent, action: str) -> str:
+    """``.help 链接 [on|off]``：查看链接入口、或切换链接行开关。"""
+    chat_key = _chat_key(event)
+    group_id = getattr(event, "group_id", None)
+    if not action:
+        return text.TXT_HELP_LINK.format(url=text.TXT_HELP_DOCS_BASE)
+    value = action.strip().lower()
+    if value in ("on", "off"):
+        await help_settings.set_link_enabled(chat_key, value == "on")
+        return text.TXT_HELP_LINK_ON if value == "on" else text.TXT_HELP_LINK_OFF
+    enabled = await help_settings.is_link_enabled(chat_key, default=group_id is None)
+    state = text.TXT_HELP_LINK_STATE_ON if enabled else text.TXT_HELP_LINK_STATE_OFF
+    return text.TXT_HELP_LINK_USAGE.format(state=state)
+
+
+def _render_contact() -> str:
+    """``.help 联系``：固定两行 + 两个可选行（配置为空则不显示）。"""
+    from ..config import get_config
+
+    lines = [text.TXT_HELP_CONTACT]
+    config = get_config()
+    # 两个配置项随下一批次落地（当前未定义，按未配置处理 = 不显示这两行）
+    contact = getattr(config, "dnddicer_master_contact", "") or ""
+    group = getattr(config, "dnddicer_master_group", "") or ""
+    if contact:
+        lines.append(text.TXT_HELP_CONTACT_MASTER.format(value=contact))
+    if group:
+        lines.append(text.TXT_HELP_CONTACT_GROUP.format(value=group))
+    return "\n".join(lines)
+
+
+def _find_command(keyword: str) -> str:
+    """按命令名 / 别名查详情文案（大小写不敏感；骰主命令也查得到）。"""
+    commands = base.get_registered_commands(include_hidden=True)
+    if keyword in commands:
+        return commands[keyword]
+    lowered = keyword.lower()
+    for name, description in commands.items():
+        if name.lower() == lowered:
+            return description
+    return ""
 
 
 @help_matcher.handle()
 async def handle_help(event: MessageEvent) -> None:
     """处理 .help / .帮助。"""
-    rest = (base.get_command_rest(event) or "").strip()
+    keyword = (base.get_command_rest(event) or "").strip()
 
-    if not rest:
-        # 无参数：总览全部命令（保持注册顺序；同帮助文本的别名只显示首条，
-        # 如 .帮助 是 .help 的别名，避免列表重复）
-        lines = ["屠龙骰可用命令："]
-        seen_docs: set[str] = set()
-        for name, description in base.get_registered_commands().items():
-            if description in seen_docs:
-                continue
-            seen_docs.add(description)
-            summary = _summary_line(description)
-            lines.append(f"· .{name}  {summary}" if summary else f"· .{name}")
-        lines.append(text.TXT_DOCS_LINK)
-        await help_matcher.finish("\n".join(lines))
+    # ① 无参数：总览
+    if not keyword:
+        body = text.TXT_HELP_LANDING.format(version=__version__)
+        await help_matcher.finish(await _with_doc_line(body, event))
 
-    # 带参数：查指定命令的完整帮助
-    keyword = rest
-    commands = base.get_registered_commands()
-    # 大小写不敏感查找；直接命中优先
-    match = commands.get(keyword) or next(
-        (doc for name, doc in commands.items() if name.lower() == keyword.lower()),
-        None,
+    first, _, action = keyword.partition(" ")
+    action = action.strip()
+
+    # ② 专用入口：链接 / 命令目录 / 关于 / 骰主 / 联系
+    if first == help_layout.LINK_KEYWORD:
+        await help_matcher.finish(await _handle_link(event, action))
+    if help_layout.is_catalog_keyword(first):
+        await help_matcher.finish(await _with_doc_line(text.TXT_HELP_CATALOG, event))
+    if first == help_layout.ABOUT_KEYWORD:
+        body = text.TXT_HELP_ABOUT.format(
+            version=__version__,
+            repo=_repo_url(),
+            group=text.TXT_HELP_ABOUT_GROUP,
+        )
+        await help_matcher.finish(body)
+    if first == help_layout.MASTER_KEYWORD:
+        await help_matcher.finish(await _with_doc_line(text.TXT_HELP_MASTER, event))
+    if first == help_layout.CONTACT_KEYWORD:
+        await help_matcher.finish(_render_contact())
+
+    # ③ 组名 / 组别名：该组命令清单
+    group = help_layout.find_group(keyword)
+    if group is not None:
+        await help_matcher.finish(await _with_doc_line("\n".join(group[1]), event))
+
+    # ④ 命令名 / 别名：命令详情
+    detail = _find_command(keyword)
+    if detail:
+        await help_matcher.finish(await _with_doc_line(detail, event))
+
+    # ⑤ 只进帮助的条目（检定点 / 豁免 / 先攻检定 / 武器命令族 / .master）
+    entry = help_layout.find_help_only(keyword)
+    if entry is not None:
+        await help_matcher.finish(await _with_doc_line(entry.text, event))
+
+    # ⑥ 未命中
+    await help_matcher.finish(
+        "\n".join(
+            (
+                text.TXT_HELP_NOT_FOUND.format(keyword=keyword),
+                text.TXT_HELP_NOT_FOUND_HINT,
+            )
+        )
     )
-    if match:
-        await help_matcher.finish(match)
-    await help_matcher.finish(f"未找到命令「{keyword}」。发送 .help 查看全部命令。")

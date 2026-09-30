@@ -1,8 +1,8 @@
 """骰主索引命令 ``.查询索引`` 的 nonebug 测试（2026-09-26）。
 
 覆盖：群聊一律静默（骰主也不例外）、私聊非骰主给提示、骰主私聊查看状态 /
-刷新 / 参数校验、后台刷新完成与失败回报、以及 ``.帮助`` 不显示该命令
-（列表由既有逐字断言覆盖，另测 ``.help 查询索引`` 详情不可见）。
+刷新 / 参数校验、后台刷新完成与失败回报、以及该命令在帮助体系里的可见性
+（不进任何命令清单，但 ``.help 查询索引`` 能查到详情，见 ``.help 骰主``）。
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from nonebot.adapters.onebot.v11 import Bot, Message
 from fake_event import fake_group_message_event_v11, fake_private_message_event_v11
 
 from nonebot_plugin_dnddicer.commands import atlas as atlas_cmd
-from nonebot_plugin_dnddicer.commands import base, text
+from nonebot_plugin_dnddicer.commands import base, help_layout, text
 from nonebot_plugin_dnddicer.commands.help import help_matcher
 from nonebot_plugin_dnddicer.query import atlas as atlas_mod
 
@@ -234,15 +234,17 @@ async def test_run_refresh_failure_reports(app: App, master, tmp_path, monkeypat
     assert sent == [text.TXT_INDEX_REFRESH_FAILED]
 
 
-# ── .帮助 不显示骰主命令 ────────────────────────────────────────────────
+# ── 骰主命令在帮助体系里的可见性 ────────────────────────────────────────
 
 
 @pytest.mark.asyncio
 async def test_help_detail_hides_superuser_command(app: App):
-    """.help 查询索引：骰主命令不进详情（按未找到处理）。"""
-    await _expect(
-        app,
-        help_matcher,
-        _group_event(".help 查询索引"),
-        "未找到命令「查询索引」。发送 .help 查看全部命令。",
-    )
+    """.help 查询索引：查得到详情，但不进任何命令清单（目录 / 组清单都不出现）。"""
+    from nonebot_plugin_dnddicer.commands import base
+
+    detail = base.get_registered_commands(include_hidden=True)["查询索引"]
+    assert detail.startswith(".查询索引")
+    assert "查询索引" not in base.get_registered_commands()
+    for _, lines in help_layout.HELP_GROUPS:
+        assert not any("查询索引" in line for line in lines)
+    await _expect(app, help_matcher, _group_event(".help 查询索引"), detail)

@@ -20,9 +20,10 @@ from ..platform import onebot_v11
 from . import base, text
 
 _HELP = (
-    "设置当前群的默认掷骰表达式\n"
-    "用法：.dset [表达式]（如 .dset 100、.dset 2d6+3）；无参数查看当前默认。\n"
-    "仅群主或管理员可修改；掷骰（.r）中裸 D 将使用本群默认骰面。"
+    ".dset [表达式]\n"
+    "  设置本群默认骰面（仅群主或管理员）\n"
+    "  无参数查看当前默认；裸 D 用本群默认骰面\n"
+    "  示例：.dset 100 ｜ .dset 2d6+3"
 )
 
 dset_matcher = base.on_dnd_command("dset", _HELP)

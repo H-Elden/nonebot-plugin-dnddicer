@@ -56,8 +56,14 @@ def register_command(name: str, description: str = "", *, hidden: bool = False) 
         _HIDDEN.add(name)
 
 
-def get_registered_commands() -> dict[str, str]:
-    """返回可在 .帮助 中展示的命令名及其说明（副本；隐藏命令不出现）。"""
+def get_registered_commands(*, include_hidden: bool = False) -> dict[str, str]:
+    """返回命令名 → 说明文案的副本。
+
+    默认不含隐藏命令（``.help`` 的清单与目录据此渲染）；``include_hidden=True``
+    时连隐藏命令一起返回（``.help <骰主命令>`` 查详情用，见 commands/help.py）。
+    """
+    if include_hidden:
+        return dict(_REGISTRY)
     return {name: doc for name, doc in _REGISTRY.items() if name not in _HIDDEN}
 
 

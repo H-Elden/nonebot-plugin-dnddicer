@@ -20,13 +20,10 @@ from ..version import __version__
 from . import base, text
 
 _HELP = (
-    "查看插件信息或开关本群服务：.bot on / .bot off（仅群聊，需群主或管理员权限）\n"
-    "用法（群聊中需先 @ 本机器人，再附上命令）：\n"
-    "· .bot —— 查看插件信息（版本/简介），群聊内附带本群服务状态\n"
-    "· .bot on —— 在本群开启服务（未开启的群仅 .bot 命令可用）\n"
-    "· .bot off —— 在本群关闭服务（本群不再响应本插件命令，.bot 不受影响）\n"
-    "说明：.bot on/off 仅限群聊使用，需群主或管理员权限；群聊中 .bot 系列命令"
-    "需 @ 本机器人才响应；私聊可直接使用，不受群聊服务开关限制。"
+    ".bot [on|off]（群聊需先 @ 骰娘）\n"
+    "  无参数：查看插件信息（群聊附本群服务状态）\n"
+    "  on / off：开启 / 关闭本群服务（群主或管理员）\n"
+    "  未开启的群仅 .bot 可用；私聊不受开关限制"
 )
 
 bot_matcher = base.on_dnd_command("bot", _HELP, require_to_me=True)

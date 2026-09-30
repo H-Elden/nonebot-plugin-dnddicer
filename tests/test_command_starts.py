@@ -20,6 +20,11 @@ from fake_event import fake_group_message_event_v11
 
 from nonebot_plugin_dnddicer.commands import text
 
+#: 未命中的回复（2026-09-28 版式重做后：一行提示 + 一行指向分组目录）
+_NOT_FOUND = (
+    f"{text.TXT_HELP_NOT_FOUND.format(keyword='不存在')}\n{text.TXT_HELP_NOT_FOUND_HINT}"
+)
+
 
 @pytest.fixture(autouse=True)
 def _clean_command_starts_cache():
@@ -85,13 +90,13 @@ async def test_dot_and_chinese_dot_matched_by_default(app: App):
         app,
         help_matcher,
         _group_event(".help 不存在"),
-        "未找到命令「不存在」。发送 .help 查看全部命令。",
+        _NOT_FOUND,
     )
     await _expect(
         app,
         help_matcher,
         _group_event("。帮助 不存在"),
-        "未找到命令「不存在」。发送 .help 查看全部命令。",
+        _NOT_FOUND,
     )
 
 
@@ -109,7 +114,7 @@ async def test_host_starts_enabled_matches_slash(app: App, monkeypatch: pytest.M
         app,
         help_matcher,
         _group_event("/help 不存在"),
-        "未找到命令「不存在」。发送 .help 查看全部命令。",
+        _NOT_FOUND,
     )
     await _expect(
         app,

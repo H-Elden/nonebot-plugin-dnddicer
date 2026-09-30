@@ -33,18 +33,13 @@ from . import text
 from .base import get_command_rest, on_dnd_command, resolve_display_name
 from .roll_parse_args import RollParseArgs, _parse_roll_args
 
-#: 命令说明（供 .帮助 使用）
+#: 命令说明（``.help r`` 详情，2026-09-28 版式重做）
 _HELP = (
-    "掷骰：.r[掷骰表达式]([掷骰原因])\n"
-    "[掷骰表达式]：([轮数]#)[个数]d面数(优/劣势)(k[取点数最大的骰子数])"
-    "不带面数时视为掷一个默认的20面骰\n"
-    "r后加h即为暗骰\n"
-    "示例:\n"
-    ".rd20+1d4+4\n"
-    ".r4#d    //投4次d20\n"
-    ".rd20劣势+4 //带劣势攻击\n"
-    ".r2#d优势+4 攻击被束缚的地精 //两次有加值的优势攻击\n"
-    ".r1d12+2d8+5抗性 //得到减半向下取整的投骰总值"
+    ".r[标志][表达式] [原因]\n"
+    "  掷骰表达式，裸 D 用本群默认骰面\n"
+    "  写法：[N#][个数]D面数[优势|劣势][±加值]\n"
+    "  .rh 暗骰、.rs 只显数值、4# 连掷、k/kl 取高取低\n"
+    "  示例：.r2d6+3 ｜ .rd优势+4"
 )
 
 roll_matcher = on_dnd_command("r", _HELP)

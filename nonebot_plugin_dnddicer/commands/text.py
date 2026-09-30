@@ -74,6 +74,80 @@ TXT_UNKNOWN_ERROR = "骰娘内部发生了错误，请联系管理员反馈。"
 # ── 文档站链接行（.bot 信息与 .help 无参数总览的末行共用）──────────────────
 TXT_DOCS_LINK = "详细帮助文档：https://dnddicer.netlify.app"
 
+# ── 帮助体系 .help（2026-09-28 重做；版式表见 commands/help_layout.py）──────
+# 入口：无参数总览 / `命令` 分组目录 / `<组名>` 组清单 / `<命令>` 详情 /
+#       `链接`（含 on/off 开关）/ `关于` / `骰主` / `联系`；未命中给一行提示。
+# 回复末尾的文档站链接行由 `.help 链接 on/off` 控制（群聊默认关、私聊默认开）。
+#: 文档站基址（帮助回复用它拼链接；.bot 的链接行仍是 TXT_DOCS_LINK）
+TXT_HELP_DOCS_BASE = "https://dnddicer.netlify.app"
+#: 帮助回复末尾的链接行（各入口 / 组清单 / 详情共用；链接开关关闭时不加）
+TXT_HELP_DOC_LINE = "帮助文档：{url}"
+#: 无参数总览（版本 + 简介 + 开关骰娘 + 四个入口 + 冲突提示）
+TXT_HELP_LANDING = (
+    "屠龙骰（DNDDicer）v{version}\n"
+    "DND 5e/5r 跑团专用骰娘~\n"
+    "@骰娘 .bot on/off 开关骰娘\n"
+    ".help 命令 查看命令分组\n"
+    ".help 链接 查看帮助文档\n"
+    ".help 关于 查看项目地址\n"
+    ".help 骰主 查看骰主指令\n"
+    ".help 联系 联系骰主"
+)
+#: `.help 命令`：7 组目录
+TXT_HELP_CATALOG = (
+    "屠龙骰命令一览\n"
+    ".help 掷骰 查看掷骰相关命令\n"
+    ".help 角色 查看角色卡命令\n"
+    ".help 武器 查看武器使用命令\n"
+    ".help 生命 查看生命值命令\n"
+    ".help 先攻 查看先攻/战斗命令\n"
+    ".help 查询 查看规则查询命令\n"
+    ".help 管理 查看群管专用命令"
+)
+#: `.help 链接`：相关链接 + 链接开关的用法
+TXT_HELP_LINK = (
+    "【相关链接】\n"
+    "帮助文档：{url}\n"
+    "5e不全书：https://5echm.kagangtuya.top\n"
+    "【相关命令】\n"
+    ".help 链接 on/off\n"
+    "  help命令关联文档站链接开关"
+)
+#: 链接开关的反馈（{state} 为「开启」/「关闭」）
+TXT_HELP_LINK_ON = "已开启本处帮助回复末尾的文档站链接。"
+TXT_HELP_LINK_OFF = "已关闭本处帮助回复末尾的文档站链接。"
+TXT_HELP_LINK_USAGE = "用法：.help 链接 on/off（当前：{state}）"
+TXT_HELP_LINK_STATE_ON = "开启"
+TXT_HELP_LINK_STATE_OFF = "关闭"
+#: `.help 关于`（版本、项目地址、交流群与两句收尾）
+TXT_HELP_ABOUT = (
+    "屠龙骰（DNDDicer）\n"
+    "　　专精 DND 5e/5r 跑团的 NoneBot2 骰娘插件，"
+    "致力于做功能最全面、体验最好的 DND 骰娘。\n"
+    "当前版本：v{version}\n"
+    "项目地址：{repo}\n"
+    "交流反馈：{group}\n"
+    "欢迎进群交流或提Issue，\n"
+    "喜欢就点个Star吧！"
+)
+#: `.help 关于` 的交流群号（2026-09-28 用户定：只放在这里，不做配置项）
+TXT_HELP_ABOUT_GROUP = "1107879441"
+#: `.help 骰主`：骰主专用指令清单（标题 + 逐条，其余本模块外补）
+TXT_HELP_MASTER = (
+    "以下指令仅限骰主使用\n"
+    ".查询索引 [刷新 [类型…]] 速查索引状态与手动刷新"
+)
+#: `.help 联系`：固定两行 + 两个可选行（配置为空时不显示，见 commands/help.py）
+TXT_HELP_CONTACT = (
+    "通过以下方式联系骰主反馈:\n"
+    ".master 消息 给骰主发送消息"
+)
+TXT_HELP_CONTACT_MASTER = "骰主联系方式：{value}"
+TXT_HELP_CONTACT_GROUP = "骰主交流群：{value}"
+#: 未命中：一行提示 + 一行指向分组目录
+TXT_HELP_NOT_FOUND = "未找到「{keyword}」。"
+TXT_HELP_NOT_FOUND_HINT = ".help 命令 查看命令分组"
+
 # ── .bot 插件信息与群聊服务开关（宿主新需求 2026-09-09，自研文案）
 # 群聊服务默认关闭（白名单）：未开启的群仅 .bot 命令可用，其余命令静默不响应；
 # 私聊不受群聊服务开关限制
@@ -370,12 +444,10 @@ TXT_SUPERUSER_ONLY = "该命令仅骰主可用。"
 
 #: 速查索引命令（.查询索引）帮助
 TXT_INDEX_HELP = (
-    "速查索引：.查询索引（.qatlas）\n"
-    "- 无参数：查看各类索引的状态（条目数、构建时间）\n"
-    "- 刷新：重建全部索引\n"
-    "- 刷新 <类型>：只重建指定类型\n"
-    "类型：法术 / 怪物 / 物品 / 专长 / 职业 / 起源 / 术语 / 单位\n"
-    "示例：.查询索引 刷新 法术"
+    ".查询索引 [刷新 [类型…]]（.qatlas，仅骰主私聊）\n"
+    "  无参数：查看各类速查索引状态\n"
+    "  刷新：重建全部；刷新 <类型>：只重建该类\n"
+    "  类型：法术/怪物/物品/专长/职业/起源/术语/单位"
 )
 TXT_INDEX_STATUS_HEAD = "速查索引状态（构建于 {built_at}）："
 TXT_INDEX_STATUS_ROW = "· {label}：{count} 条"
@@ -392,11 +464,11 @@ TXT_INDEX_REFRESH_KEPT = "（新构建条目数异常，已保留原数据）"
 TXT_ATLAS_USAGE = "用法：.查询{kind} <名称>（如 {example}）"
 #: 子命令帮助全文
 TXT_ATLAS_HELP = (
-    "查询{kind}：.查询{kind} <名称>\n"
-    "- 在《5e不全书》的{kind}速查索引中按名称查找（中文名 / 英文名均可）\n"
-    "- 唯一命中直接展示正文；多个候选回复数字查看，多于一页可 + / - 翻页\n"
-    "- 受 .查询范围 限制：只在本处开放的书目里查找\n"
-    "示例：{example}"
+    ".查询{kind} <名称>\n"
+    "  在《5e不全书》速查中按名称查找（中文 / 英文名均可）\n"
+    "  同类速查：怪物/物品/专长/职业/起源/术语/单位\n"
+    "  受 .查询范围 限制；多候选回复数字查看\n"
+    "  示例：{example}"
 )
 #: 索引尚未就绪（懒构建失败或站点不可达）
 TXT_ATLAS_NOT_READY = "速查索引尚未就绪（未能从站点获取），请稍后再试。"
