@@ -110,6 +110,7 @@ DNDDICER_MASTER_GROUP=87654321
 | `dnddicer_query_base_urls` | `list` | 在线服务 | 查询服务端点，按顺序尝试，失败则自动尝试下一个 |
 | `dnddicer_query_site_urls` | `list` | 站点主站 | 词条正文的**页面抓取**地址（速查子命令与样式化正文用）；<br>自建部署时改为你的站点地址 |
 | `dnddicer_query_image_enabled` | `bool` | `false` | 图片模式总开关，决定各处**能不能**出图；<br>需先安装[可选依赖项](#可选依赖项)中的 `[render]` |
+| `dnddicer_query_image_default` | `bool` | `false` | 词条正文的**默认形态**：`false` 时各处初始为文字、需用户 `.查询图片 on`；设为 `true` 后未设置过的地方（含新群）默认出图，用户仍可用 `.查询图片 off` 单独改回文字。<br>只决定默认值，总开关未开或渲染依赖缺失时仍以文字显示 |
 | `dnddicer_query_image_font_family` | `str` | 空（内置字体栈） | 图片卡片的字体家族（CSS `font-family` 列表）。留空用内置栈（中文优先且中西文同源，如 `"Noto Sans CJK SC", "Microsoft YaHei", sans-serif`）；服务器缺少中文字体或想换一套字时用它覆盖 |
 | `dnddicer_query_timeout` | `float` | `8.0` | 单个端点的请求超时（秒） |
 | `dnddicer_query_page_cache_ttl` | `float` | `86400.0` | 页面缓存时长（秒）：同一页面在此时长内重复查询不重复抓取 |
@@ -118,13 +119,14 @@ DNDDICER_MASTER_GROUP=87654321
 | `dnddicer_query_cache_ttl` | `float` | `600.0` | 同一关键词的结果缓存时长（秒） |
 | `dnddicer_query_endpoint_cooldown` | `float` | `60.0` | 端点失败后的冷却时长（秒） |
 
-默认端点是公开的在线服务：`https://5echmsearch.kagangtuya.top`，开箱无需部署；正文抓取默认走站点主站（`https://5echm.kagangtuya.top`），自建站点时请把 `dnddicer_query_site_urls` 指向自建地址。图片模式各群/私聊的启用方式见[规则查询](./query.md#图片显示-查询图片)页面。
+默认端点是公开的在线服务：`https://5echmsearch.kagangtuya.top`，开箱无需部署；正文抓取默认走站点主站（`https://5echm.kagangtuya.top`），自建站点时请把 `dnddicer_query_site_urls` 指向自建地址。图片模式各群/私聊的启用方式（含默认形态配置）见[规则查询](./query.md#图片显示-查询图片)页面。
 
 推荐全部开启以获得最佳体验，开启配置示例：
 
 ```bash
 DNDDICER_QUERY_ENABLED=TRUE
 DNDDICER_QUERY_IMAGE_ENABLED=TRUE
+DNDDICER_QUERY_IMAGE_DEFAULT=TRUE
 DNDDICER_QUERY_BASE_URLS=["http://127.0.0.1:13000", "https://5echmsearch.kagangtuya.top"]
 DNDDICER_QUERY_SITE_URLS=["http://127.0.0.1:13000"]
 ```
@@ -170,6 +172,8 @@ DNDDICER_QUERY_BASE_URLS=["https://5echmsearch.kagangtuya.top"]
 DNDDICER_QUERY_SITE_URLS=["https://5echm.kagangtuya.top"]
 # # 图片模式总开关
 DNDDICER_QUERY_IMAGE_ENABLED=FALSE
+# # 词条正文默认形态（未设置过的地方是否出图）
+DNDDICER_QUERY_IMAGE_DEFAULT=FALSE
 # # 单个端点的请求超时（秒）
 DNDDICER_QUERY_TIMEOUT=8.0
 # # 同一关键词的结果缓存时长（秒）
