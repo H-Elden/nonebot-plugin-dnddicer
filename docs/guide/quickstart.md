@@ -119,6 +119,8 @@ DNDDICER_MASTER_GROUP=87654321
 | `dnddicer_query_cache_ttl` | `float` | `600.0` | 同一关键词的结果缓存时长（秒） |
 | `dnddicer_query_endpoint_cooldown` | `float` | `60.0` | 端点失败后的冷却时长（秒） |
 
+字体家族写进 `.env` 时不要带半角双引号：直接写 `DNDDICER_QUERY_IMAGE_FONT_FAMILY=Noto Sans CJK SC, Microsoft YaHei, sans-serif` 即可（不加引号的家族名本就是合法的 CSS 写法）；若要保留引号，用单引号包住整行的值，如 `DNDDICER_QUERY_IMAGE_FONT_FAMILY='"Noto Sans CJK SC", "Microsoft YaHei", sans-serif'`。带半角双引号的写法会让该行解析失败被丢弃（日志里只有一行 dotenv 告警），字体实际回落为内置栈。
+
 默认端点是公开的在线服务：`https://5echmsearch.kagangtuya.top`，开箱无需部署；正文抓取默认走站点主站（`https://5echm.kagangtuya.top`），自建站点时请把 `dnddicer_query_site_urls` 指向自建地址。图片模式各群/私聊的启用方式（含默认形态配置）见[规则查询](./query.md#图片显示-查询图片)页面。
 
 推荐全部开启以获得最佳体验，开启配置示例：
@@ -174,7 +176,7 @@ DNDDICER_QUERY_SITE_URLS=["https://5echm.kagangtuya.top"]
 DNDDICER_QUERY_IMAGE_ENABLED=FALSE
 # # 词条正文默认形态（未设置过的地方是否出图）
 DNDDICER_QUERY_IMAGE_DEFAULT=FALSE
-# # 图片卡片字体家族（留空用内置字体栈）
+# # 图片卡片字体家族（留空用内置字体栈；填写时不带引号）
 DNDDICER_QUERY_IMAGE_FONT_FAMILY=
 # # 单个端点的请求超时（秒）
 DNDDICER_QUERY_TIMEOUT=8.0
