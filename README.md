@@ -1,8 +1,14 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/H-Elden/nonebot-plugin-dnddicer/main/logo/dnddicer-logo.svg" alt="屠龙骰 DNDDicer" width="140">
+</p>
+
 # 屠龙骰（DNDDicer / nonebot-plugin-dnddicer）
 
 > 专精 **DND5e / DND5r** 跑团的 [NoneBot2](https://nonebot.dev/) 骰娘插件（OneBot V11 适配器），致力于做功能最全面、体验最好的 DND 骰娘。
 >
 > 当前版本：**v0.4.2** · 完整使用手册见 **📖 [使用文档](https://h-elden.github.io/nonebot-plugin-dnddicer/)**（[国内镜像](https://dnddicer.netlify.app/)，GitHub Pages 访问不畅时用）
+>
+> 交流反馈 QQ 群：[![QQ群](https://img.shields.io/badge/QQ%E7%BE%A4-1107879441-12B7F5?logo=tencentqq&logoColor=white)](https://qun.qq.com/universal-share/share?ac=1&authKey=eUFiLk5ktomkYgDWCMnJnLNQW%2FJwmfR7wXKRrYyQeJy5uaYtwDsm4ABDiofKx6%2BN&busi_data=eyJncm91cENvZGUiOiIxMTA3ODc5NDQxIiwidG9rZW4iOiIvWHlQbDlNeUdBOVpQSnB1WU1RNUFmRCtBNlgwTXpnN2VOSlh6UkJ1YTFUdmREdEExYmEwSXo4SXFiR21zb0tsIiwidWluIjoiMjk4NDQ5NTc3NCJ9&data=JWJQw7qsywgzyHnQ-HJ_PzqF_Y1otBjTRkehoSmk6faB87xzjGf4PA_p1KNPhLvkkOwlLEuNH9jTN8XxNbxRPQ&svctype=4&tempid=h5_group_info)
 
 ## ✨ 简介
 
