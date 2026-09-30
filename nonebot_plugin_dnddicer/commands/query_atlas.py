@@ -219,7 +219,7 @@ async def send_atlas_entry(
     use_image = (
         bool(decoded.text.strip())
         and get_config().dnddicer_query_image_enabled
-        and await query_settings.is_image_enabled(query_common.chat_key(event))
+        and await query_common.image_enabled(event)
     )
     if use_image:
         if render.rich_available():

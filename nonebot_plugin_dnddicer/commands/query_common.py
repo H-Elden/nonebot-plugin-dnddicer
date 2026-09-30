@@ -2,6 +2,8 @@
 
 - **按处键与处所代词**：``.查询图片`` / ``.查询范围`` / 速查子命令共用同一套
   「群聊按群、私聊按人」的定位（``chat_key`` / ``where``）；
+- **图片形态判定**：``image_enabled`` 统一「显式设置优先、否则跟随骰主配置的
+  默认形态」这一口径，通用检索与速查子命令共用（避免两处各判一次走偏）；
 - **候选列表框架**：头部 + 条目行 + 收尾（回复数字 / 翻页提示）；只有一页时
   不显示页码与翻页提示（2026-09-26 用户拍板，两条查询路径共用同一实现）；
 - **书名映射**：站内目录名 → 书架中文书名（如「玩家手册」→「玩家手册2014」），
@@ -14,6 +16,7 @@ from typing import Sequence
 
 from nonebot.adapters.onebot.v11 import MessageEvent
 
+from ..config import get_config
 from ..data import query_settings
 from ..query import books
 from ..query.interaction import DEFAULT_TTL
@@ -54,6 +57,22 @@ def chat_key(event: MessageEvent) -> str:
 def where(event: MessageEvent) -> str:
     """文案中的处所代词：群聊「本群」、私聊「你」。"""
     return "本群" if getattr(event, "group_id", None) is not None else "你"
+
+
+async def image_enabled(event: MessageEvent) -> bool:
+    """本处当前是否以图片显示词条正文（**实际生效**的形态）。
+
+    两级取值（2026-09-30 起）：
+    1. 本处做过 ``.查询图片 on`` / ``off`` → 按显式设置（写死，不随默认变化）；
+    2. 没做过 → 跟随骰主配置 ``dnddicer_query_image_default``（群聊与私聊同一口径）。
+
+    注：骰主总开关（``dnddicer_query_image_enabled``）与渲染依赖在本函数之外把关
+    ——本函数只回答「本处要不要图」，能不能出图由调用方另判。
+    """
+    override = await query_settings.get_image_setting(chat_key(event))
+    if override is not None:
+        return override
+    return bool(get_config().dnddicer_query_image_default)
 
 
 def list_frame(*, head: str, items: Sequence[str], pages: int) -> str:

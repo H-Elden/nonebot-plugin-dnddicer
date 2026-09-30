@@ -427,3 +427,60 @@ async def test_entry_fetch_failure_hint(app: App, enabled_query, image_mode, tmp
         _group_event(".查询法术 旧版"),
         text.TXT_QUERY_UNAVAILABLE.format(count=1),
     )
+
+
+@pytest.mark.asyncio
+async def test_image_default_on_sends_rich_card_without_setting(
+    app: App, enabled_query, store, image_mode, monkeypatch
+):
+    """默认图片（dnddicer_query_image_default）：速查子命令没手动开也出卡片。"""
+    from nonebot_plugin_dnddicer import render
+
+    monkeypatch.setattr(get_config(), "dnddicer_query_image_default", True)
+    calls: list = []
+
+    async def _fake_rich(title, category, body_html, source_path, located):
+        calls.append(title)
+        return _PNG_1PX
+
+    render.set_rich_renderer(_fake_rich)
+
+    async with app.test_matcher(query_atlas.spell_matcher) as ctx:
+        adapter = ctx.create_adapter(base=OnebotV11Adapter)
+        bot = ctx.create_bot(base=Bot, adapter=adapter)
+        event = _group_event(".查询法术 旧版")
+        ctx.should_call_send(event, MessageSegment.image(_PNG_1PX))
+        ctx.receive_event(bot, event)
+
+    assert calls and calls[0].startswith("旧版样例法术")
+
+
+@pytest.mark.asyncio
+async def test_image_default_on_off_by_explicit_setting(
+    app: App, enabled_query, store, image_mode, monkeypatch
+):
+    """默认图片下显式 .查询图片 off：速查子命令回到文字（本处设置压过默认）。"""
+    from nonebot_plugin_dnddicer import render
+
+    monkeypatch.setattr(get_config(), "dnddicer_query_image_default", True)
+    await query_settings.set_image_enabled(
+        query_common.chat_key(_group_event("1")), False
+    )
+    calls: list = []
+
+    async def _fake_rich(title, category, body_html, source_path, located):
+        calls.append(title)
+        return _PNG_1PX
+
+    render.set_rich_renderer(_fake_rich)
+    await _expect(
+        app,
+        query_atlas.spell_matcher,
+        _group_event(".查询法术 旧版"),
+        _entry_text(
+            "玩家手册2014 · 一环 · 惑控",
+            "旧版样例法术｜Legacy Sample",
+            ["施法时间：动作", "旧版说明文字。"],
+        ),
+    )
+    assert calls == []

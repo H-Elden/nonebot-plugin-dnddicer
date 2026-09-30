@@ -1092,6 +1092,150 @@ async def test_image_setting_does_not_shadow_query(app: App, enabled_query, imag
     )
 
 
+# ── 图片默认形态 dnddicer_query_image_default（2026-09-30 新增）──────────
+# 口径：显式设置优先；没显式设置过的地方跟随该配置（群聊与私聊同一口径）；
+# 总开关与渲染依赖仍单独把关（总闸没开时「默认图片」也出不了图）。
+
+
+@pytest.fixture
+def image_default_on(monkeypatch):
+    """把「图片默认形态」设为图片（群聊与私聊一致）。"""
+    monkeypatch.setattr(get_config(), "dnddicer_query_image_default", True)
+
+
+@pytest.mark.asyncio
+async def test_image_default_on_query_sends_image_without_setting(
+    app: App, enabled_query, image_mode, image_default_on
+):
+    """默认图片：没发过 .查询图片 on，唯一候选查询也直接出图。"""
+    render.set_renderer(_fake_renderer())
+    _setup_entry()
+    await _expect_image(app, query_cmd.query_matcher, _group_event(".查询 镜影术"), _PNG_1PX)
+
+
+@pytest.mark.asyncio
+async def test_image_default_on_applies_to_private_too(
+    app: App, enabled_query, image_mode, image_default_on
+):
+    """群聊与私聊同一口径：私聊同样默认出图（措辞用「你」）。"""
+    render.set_renderer(_fake_renderer())
+    _setup_entry()
+    await _expect(
+        app,
+        query_cmd.image_matcher,
+        fake_private_message_event_v11(message=Message(".查询图片")),
+        text.TXT_QUERY_IMAGE_STATE_ON.format(where="你"),
+    )
+    await _expect_image(
+        app,
+        query_cmd.query_matcher,
+        fake_private_message_event_v11(message=Message(".查询 镜影术")),
+        _PNG_1PX,
+    )
+
+
+@pytest.mark.asyncio
+async def test_image_default_on_view_state_reports_image(
+    app: App, enabled_query, image_mode, image_default_on
+):
+    """默认图片时查看：直接报当前为图片（不区分是默认还是手动开的）。"""
+    await _expect(
+        app,
+        query_cmd.image_matcher,
+        _group_event(".查询图片"),
+        text.TXT_QUERY_IMAGE_STATE_ON.format(where="本群"),
+    )
+
+
+@pytest.mark.asyncio
+async def test_image_default_on_can_be_turned_off_per_place(
+    app: App, enabled_query, image_mode, image_default_on
+):
+    """默认图片的群仍可用 .查询图片 off 单独改回文字，且改动只影响本处。"""
+    render.set_renderer(_fake_renderer())
+    _setup_entry()
+    await _expect(
+        app,
+        query_cmd.image_matcher,
+        _group_event(".查询图片 off", group_id=_G),
+        text.TXT_QUERY_IMAGE_OFF.format(where="本群"),
+    )
+    # 本处回到文字
+    await _expect(
+        app,
+        query_cmd.query_matcher,
+        _group_event(".查询 镜影术", group_id=_G),
+        _expected_entry("二环", "玩家手册2024", _MIRROR_BODY),
+    )
+    # 另一群未显式设置过 → 仍按默认出图
+    await _expect_image(
+        app,
+        query_cmd.query_matcher,
+        _group_event(".查询 镜影术", group_id=_G + 1),
+        _PNG_1PX,
+    )
+
+
+@pytest.mark.asyncio
+async def test_image_explicit_setting_outlives_default_change(
+    app: App, enabled_query, image_mode, monkeypatch
+):
+    """显式设置一旦写下就不再跟默认走：默认关时手动开启的群，改默认后仍是图片。"""
+    from nonebot_plugin_dnddicer.data import query_settings as _qs
+
+    render.set_renderer(_fake_renderer())
+    _setup_entry()
+    await _expect(
+        app,
+        query_cmd.image_matcher,
+        _group_event(".查询图片 on"),
+        text.TXT_QUERY_IMAGE_ON.format(where="本群"),
+    )
+    # 骰主把默认改为图片：该群是显式开启，不受影响
+    monkeypatch.setattr(get_config(), "dnddicer_query_image_default", True)
+    await _expect_image(app, query_cmd.query_matcher, _group_event(".查询 镜影术"), _PNG_1PX)
+    # 存储里记的是显式值（而非「跟随默认」的空值）
+    assert await _qs.get_image_setting(_qs.group_key(_G)) is True
+
+
+@pytest.mark.asyncio
+async def test_image_default_on_still_gated_by_master_switch(
+    app: App, enabled_query, image_default_on
+):
+    """总闸未开：默认图片也出不了图（以文字显示），查看时说清「骰主当前未开放」。"""
+    calls: list = []
+    render.set_renderer(_fake_renderer(calls=calls))
+    _setup_entry()
+    await _expect(
+        app,
+        query_cmd.image_matcher,
+        _group_event(".查询图片"),
+        text.TXT_QUERY_IMAGE_STATE_PENDING.format(where="本群"),
+    )
+    await _expect(
+        app,
+        query_cmd.query_matcher,
+        _group_event(".查询 镜影术"),
+        _expected_entry("二环", "玩家手册2024", _MIRROR_BODY),
+    )
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_image_default_off_keeps_text(app: App, enabled_query, image_mode):
+    """默认仍为文字（未配置时）：行为与 0.4.2 逐字一致（回归基线）。"""
+    calls: list = []
+    render.set_renderer(_fake_renderer(calls=calls))
+    _setup_entry()
+    await _expect(
+        app,
+        query_cmd.query_matcher,
+        _group_event(".查询 镜影术"),
+        _expected_entry("二环", "玩家手册2024", _MIRROR_BODY),
+    )
+    assert calls == []
+
+
 # ── 查询范围 .查询范围 与书目表 .规则书（2026-09-25 新增）────────────────
 
 

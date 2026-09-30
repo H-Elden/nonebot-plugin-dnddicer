@@ -228,10 +228,10 @@ def _image_unavailable_text() -> Optional[str]:
 async def _image_state_text(event: MessageEvent) -> str:
     """查看本处设置：按**实际生效**的形态回复（不可用时说明原因）。"""
     where = _where(event)
-    if not await query_settings.is_image_enabled(_chat_key(event)):
+    if not await query_common.image_enabled(event):
         return text.TXT_QUERY_IMAGE_STATE_OFF.format(where=where)
     if _image_unavailable_text() is not None:
-        # 已设为图片但骰主当前未配置（总开关被关或依赖缺失）→ 暂以文字
+        # 已设为图片（或按默认出图）但骰主当前未配置（总开关被关或依赖缺失）→ 暂以文字
         return text.TXT_QUERY_IMAGE_STATE_PENDING.format(where=where)
     return text.TXT_QUERY_IMAGE_STATE_ON.format(where=where)
 
@@ -543,7 +543,7 @@ async def _send_entry(
     use_image = (
         bool(entry_text.strip())
         and get_config().dnddicer_query_image_enabled
-        and await query_settings.is_image_enabled(_chat_key(event))
+        and await query_common.image_enabled(event)
     )
     if use_image:
         if render.render_available():

@@ -191,29 +191,30 @@ def clean_query_settings():
 
 
 @pytest.mark.asyncio
-async def test_image_setting_defaults_off(clean_query_settings):
-    """默认关闭：任何处（群/私聊）初始都是文字。"""
+async def test_image_setting_defaults_unset(clean_query_settings):
+    """默认未设置：任何处（群/私聊）都没有显式值，形态交给配置默认决定。"""
     from nonebot_plugin_dnddicer.data import query_settings as _qs
 
-    assert await _qs.is_image_enabled(_qs.group_key(123)) is False
-    assert await _qs.is_image_enabled(_qs.private_key(456)) is False
+    assert await _qs.get_image_setting(_qs.group_key(123)) is None
+    assert await _qs.get_image_setting(_qs.private_key(456)) is None
 
 
 @pytest.mark.asyncio
 async def test_image_setting_roundtrip_and_persist(clean_query_settings):
-    """开启→关闭往返；写入落盘（清缓存后重读仍生效）。"""
+    """显式开启 → 显式关闭往返；写入落盘（清缓存后重读仍是显式值）。"""
     from nonebot_plugin_dnddicer.data import query_settings as _qs
 
     key = _qs.group_key(123)
     await _qs.set_image_enabled(key, True)
-    assert await _qs.is_image_enabled(key) is True
+    assert await _qs.get_image_setting(key) is True
 
     _qs._cache = None  # 模拟进程重启：从磁盘重读
-    assert await _qs.is_image_enabled(key) is True
+    assert await _qs.get_image_setting(key) is True
 
     await _qs.set_image_enabled(key, False)
     _qs._cache = None
-    assert await _qs.is_image_enabled(key) is False
+    # 显式关闭是 True 之外的**另一种**显式值，不能退回「未设置」
+    assert await _qs.get_image_setting(key) is False
 
 
 @pytest.mark.asyncio
@@ -225,15 +226,15 @@ async def test_image_setting_scoped(clean_query_settings):
     user_a, user_b = _qs.private_key(100), _qs.private_key(200)
     await _qs.set_image_enabled(group_a, True)
 
-    assert await _qs.is_image_enabled(group_a) is True
-    assert await _qs.is_image_enabled(group_b) is False
-    assert await _qs.is_image_enabled(user_a) is False
-    assert await _qs.is_image_enabled(user_b) is False
+    assert await _qs.get_image_setting(group_a) is True
+    assert await _qs.get_image_setting(group_b) is None
+    assert await _qs.get_image_setting(user_a) is None
+    assert await _qs.get_image_setting(user_b) is None
 
-    await _qs.set_image_enabled(user_a, True)
+    await _qs.set_image_enabled(user_a, False)
     _qs._cache = None
-    assert await _qs.is_image_enabled(user_a) is True
-    assert await _qs.is_image_enabled(group_b) is False
+    assert await _qs.get_image_setting(user_a) is False
+    assert await _qs.get_image_setting(group_b) is None
 
 
 @pytest.mark.asyncio
@@ -245,12 +246,12 @@ async def test_image_setting_repeated_write_is_noop(clean_query_settings):
     await _qs.set_image_enabled(key, True)
     await _qs.set_image_enabled(key, True)
     _qs._cache = None
-    assert await _qs.is_image_enabled(key) is True
+    assert await _qs.get_image_setting(key) is True
     # 关闭两次同样稳定
     await _qs.set_image_enabled(key, False)
     await _qs.set_image_enabled(key, False)
     _qs._cache = None
-    assert await _qs.is_image_enabled(key) is False
+    assert await _qs.get_image_setting(key) is False
 
 
 @pytest.mark.asyncio
@@ -262,11 +263,48 @@ async def test_image_setting_tolerates_broken_storage(clean_query_settings):
     path = get_data_file("query_settings.json")
     path.write_text("{ 这不是合法 JSON", encoding="utf-8")
     _qs._cache = None
-    assert await _qs.is_image_enabled(_qs.group_key(1)) is False
+    assert await _qs.get_image_setting(_qs.group_key(1)) is None
 
-    path.write_text('{"schema_version": 1, "data": {"image_enabled": "非法"}}', encoding="utf-8")
+    path.write_text(
+        '{"schema_version": 1, "data": {"image_override": "非法"}}', encoding="utf-8"
+    )
     _qs._cache = None
-    assert await _qs.is_image_enabled(_qs.group_key(1)) is False
+    assert await _qs.get_image_setting(_qs.group_key(1)) is None
+
+    # 字典里混进非法值：只认布尔，其余条目忽略
+    path.write_text(
+        '{"schema_version": 1, "data": {"image_override": '
+        '{"group_1": true, "group_2": "yes", "group_3": null}}}',
+        encoding="utf-8",
+    )
+    _qs._cache = None
+    assert await _qs.get_image_setting(_qs.group_key(1)) is True
+    assert await _qs.get_image_setting(_qs.group_key(2)) is None
+    assert await _qs.get_image_setting(_qs.group_key(3)) is None
+
+
+@pytest.mark.asyncio
+async def test_image_setting_migrates_legacy_enabled_list(clean_query_settings):
+    """旧版本写的 image_enabled 列表（只记已开启）：按「显式开启」读入，设置不丢。"""
+    from nonebot_plugin_dnddicer.data import get_data_file
+    from nonebot_plugin_dnddicer.data import query_settings as _qs
+
+    path = get_data_file("query_settings.json")
+    path.write_text(
+        '{"schema_version": 1, "data": {"image_enabled": ["group_7", "private_8"]}}',
+        encoding="utf-8",
+    )
+    _qs._cache = None
+    assert await _qs.get_image_setting(_qs.group_key(7)) is True
+    assert await _qs.get_image_setting(_qs.private_key(8)) is True
+    assert await _qs.get_image_setting(_qs.group_key(9)) is None
+
+    # 首次写入后落盘为新结构，旧字段不再出现
+    await _qs.set_image_enabled(_qs.group_key(9), False)
+    raw = path.read_text(encoding="utf-8")
+    assert "image_enabled" not in raw
+    assert '"group_7": true' in raw
+    assert '"group_9": false' in raw
 
 
 # -------------------------------------------------------------------------
@@ -311,14 +349,14 @@ async def test_scope_scoped_per_chat_and_independent_of_image(clean_query_settin
     await _qs.set_scope(group_a, ["玩家手册2024"])
 
     _qs._cache = None
-    assert await _qs.is_image_enabled(group_a) is True
+    assert await _qs.get_image_setting(group_a) is True
     assert await _qs.get_scope(group_a) == ["玩家手册2024"]
     assert await _qs.get_scope(group_b) is None
 
     # 清掉范围不影响图片开关；关掉图片不影响范围
     await _qs.set_scope(group_a, None)
     _qs._cache = None
-    assert await _qs.is_image_enabled(group_a) is True
+    assert await _qs.get_image_setting(group_a) is True
 
 
 @pytest.mark.asyncio

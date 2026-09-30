@@ -68,6 +68,12 @@ class Config(BaseModel):
     #: （nonebot-plugin-htmlkit），未装时自动回退文字。
     dnddicer_query_image_enabled: bool = False
 
+    #: 查询图片显示的**默认形态**（群聊与私聊同一口径）：默认 False（文字），即各处
+    #: 初始都是文字、需 ``.查询图片 on`` 主动开启；设为 True 时，**没做过显式设置**
+    #: 的地方默认出图（群成员仍可用 ``.查询图片 off`` 单独改回文字，或再 on 开回来）。
+    #: 仅决定默认值：上面的总开关未开或渲染依赖缺失时，一律仍以文字显示。
+    dnddicer_query_image_default: bool = False
+
     #: 图片卡片的字体家族（CSS font-family 列表，如 ``"Noto Sans CJK SC", sans-serif``）。
     #: 留空用样式表内置字体栈（中文优先且中西文同源）。服务器缺少中文字体、或想换
     #: 一套字时用它覆盖，无需改插件：留空即内置行为。
