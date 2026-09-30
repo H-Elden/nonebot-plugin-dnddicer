@@ -78,13 +78,13 @@ Ubuntu / Debian 安装：`apt install fonts-noto-cjk`。
 | `dnddicer_enabled` | `bool` | `true` | 插件功能总开关。设为 `false` 时只加载骨架、不注册任何命令<br>（供开发者临时禁用本插件） |
 | `dnddicer_use_host_command_starts` | `bool` | `false` | 是否兼容宿主 `COMMAND_START` 起始符，详见下文「[命令起始符](#命令起始符)」一节 |
 
-### 骰主联系（可选）
+### 联系骰主
 
 三项都与「骰主」相关，**默认全空**：不配置时 `.master` 提示骰主未配置，`.help 联系` 也不显示对应行，插件照常可用。
 
 | 配置项 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `dnddicer_master_qq` | `str` | 空 | **骰主 QQ 号（单个）**：`.master` 反馈的唯一收件人。留空时 `.master` 回「骰主未配置」，不会转发<br>（不复用宿主 `SUPERUSERS`：那是骰主集合、可能有多个号，与「发给骰主本人」不是一回事） |
+| `dnddicer_master_qq` | `str` | 空 | **骰主 QQ 号（单个）**：`.master` 反馈的唯一收件人。留空时 `.master` 回「骰主未配置」，不转发<br>（不复用宿主 `SUPERUSERS`：那是超管集合、可能有多个号） |
 | `dnddicer_master_contact` | `str` | 空 | 骰主联系方式（自由文本，如 `QQ 12345678`），仅用于 `.help 联系` 展示；留空不显示该行 |
 | `dnddicer_master_group` | `str` | 空 | 骰主交流群群号（如 `87654321`），仅用于 `.help 联系` 展示；留空不显示该行 |
 

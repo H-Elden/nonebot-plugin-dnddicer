@@ -55,7 +55,7 @@ plugins = ["nonebot_plugin_dnddicer"]
 | `dnddicer_default_face` | `int` | `20` | 全局默认骰面（DND 惯例 D20；已配置 `.dset` 的群以群配置为准，此项作兜底） |
 | `dnddicer_enabled` | `bool` | `true` | 功能总开关，`false` 时只加载骨架、不注册命令 |
 | `dnddicer_use_host_command_starts` | `bool` | `false` | 是否兼容宿主 `COMMAND_START` 起始符（NoneBot 默认 `/`，开启后 `/.help` 等亦可触发）。默认只匹配 `.` / `。`，避免 `/help`、`/bot` 等常见单词命令与其他插件同时命中（冲突） |
-| `dnddicer_master_qq` | `str` | 空 | 骰主 QQ 号（**单个**）：`.master` 反馈的收件人，留空则 `.master` 回「骰主未配置」（不复用宿主 `SUPERUSERS`） |
+| `dnddicer_master_qq` | `str` | 空 | 骰主 QQ 号（**单个**）：`.master` 反馈的收件人，留空则 `.master` 回「骰主未配置」 |
 | `dnddicer_master_contact` | `str` | 空 | 骰主联系方式（自由文本），仅用于 `.help 联系` 展示，留空不显示该行 |
 | `dnddicer_master_group` | `str` | 空 | 骰主交流群群号，仅用于 `.help 联系` 展示，留空不显示该行 |
 
