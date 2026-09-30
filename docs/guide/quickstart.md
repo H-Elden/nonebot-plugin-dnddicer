@@ -174,6 +174,8 @@ DNDDICER_QUERY_SITE_URLS=["https://5echm.kagangtuya.top"]
 DNDDICER_QUERY_IMAGE_ENABLED=FALSE
 # # 词条正文默认形态（未设置过的地方是否出图）
 DNDDICER_QUERY_IMAGE_DEFAULT=FALSE
+# # 图片卡片字体家族（留空用内置字体栈）
+DNDDICER_QUERY_IMAGE_FONT_FAMILY=
 # # 单个端点的请求超时（秒）
 DNDDICER_QUERY_TIMEOUT=8.0
 # # 同一关键词的结果缓存时长（秒）
