@@ -90,7 +90,7 @@ _HELP = (
     "  清理：.hp del 名称（NPC）、.hp clr\n"
     "  武器写法：.hp 地精 -刺剑伤害（可加后缀）"
 )
-hp_matcher = base.on_dnd_command("hp", _HELP)
+hp_matcher = base.on_dnd_command("hp", _HELP, doc="guide/hp")
 
 
 # =========================================================================
@@ -102,7 +102,7 @@ _HELP_LONG_REST = (
     "  恢复生命值至上限、清除临时生命值、回复一半生命骰\n"
     "  @玩家 用于 DM 替不在场玩家收尾"
 )
-long_rest_matcher = base.on_dnd_command("长休", _HELP_LONG_REST)
+long_rest_matcher = base.on_dnd_command("长休", _HELP_LONG_REST, doc="guide/hp-advanced")
 
 
 # =========================================================================

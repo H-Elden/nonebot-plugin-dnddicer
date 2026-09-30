@@ -26,7 +26,7 @@ _HELP = (
     "  示例：.dset 100 ｜ .dset 2d6+3"
 )
 
-dset_matcher = base.on_dnd_command("dset", _HELP)
+dset_matcher = base.on_dnd_command("dset", _HELP, doc="guide/faq")
 
 
 @dset_matcher.handle()

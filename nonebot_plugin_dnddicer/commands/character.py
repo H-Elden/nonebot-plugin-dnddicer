@@ -52,14 +52,14 @@ _HELP = (
     "  看他人：.角色卡 @玩家 或 .角色卡 角色名\n"
     "  示例：.角色卡模板 ｜ .角色卡记录 <模板内容>"
 )
-char_matcher = base.on_dnd_command("角色卡", _HELP)
+char_matcher = base.on_dnd_command("角色卡", _HELP, doc="guide/character-card")
 
 _HELP_STATE = (
     ".状态 [@玩家]\n"
     "  查看当前 HP 与生命骰摘要\n"
     "  @玩家 查看他人（需该玩家已在本群建卡）"
 )
-state_matcher = base.on_dnd_command("状态", _HELP_STATE)
+state_matcher = base.on_dnd_command("状态", _HELP_STATE, doc="guide/hp")
 
 
 def _gen_template_feedback() -> str:

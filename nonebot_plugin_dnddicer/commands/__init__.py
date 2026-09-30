@@ -20,6 +20,7 @@
 - battle.py        战斗轮（.br/.ed/.回合/.轮次，已落地）
 - query.py         规则查询（.查询/.q + .搜索/.s/.检索，候选列表 + 数字选择，已落地）
 - bot.py           .bot 插件信息服务与群聊服务开关（2026-09-09 宿主新需求）
+- master.py        反馈给骰主（.master，群聊/私聊均可用，2026-09-30 落地）
 - group_config.py  群配置（默认骰面 .dset，已落地）
 - help.py          帮助（.帮助 / .help，已落地；须在其它命令之后导入以保持列表顺序）
 """
@@ -38,6 +39,7 @@ from . import query  # noqa: F401  # .查询/.搜索 规则查询（候选 + 数
 from . import query_atlas  # noqa: F401  # .查询法术 等速查子命令（8 条，速查索引）
 from . import atlas  # noqa: F401  # 速查索引编排 + .查询索引（骰主命令，隐藏）
 from . import bot  # noqa: F401  # .bot 插件信息与群聊服务开关
+from . import master  # noqa: F401  # .master 反馈给骰主（私聊转发）
 from . import help  # noqa: F401  # .帮助 / .help（须在其它命令之后导入以保持列表顺序）
 from . import roll_parse_args  # noqa: F401  # .r 参数解析（引擎同源）
 from . import text  # noqa: F401  # 反馈文案

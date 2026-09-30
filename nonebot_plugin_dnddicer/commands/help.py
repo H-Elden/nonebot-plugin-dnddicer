@@ -18,8 +18,10 @@
 因此 ``.help 查询`` 给「查询」组清单、``.help q`` 才是 ``.查询`` 命令详情。
 
 回复末尾的文档站链接行由 ``.help 链接 on/off`` 控制：**群聊默认关、私聊默认开**，
-按群 / 私聊分别持久（见 ``data/help_settings.py``）；``关于`` / ``联系`` / ``链接``
-三个入口自身带链接或联系方式，不再追加这一行。
+按群 / 私聊分别持久（见 ``data/help_settings.py``）；链接地址取**条目对应的文档页
+深链**（组清单与命令详情各带自己的 ``doc``，见 ``help_layout`` 与各命令模块的
+注册处），没有对应页时回落站点首页；``关于`` / ``联系`` / ``链接`` 三个入口自身
+带链接或联系方式，不再追加这一行。
 """
 
 from __future__ import annotations
@@ -33,6 +35,11 @@ from . import base, help_layout, text
 #: 插件元数据取不到时的仓库地址兜底（与 pyproject / __init__.py 同值）
 _REPO_URL_FALLBACK = "https://github.com/H-Elden/nonebot-plugin-dnddicer"
 
+#: 总览 / 目录入口的对应文档页（《命令总览》）
+_LANDING_DOC = "guide/overview"
+#: `.help 骰主` 的对应文档页（骰主指令目前只有 `.查询索引`，见站点《规则查询》）
+_MASTER_DOC = "guide/query"
+
 _HELP = (
     ".help [命令 | 分组 | 链接 | 关于 | 骰主 | 联系]\n"
     "  无参数：帮助总览；.help 命令：命令分组目录\n"
@@ -40,7 +47,9 @@ _HELP = (
     "  .help <命令>：命令详情（如 .help r、.help hp）"
 )
 
-help_matcher = base.on_dnd_command("help", _HELP, aliases=("帮助",))
+help_matcher = base.on_dnd_command(
+    "help", _HELP, aliases=("帮助",), doc="guide/overview"
+)
 
 
 def _chat_key(event: MessageEvent) -> str:
@@ -60,20 +69,29 @@ def _repo_url() -> str:
     return getattr(__plugin_meta__, "homepage", "") or _REPO_URL_FALLBACK
 
 
-async def _doc_line(event: MessageEvent) -> str:
-    """末尾的文档站链接行；本处开关关闭时返回空串（群聊默认关、私聊默认开）。"""
+async def _doc_line(event: MessageEvent, doc: str = "") -> str:
+    """末尾的文档站链接行；本处开关关闭时返回空串（群聊默认关、私聊默认开）。
+
+    ``doc`` 为条目对应的文档页站内相对路径（如 ``guide/hp``）；留空回落站点首页。
+    """
     group_id = getattr(event, "group_id", None)
     enabled = await help_settings.is_link_enabled(
         _chat_key(event), default=group_id is None
     )
     if not enabled:
         return ""
-    return text.TXT_HELP_DOC_LINE.format(url=text.TXT_HELP_DOCS_BASE)
+    return text.TXT_HELP_DOC_LINE.format(url=_doc_url(doc))
 
 
-async def _with_doc_line(body: str, event: MessageEvent) -> str:
-    """按本处开关给回复补上文档站链接行。"""
-    line = await _doc_line(event)
+def _doc_url(doc: str) -> str:
+    """文档站地址：有对应页给深链，没有则给站点首页。"""
+    page = (doc or "").strip().strip("/")
+    return f"{text.TXT_HELP_DOCS_BASE}/{page}" if page else text.TXT_HELP_DOCS_BASE
+
+
+async def _with_doc_line(body: str, event: MessageEvent, doc: str = "") -> str:
+    """按本处开关给回复补上文档站链接行（``doc`` 为对应文档页）。"""
+    line = await _doc_line(event, doc)
     return f"{body}\n{line}" if line else body
 
 
@@ -93,12 +111,16 @@ async def _handle_link(event: MessageEvent, action: str) -> str:
 
 
 def _render_contact() -> str:
-    """``.help 联系``：固定两行 + 两个可选行（配置为空则不显示）。"""
+    """``.help 联系``：固定两行 + 两个可选行（配置为空则不显示）。
+
+    两个可选行取自配置 ``dnddicer_master_contact``（骰主联系方式）与
+    ``dnddicer_master_group``（骰主交流群），顺序固定；骰主 QQ
+    （``dnddicer_master_qq``）是 ``.master`` 的投递地址，不在此展示。
+    """
     from ..config import get_config
 
     lines = [text.TXT_HELP_CONTACT]
     config = get_config()
-    # 两个配置项随下一批次落地（当前未定义，按未配置处理 = 不显示这两行）
     contact = getattr(config, "dnddicer_master_contact", "") or ""
     group = getattr(config, "dnddicer_master_group", "") or ""
     if contact:
@@ -108,16 +130,16 @@ def _render_contact() -> str:
     return "\n".join(lines)
 
 
-def _find_command(keyword: str) -> str:
-    """按命令名 / 别名查详情文案（大小写不敏感；骰主命令也查得到）。"""
+def _find_command(keyword: str) -> tuple[str, str]:
+    """按命令名 / 别名查详情文案与对应文档页（大小写不敏感；骰主命令也查得到）。"""
     commands = base.get_registered_commands(include_hidden=True)
     if keyword in commands:
-        return commands[keyword]
+        return commands[keyword], base.get_command_doc(keyword)
     lowered = keyword.lower()
     for name, description in commands.items():
         if name.lower() == lowered:
-            return description
-    return ""
+            return description, base.get_command_doc(name)
+    return "", ""
 
 
 @help_matcher.handle()
@@ -125,10 +147,10 @@ async def handle_help(event: MessageEvent) -> None:
     """处理 .help / .帮助。"""
     keyword = (base.get_command_rest(event) or "").strip()
 
-    # ① 无参数：总览
+    # ① 无参数：总览（对应《命令总览》页）
     if not keyword:
         body = text.TXT_HELP_LANDING.format(version=__version__)
-        await help_matcher.finish(await _with_doc_line(body, event))
+        await help_matcher.finish(await _with_doc_line(body, event, _LANDING_DOC))
 
     first, _, action = keyword.partition(" ")
     action = action.strip()
@@ -137,7 +159,9 @@ async def handle_help(event: MessageEvent) -> None:
     if first == help_layout.LINK_KEYWORD:
         await help_matcher.finish(await _handle_link(event, action))
     if help_layout.is_catalog_keyword(first):
-        await help_matcher.finish(await _with_doc_line(text.TXT_HELP_CATALOG, event))
+        await help_matcher.finish(
+            await _with_doc_line(text.TXT_HELP_CATALOG, event, _LANDING_DOC)
+        )
     if first == help_layout.ABOUT_KEYWORD:
         body = text.TXT_HELP_ABOUT.format(
             version=__version__,
@@ -146,24 +170,27 @@ async def handle_help(event: MessageEvent) -> None:
         )
         await help_matcher.finish(body)
     if first == help_layout.MASTER_KEYWORD:
-        await help_matcher.finish(await _with_doc_line(text.TXT_HELP_MASTER, event))
+        await help_matcher.finish(
+            await _with_doc_line(text.TXT_HELP_MASTER, event, _MASTER_DOC)
+        )
     if first == help_layout.CONTACT_KEYWORD:
         await help_matcher.finish(_render_contact())
 
     # ③ 组名 / 组别名：该组命令清单
     group = help_layout.find_group(keyword)
     if group is not None:
-        await help_matcher.finish(await _with_doc_line("\n".join(group[1]), event))
+        name, lines, doc = group
+        await help_matcher.finish(await _with_doc_line("\n".join(lines), event, doc))
 
     # ④ 命令名 / 别名：命令详情
-    detail = _find_command(keyword)
+    detail, doc = _find_command(keyword)
     if detail:
-        await help_matcher.finish(await _with_doc_line(detail, event))
+        await help_matcher.finish(await _with_doc_line(detail, event, doc))
 
     # ⑤ 只进帮助的条目（检定点 / 豁免 / 先攻检定 / 武器命令族 / .master）
     entry = help_layout.find_help_only(keyword)
     if entry is not None:
-        await help_matcher.finish(await _with_doc_line(entry.text, event))
+        await help_matcher.finish(await _with_doc_line(entry.text, event, entry.doc))
 
     # ⑥ 未命中
     await help_matcher.finish(

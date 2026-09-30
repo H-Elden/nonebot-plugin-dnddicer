@@ -961,14 +961,18 @@ _HELP_SET_WEAPON = (
     "  示例：.设置武器 短剑+6,1d4+4穿刺\n"
     "  示例：.设置武器 火球术x,8d6火焰"
 )
-set_weapon_matcher = base.on_dnd_command("设置武器", _HELP_SET_WEAPON)
+set_weapon_matcher = base.on_dnd_command(
+    "设置武器", _HELP_SET_WEAPON, doc="guide/weapons"
+)
 
 _HELP_DEL_WEAPON = (
     ".删除武器 名称 （多个用 / 分隔）\n"
     "  删除卡上武器，名称支持模糊匹配\n"
     "  未找到或名称不明确时逐项回报"
 )
-del_weapon_matcher = base.on_dnd_command("删除武器", _HELP_DEL_WEAPON)
+del_weapon_matcher = base.on_dnd_command(
+    "删除武器", _HELP_DEL_WEAPON, doc="guide/weapons"
+)
 
 
 @set_weapon_matcher.handle()

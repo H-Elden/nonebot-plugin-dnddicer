@@ -459,6 +459,25 @@ TXT_INDEX_REFRESH_DONE = "索引重建完成：\n{details}"
 TXT_INDEX_REFRESH_FAILED = "索引重建失败：站点不可达或解析异常，已保留原索引。"
 TXT_INDEX_REFRESH_KEPT = "（新构建条目数异常，已保留原数据）"
 
+# ── 反馈给骰主 .master（2026-09-30 新增；群聊/私聊均可用）──────────────────
+#: 转发明细（骰娘私聊骰主）：来源行 + 消息正文
+TXT_MASTER_FORWARD = "【骰娘反馈】来自{source}\n{body}"
+#: 来源行：群聊带群号、群名片（或昵称）与 QQ 号
+TXT_MASTER_SOURCE_GROUP = "群 {group}（{name} / QQ {qq}）"
+#: 来源行：群聊但取不到群名片/昵称
+TXT_MASTER_SOURCE_GROUP_NO_NAME = "群 {group}（QQ {qq}）"
+#: 来源行：私聊
+TXT_MASTER_SOURCE_PRIVATE = "私聊（QQ {qq}）"
+#: 正文超长时的截断标注（接在被截断的正文末尾）
+TXT_MASTER_TRUNCATED = "（已截断）"
+#: 空参数用法
+TXT_MASTER_USAGE = "用法：.master <消息>（把你的意见发给骰主）"
+#: 发送成功；骰主未配置 QQ；投递失败；频率限制（{seconds} 为剩余秒数）
+TXT_MASTER_SENT = "已发送给骰主，感谢反馈。"
+TXT_MASTER_NOT_CONFIGURED = "骰主未配置，暂时发不出去。"
+TXT_MASTER_SEND_FAILED = "消息没能发出去，骰主可能还没加骰娘好友。"
+TXT_MASTER_RATE_LIMITED = "发送太频繁了，请 {seconds} 秒后再试。"
+
 # ── 速查子命令（.查询法术 / .查询怪物 / …，2026-09-26）────────────────
 #: 子命令用法提示（{kind} 类型名、{example} 示例）
 TXT_ATLAS_USAGE = "用法：.查询{kind} <名称>（如 {example}）"

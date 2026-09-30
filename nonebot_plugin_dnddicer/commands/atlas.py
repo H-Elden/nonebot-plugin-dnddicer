@@ -159,6 +159,7 @@ index_matcher = base.on_dnd_command(
     aliases=("qatlas",),
     hidden=True,
     private_superuser=True,
+    doc="guide/query",
 )
 
 #: 中文类型名 → 类别键

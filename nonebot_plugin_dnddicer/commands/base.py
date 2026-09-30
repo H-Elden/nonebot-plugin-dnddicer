@@ -40,20 +40,44 @@ _BUILTIN_STARTS: tuple[str, ...] = (".", "。")
 #: 已注册命令名 → 说明文案（供匹配与 .帮助 使用）
 _REGISTRY: dict[str, str] = {}
 
+#: 已注册命令名 → 文档站相对路径（如 ``guide/hp``；空串 = 站点首页）
+_DOCS: dict[str, str] = {}
+
 #: 隐藏命令名：注册进匹配表（命令照常可用），但不进 .帮助 列表与详情
 _HIDDEN: set[str] = set()
 
 
-def register_command(name: str, description: str = "", *, hidden: bool = False) -> None:
+def register_command(
+    name: str, description: str = "", *, hidden: bool = False, doc: str = ""
+) -> None:
     """注册一条命令名（重复注册同名时保留先注册者）。
 
     ``hidden=True`` 的命令照常参与匹配，但 ``get_registered_commands`` 不返回，
     因此不出现在 ``.帮助`` 列表与 ``.help <名>`` 详情里（骰主命令等内部命令用）。
+
+    ``doc`` 为该命令对应文档站页面的**站内相对路径**（如 ``guide/hp``），
+    ``.help <名>`` 详情末尾的链接行据此生成深链；留空表示没有对应页、
+    链接行回落到站点首页（见 ``commands/help.py``）。
     """
     if name not in _REGISTRY:
         _REGISTRY[name] = description
+        _DOCS[name] = doc
     if hidden:
         _HIDDEN.add(name)
+
+
+def get_command_doc(name: str) -> str:
+    """返回命令对应的文档站相对路径（未登记或留空时为 ``""`` = 站点首页）。
+
+    大小写不敏感（命令名匹配本就是大小写不敏感）；未注册的命令名返回空串。
+    """
+    if name in _DOCS:
+        return _DOCS[name]
+    lowered = name.lower()
+    for registered, doc in _DOCS.items():
+        if registered.lower() == lowered:
+            return doc
+    return ""
 
 
 def get_registered_commands(*, include_hidden: bool = False) -> dict[str, str]:
@@ -212,6 +236,7 @@ def on_dnd_command(
     require_to_me: bool = False,
     hidden: bool = False,
     private_superuser: bool = False,
+    doc: str = "",
 ) -> Matcher:
     """创建一条 DNDDicer 点前缀命令的事件响应器并注册命令名。
 
@@ -225,13 +250,15 @@ def on_dnd_command(
         hidden: 是否列入「隐藏命令」（照常匹配，但不进 .帮助 列表与详情）。
         private_superuser: 是否仅私聊命中（群聊静默不响应）；命令处理层需
             自行调用 ``guard_superuser`` 判定骰主身份并给非骰主提示。
+        doc: 命令对应文档站页面的站内相对路径（如 ``guide/hp``）；别名沿用
+            同一路径，留空表示回落到站点首页（见 ``register_command``）。
 
     Returns:
         可直接挂 ``@matcher.handle()`` 的 Matcher。
     """
-    register_command(name, description, hidden=hidden)
+    register_command(name, description, hidden=hidden, doc=doc)
     for alias in aliases:
-        register_command(alias, description, hidden=hidden)
+        register_command(alias, description, hidden=hidden, doc=doc)
 
     names = (name, *aliases)
     rule = command_rule(*names)

@@ -2,7 +2,8 @@
 
 覆盖：总览、`命令` 目录（含静默别名）、组名与组别名、命令详情、只进帮助的条目
 （检定点 / 豁免 / 武器命令族）、`链接`（含 on/off 开关）、`关于` / `骰主` / `联系`、
-未命中；以及「群聊默认不带文档站链接行、私聊默认带」这一口径。
+未命中；「群聊默认不带文档站链接行、私聊默认带」这一口径；以及链接行的**文档页
+深链**（每条回复指向自己的文档页，无对应页回落首页，2026-09-30 批次 A）。
 """
 
 import pytest
@@ -12,11 +13,18 @@ from nonebot.adapters.onebot.v11 import Bot, Message
 
 from fake_event import fake_group_message_event_v11, fake_private_message_event_v11
 
+from nonebot_plugin_dnddicer.commands import base, help_layout
 from nonebot_plugin_dnddicer.commands import text as cmd_text
 from nonebot_plugin_dnddicer.commands.help import help_matcher
 from nonebot_plugin_dnddicer.version import __version__
 
-_DOC_LINE = "帮助文档：https://dnddicer.netlify.app"
+#: 文档站首页链接行（无对应文档页的条目回落于此）
+_HOME_LINE = f"帮助文档：{cmd_text.TXT_HELP_DOCS_BASE}"
+
+
+def _doc_line(page: str) -> str:
+    """指定文档页的链接行（如 ``guide/hp``）。"""
+    return f"帮助文档：{cmd_text.TXT_HELP_DOCS_BASE}/{page}"
 
 
 async def _expect(app: App, matcher, event, expected: str):
@@ -104,7 +112,7 @@ _HP_DETAIL = (
 
 _LINK_ENTRY = (
     "【相关链接】\n"
-    f"{_DOC_LINE}\n"
+    f"{_HOME_LINE}\n"
     "5e不全书：https://5echm.kagangtuya.top\n"
     "【相关命令】\n"
     ".help 链接 on/off\n"
@@ -143,8 +151,8 @@ async def test_landing_group_without_doc_line(app: App):
 
 @pytest.mark.asyncio
 async def test_landing_private_with_doc_line(app: App):
-    """私聊无参数 .help：默认带文档站链接行。"""
-    await _expect_private(app, ".help", f"{_LANDING}\n{_DOC_LINE}")
+    """私聊无参数 .help：默认带文档站链接行（指向《命令总览》）。"""
+    await _expect_private(app, ".help", f"{_LANDING}\n{_doc_line('guide/overview')}")
 
 
 @pytest.mark.asyncio
@@ -181,8 +189,80 @@ async def test_group_takes_precedence_over_command(app: App):
 
 @pytest.mark.asyncio
 async def test_group_listing_with_doc_line_in_private(app: App):
-    """私聊组清单：末尾补文档站链接行。"""
-    await _expect_private(app, ".help 生命", f"{_LIFE_GROUP}\n{_DOC_LINE}")
+    """私聊组清单：末尾补文档站链接行（指向该组对应的文档页）。"""
+    await _expect_private(app, ".help 生命", f"{_LIFE_GROUP}\n{_doc_line('guide/hp')}")
+
+
+# ── 文档页深链（批次 A）──────────────────────────────────────────────────
+
+
+def _reply_body(keyword: str) -> str:
+    """取该入口的期望正文（分组清单 / 命令详情 / 只进帮助条目 / 骰主入口）。
+
+    只用于深链用例——正文本身由其它用例逐字断言；这里从注册表与版式表取，
+    避免在测试里抄一遍文案（若分派走了别的分支，正文对不上即失败）。
+    """
+    if keyword == "骰主":
+        return cmd_text.TXT_HELP_MASTER
+    if help_layout.is_catalog_keyword(keyword):
+        return cmd_text.TXT_HELP_CATALOG
+    group = help_layout.find_group(keyword)
+    if group is not None:
+        return "\n".join(group[1])
+    for name, description in base.get_registered_commands(include_hidden=True).items():
+        if name.lower() == keyword.lower():
+            return description
+    entry = help_layout.find_help_only(keyword)
+    assert entry is not None, f"「{keyword}」既不是分组也不是命令"
+    return entry.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("keyword", "page"),
+    [
+        ("命令", "guide/overview"),
+        ("骰主", "guide/query"),
+        ("掷骰", "guide/roll-basics"),
+        ("角色", "guide/character-card"),
+        ("武器", "guide/weapons"),
+        ("先攻", "guide/initiative"),
+        ("查询", "guide/query"),
+        ("管理", "guide/faq"),
+        ("dnd", "guide/character-card"),
+        ("状态", "guide/hp"),
+        ("长休", "guide/hp-advanced"),
+        ("npc", "guide/hp"),
+        ("ri", "guide/initiative"),
+        ("br", "guide/battle"),
+        ("查询范围", "guide/query-scope"),
+        ("规则书", "guide/query-scope"),
+        ("dset", "guide/faq"),
+        ("bot", "guide/faq"),
+        ("master", "guide/faq"),
+        ("查询索引", "guide/query"),
+        ("检定", "guide/checks"),
+        ("豁免", "guide/checks"),
+        ("先攻检定", "guide/initiative"),
+        ("刺剑伤害", "guide/weapons"),
+    ],
+)
+async def test_doc_deep_link(app: App, keyword: str, page: str):
+    """私聊各入口的链接行指向各自对应的文档页（2026-09-30 定稿的映射）。"""
+    await _expect_private(
+        app, f".help {keyword}", f"{_reply_body(keyword)}\n{_doc_line(page)}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_doc_link_falls_back_to_home():
+    """未登记文档页的条目（``doc`` 为空）：链接行回落站点首页。"""
+    from nonebot_plugin_dnddicer.commands import help as help_module
+
+    assert help_module._doc_url("") == cmd_text.TXT_HELP_DOCS_BASE
+    assert help_module._doc_url("guide/hp") == _doc_line("guide/hp").removeprefix(
+        "帮助文档："
+    )
 
 
 # ── 命令详情 ────────────────────────────────────────────────────────────
@@ -263,7 +343,7 @@ async def test_link_switch(app: App):
     """.help 链接 on/off：控制本处帮助回复末尾的文档站链接行（按处持久）。"""
     await _expect_group(app, ".help 链接 on", cmd_text.TXT_HELP_LINK_ON)
     try:
-        await _expect_group(app, ".help r", f"{_R_DETAIL}\n{_DOC_LINE}")
+        await _expect_group(app, ".help r", f"{_R_DETAIL}\n{_doc_line('guide/roll-basics')}")
     finally:
         await _expect_group(app, ".help 链接 off", cmd_text.TXT_HELP_LINK_OFF)
     await _expect_group(app, ".help r", _R_DETAIL)
@@ -295,21 +375,61 @@ async def test_contact_without_config(app: App):
     await _expect_group(app, ".help 联系", _CONTACT)
 
 
-@pytest.mark.asyncio
-async def test_contact_with_config(app: App, monkeypatch: pytest.MonkeyPatch):
-    """.help 联系：配置了联系方式与交流群时补上两行。"""
+def _patch_master_config(
+    monkeypatch: pytest.MonkeyPatch, **fields: str
+) -> None:
+    """把插件配置替换为带指定骰主字段的真实 ``Config`` 实例。"""
     from nonebot_plugin_dnddicer import config as config_module
 
-    class _StubConfig:
-        dnddicer_master_contact = "QQ 123456"
-        dnddicer_master_group = "987654321"
+    monkeypatch.setattr(
+        config_module, "get_config", lambda: config_module.Config(**fields)
+    )
 
-    monkeypatch.setattr(config_module, "get_config", lambda: _StubConfig())
+
+@pytest.mark.asyncio
+async def test_contact_with_contact_only(app: App, monkeypatch: pytest.MonkeyPatch):
+    """.help 联系：只配联系方式时只多一行。"""
+    _patch_master_config(monkeypatch, dnddicer_master_contact="QQ 12345678")
+    await _expect_group(app, ".help 联系", f"{_CONTACT}\n骰主联系方式：QQ 12345678")
+
+
+@pytest.mark.asyncio
+async def test_contact_with_group_only(app: App, monkeypatch: pytest.MonkeyPatch):
+    """.help 联系：只配交流群时只多一行。"""
+    _patch_master_config(monkeypatch, dnddicer_master_group="87654321")
+    await _expect_group(app, ".help 联系", f"{_CONTACT}\n骰主交流群：87654321")
+
+
+@pytest.mark.asyncio
+async def test_contact_with_config(app: App, monkeypatch: pytest.MonkeyPatch):
+    """.help 联系：两项都配时两行齐全，顺序固定（联系方式 → 交流群）。"""
+    _patch_master_config(
+        monkeypatch,
+        dnddicer_master_contact="QQ 12345678",
+        dnddicer_master_group="87654321",
+    )
     await _expect_group(
         app,
         ".help 联系",
-        f"{_CONTACT}\n骰主联系方式：QQ 123456\n骰主交流群：987654321",
+        f"{_CONTACT}\n骰主联系方式：QQ 12345678\n骰主交流群：87654321",
     )
+
+
+@pytest.mark.asyncio
+async def test_contact_hides_master_qq(app: App, monkeypatch: pytest.MonkeyPatch):
+    """.help 联系：只配骰主 QQ 不因此多出行（QQ 是投递地址，不外显）。"""
+    _patch_master_config(monkeypatch, dnddicer_master_qq="10001")
+    await _expect_group(app, ".help 联系", _CONTACT)
+
+
+def test_master_config_fields_default_empty() -> None:
+    """三个骰主配置项存在且默认均为空（零配置可加载）。"""
+    from nonebot_plugin_dnddicer.config import Config
+
+    config = Config()
+    assert config.dnddicer_master_qq == ""
+    assert config.dnddicer_master_contact == ""
+    assert config.dnddicer_master_group == ""
 
 
 # ── 未命中 ──────────────────────────────────────────────────────────────

@@ -6,14 +6,22 @@
 - 详情每行 ≤ 40 字、整条 ≤ 6 行（含末尾链接行）；
 - 总览 / 目录 / 链接 / 关于 / 骰主 / 联系各有行数上限；
 - 组清单里出现的命令写法必须真实存在（已注册命令，或只进帮助的条目标签），
-  避免文案与命令表脱节。
+  避免文案与命令表脱节；
+- 每条回复登记的文档页（``doc``）必须真实存在于 ``docs/``，杜绝死链（批次 A）。
 """
+
+from pathlib import Path
 
 import pytest
 
 from nonebot_plugin_dnddicer.commands import base, help_layout
 from nonebot_plugin_dnddicer.commands import text as cmd_text
 from nonebot_plugin_dnddicer.version import __version__
+
+#: 仓库根（用于校验 ``doc`` 指向的站点页面真实存在）
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+#: 站点文档目录
+_DOCS_DIR = _REPO_ROOT / "docs"
 
 #: 组清单每行字数上限
 _GROUP_LINE_LIMIT = 30
@@ -60,7 +68,7 @@ def _command_token(line: str) -> str:
 
 def test_group_line_and_total_limits():
     """组清单行数与每行字数上限。"""
-    for name, lines in help_layout.HELP_GROUPS:
+    for name, lines, _doc in help_layout.HELP_GROUPS:
         assert len(lines) + 1 <= _GROUP_TOTAL_LIMIT, f"「{name}」组清单过长"
         for line in lines:
             assert len(line) <= _GROUP_LINE_LIMIT, f"「{name}」组清单行过长：{line}"
@@ -68,7 +76,7 @@ def test_group_line_and_total_limits():
 
 def test_group_lines_reference_real_commands():
     """组清单里出现的命令写法必须真实存在（避免文案与命令表脱节）。"""
-    for name, lines in help_layout.HELP_GROUPS:
+    for name, lines, _doc in help_layout.HELP_GROUPS:
         for line in lines:
             if line.startswith(_NON_COMMAND_PREFIXES):
                 continue
@@ -78,7 +86,7 @@ def test_group_lines_reference_real_commands():
 
 def test_group_lines_use_comment_style():
     """组清单的命令行统一「命令[参数]　#短说明」写法（标题与提示行例外）。"""
-    for name, lines in help_layout.HELP_GROUPS:
+    for name, lines, _doc in help_layout.HELP_GROUPS:
         for line in lines:
             if line.startswith(_NON_COMMAND_PREFIXES):
                 continue
@@ -134,7 +142,7 @@ def test_entry_limits():
 def test_catalog_lists_every_group():
     """目录逐组列全，且关键词与分组表一致。"""
     catalog = cmd_text.TXT_HELP_CATALOG
-    for name, _ in help_layout.HELP_GROUPS:
+    for name, _lines, _doc in help_layout.HELP_GROUPS:
         assert f".help {name} " in catalog, f"目录缺少分组「{name}」"
 
 
@@ -162,6 +170,43 @@ def test_catalog_keywords(keyword: str):
 def test_no_emoji_in_replies_except_warning():
     """除分组前置提示的 ⚠️ 外，帮助文案不带表情符号（保持纯文本可读）。"""
     blobs = [cmd_text.TXT_HELP_LANDING, cmd_text.TXT_HELP_CATALOG, cmd_text.TXT_HELP_LINK]
-    blobs += [line for _, lines in help_layout.HELP_GROUPS for line in lines]
+    blobs += [line for _name, lines, _doc in help_layout.HELP_GROUPS for line in lines]
     for blob in blobs:
         assert "⚠️" not in blob or blob.startswith("⚠️")
+
+
+# ── 文档页深链（批次 A）──────────────────────────────────────────────────
+
+
+def _registered_docs() -> dict[str, str]:
+    """全部登记文档页的条目名 → 站内相对路径（命令 + 分组 + 只进帮助条目）。"""
+    docs = {
+        name: base.get_command_doc(name)
+        for name in base.get_registered_commands(include_hidden=True)
+    }
+    docs.update({name: doc for name, _lines, doc in help_layout.HELP_GROUPS})
+    docs.update({entry.name: entry.doc for entry in help_layout.HELP_ONLY_ENTRIES})
+    return docs
+
+
+def test_registered_docs_exist():
+    """每个登记的文档页都必须真实存在（``docs/<path>.md``），杜绝死链。"""
+    for name, doc in _registered_docs().items():
+        if not doc:
+            continue  # 留空 = 无对应页，链接行回落站点首页
+        assert doc.startswith("guide/"), f"「{name}」的文档页不在 guide/ 下：{doc}"
+        assert (_DOCS_DIR / f"{doc}.md").is_file(), f"「{name}」的文档页不存在：{doc}"
+
+
+def test_group_docs_registered():
+    """7 个分组都要登记文档页（组清单末尾的链接行据此生成深链）。"""
+    for name, _lines, doc in help_layout.HELP_GROUPS:
+        assert doc, f"分组「{name}」未登记文档页"
+
+
+def test_help_only_docs_registered():
+    """按消息模式触发的条目都要登记文档页（``.master`` 暂无对应页，留空）。"""
+    for entry in help_layout.HELP_ONLY_ENTRIES:
+        if entry.name == "master":
+            continue
+        assert entry.doc, f"条目「{entry.name}」未登记文档页"

@@ -245,6 +245,6 @@ async def test_help_detail_hides_superuser_command(app: App):
     detail = base.get_registered_commands(include_hidden=True)["查询索引"]
     assert detail.startswith(".查询索引")
     assert "查询索引" not in base.get_registered_commands()
-    for _, lines in help_layout.HELP_GROUPS:
+    for _name, lines, _doc in help_layout.HELP_GROUPS:
         assert not any("查询索引" in line for line in lines)
     await _expect(app, help_matcher, _group_event(".help 查询索引"), detail)

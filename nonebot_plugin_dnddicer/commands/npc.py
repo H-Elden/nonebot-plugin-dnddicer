@@ -28,7 +28,7 @@ _HELP = (
     "  临时：恢复默认（每次新入先攻表自动回满）\n"
     "  名称可写一部分；血量先用 .hp 名称 当前/最大 建立"
 )
-npc_matcher = base.on_dnd_command("npc", _HELP)
+npc_matcher = base.on_dnd_command("npc", _HELP, doc="guide/hp")
 
 
 @npc_matcher.handle()

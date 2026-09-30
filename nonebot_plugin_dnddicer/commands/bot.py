@@ -26,7 +26,7 @@ _HELP = (
     "  未开启的群仅 .bot 可用；私聊不受开关限制"
 )
 
-bot_matcher = base.on_dnd_command("bot", _HELP, require_to_me=True)
+bot_matcher = base.on_dnd_command("bot", _HELP, require_to_me=True, doc="guide/faq")
 
 
 async def _build_info(event: MessageEvent) -> str:

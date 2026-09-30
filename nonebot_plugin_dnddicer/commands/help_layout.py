@@ -3,13 +3,17 @@
 分工：
 
 - **本模块**放结构性与整块文案：分组清单行、只进帮助的条目（``.[属性]检定`` /
-  ``.武器名攻击`` 这类按消息模式触发的写法、以及下一批次才实现的 ``.master``）；
+  ``.武器名攻击`` 这类按消息模式触发的写法）；
 - ``commands/text.py`` 放总览 / 目录 / 链接 / 关于 / 骰主 / 联系 / 未命中等单块文案；
 - 各命令自己的详情文案仍在各自模块的 ``_HELP``（``.help <命令>`` 直接返回）。
 
 版式（用户手改稿定稿）：组清单一律「命令[参数]　#短说明」单行式，每行 ≤ 30 字；
 需要先记录角色卡的分组在行首加一行 ``⚠️以下命令需要先记录角色卡：``；
 组清单整体 ≤ 10 行（含标题与末尾的文档站链接行，链接行由渲染层追加）。
+
+每条分组与只进帮助的条目还带一个 ``doc``（文档站页面的站内相对路径，如
+``guide/hp``）：回复末尾的链接行据此给出**对应页深链**，留空则回落站点首页
+（见 ``commands/help.py``）。已注册命令的 ``doc`` 登记在各命令模块的注册处。
 """
 
 from __future__ import annotations
@@ -17,8 +21,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
-#: 帮助的分组：关键词（``.help <关键词>`` 用它）→ 该组清单的展示行
-HELP_GROUPS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
+#: 帮助的分组：关键词（``.help <关键词>`` 用它）→ 该组清单的展示行 → 对应文档页。
+#: 文档页为站内相对路径（如 ``guide/hp``），组清单末尾的链接行据此生成深链。
+HELP_GROUPS: Tuple[Tuple[str, Tuple[str, ...], str], ...] = (
     (
         "掷骰",
         (
@@ -27,6 +32,7 @@ HELP_GROUPS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
             ".dnd[次数] [原因]　#不绑定属性生成",
             ".dndx[次数] [原因]　#绑定属性生成",
         ),
+        "guide/roll-basics",
     ),
     (
         "角色",
@@ -42,6 +48,7 @@ HELP_GROUPS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
             ".[技能]检定[优势|劣势]　#进行技能检定",
             ".[属性]豁免[优势|劣势]　#进行豁免检定",
         ),
+        "guide/character-card",
     ),
     (
         "武器",
@@ -56,6 +63,7 @@ HELP_GROUPS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
             ".武器名伤害[后缀]　#掷武器伤害",
             "后缀支持：副手/重击/偷袭等",
         ),
+        "guide/weapons",
     ),
     (
         "生命",
@@ -67,6 +75,7 @@ HELP_GROUPS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
             ".长休 [@玩家]　#长休结算",
             ".npc 持久/临时 名称　#NPC血量跨战斗保持开关",
         ),
+        "guide/hp",
     ),
     (
         "先攻",
@@ -81,6 +90,7 @@ HELP_GROUPS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
             ".回合 / .轮次　#查看 / 修改回合与轮次",
             ".ed / .结束　#结束当前回合并推进",
         ),
+        "guide/initiative",
     ),
     (
         "查询",
@@ -93,6 +103,7 @@ HELP_GROUPS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
             ".查询范围 [缩写|全部]　#收窄可查书目",
             ".规则书　#书目缩写与中文名对照",
         ),
+        "guide/query",
     ),
     (
         "管理",
@@ -101,6 +112,7 @@ HELP_GROUPS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
             ".dset [表达式]　#设置/查看本群默认骰面",
             ".bot [on|off]　#本群服务开关，需@",
         ),
+        "guide/faq",
     ),
 )
 
@@ -139,15 +151,17 @@ class HelpOnlyEntry:
 
     ``tokens`` 用于包含式匹配（``.help 力量检定`` → 检定条目）：先按名称/别名
     精确命中，未命中时取**最长**被包含的 token（``先攻检定`` 优先于 ``检定``）。
+    ``doc`` 为对应文档页的站内相对路径（空串 = 站点首页）。
     """
 
     name: str
     text: str
     tokens: Tuple[str, ...] = ()
+    doc: str = ""
 
 
-#: 只进帮助的条目：检定点 / 豁免 / 先攻检定 / 武器攻击 / 武器伤害（按消息模式触发），
-#: 以及下一批次才实现的 .master（帮助文案先按定稿落地）
+#: 只进帮助的条目：检定点 / 豁免 / 先攻检定 / 武器攻击 / 武器伤害（按消息模式触发）。
+#: ``.master`` 曾暂列于此，2026-09-30 起已实现为正式命令（见 commands/master.py）。
 HELP_ONLY_ENTRIES: Tuple[HelpOnlyEntry, ...] = (
     HelpOnlyEntry(
         "检定",
@@ -157,6 +171,7 @@ HELP_ONLY_ENTRIES: Tuple[HelpOnlyEntry, ...] = (
         "  属性 6 项、技能 18 项（如 隐匿、察觉、运动）\n"
         "  示例：.力量检定 ｜ .敏捷检定优势+d4 ｜ .隐匿检定",
         tokens=("检定",),
+        doc="guide/checks",
     ),
     HelpOnlyEntry(
         "豁免",
@@ -165,6 +180,7 @@ HELP_ONLY_ENTRIES: Tuple[HelpOnlyEntry, ...] = (
         "  不做 DC 判定；需先记录角色卡\n"
         "  示例：.力量豁免 ｜ .体质豁免+d4 ｜ .3#敏捷豁免优势",
         tokens=("豁免",),
+        doc="guide/checks",
     ),
     HelpOnlyEntry(
         "先攻检定",
@@ -173,6 +189,7 @@ HELP_ONLY_ENTRIES: Tuple[HelpOnlyEntry, ...] = (
         "  @玩家 以该玩家角色卡名入表并绑定\n"
         "  示例：.先攻检定 ｜ .先攻检定优势 ｜ .先攻检定 @玩家",
         tokens=("先攻检定",),
+        doc="guide/initiative",
     ),
     HelpOnlyEntry(
         "武器攻击",
@@ -182,6 +199,7 @@ HELP_ONLY_ENTRIES: Tuple[HelpOnlyEntry, ...] = (
         "  天然 20 提示重击，天然 1 提示必失\n"
         "  示例：.刺剑攻击 ｜ .2#刺剑攻击+2 ｜ .匕首命中优势",
         tokens=("武器名攻击", "武器名命中", "武器攻击", "武器命中", "攻击", "命中"),
+        doc="guide/weapons",
     ),
     HelpOnlyEntry(
         "武器伤害",
@@ -191,30 +209,28 @@ HELP_ONLY_ENTRIES: Tuple[HelpOnlyEntry, ...] = (
         "  多件武器一次结算：.刺剑伤害、匕首副手伤害\n"
         "  示例：.刺剑重击伤害+1d6 ｜ .火球术伤害 @玩家",
         tokens=("武器名伤害", "武器伤害", "伤害"),
-    ),
-    HelpOnlyEntry(
-        "master",
-        ".master <消息>\n"
-        "  给骰主发送消息（反馈问题或建议）\n"
-        "  骰主会看到你的 QQ 号与群号",
+        doc="guide/weapons",
     ),
 )
 
 
-def find_group(keyword: str) -> Optional[Tuple[str, Tuple[str, ...]]]:
-    """按分组关键词或静默别名查分组（大小写不敏感；未命中返回 None）。"""
+def find_group(keyword: str) -> Optional[Tuple[str, Tuple[str, ...], str]]:
+    """按分组关键词或静默别名查分组（大小写不敏感；未命中返回 None）。
+
+    返回 ``(组名, 清单行, 文档页)``。
+    """
     key = (keyword or "").strip()
     if not key:
         return None
     lowered = key.lower()
-    for name, lines in HELP_GROUPS:
+    for name, lines, doc in HELP_GROUPS:
         if name.lower() == lowered:
-            return name, lines
+            return name, lines, doc
     for alias, target in GROUP_SYNONYMS:
         if alias.lower() == lowered:
-            for name, lines in HELP_GROUPS:
+            for name, lines, doc in HELP_GROUPS:
                 if name == target:
-                    return name, lines
+                    return name, lines, doc
     return None
 
 

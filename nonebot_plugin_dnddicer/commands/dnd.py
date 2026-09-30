@@ -51,7 +51,7 @@ _HELP = (
     "  示例：.dnd ｜ .dnd5 ｜ .dnd 开卡"
 )
 
-dnd_matcher = base.on_dnd_command("dnd", _HELP)
+dnd_matcher = base.on_dnd_command("dnd", _HELP, doc="guide/character-card")
 
 _HELP_DNDX = (
     ".dndx[次数] [原因]\n"
@@ -61,7 +61,7 @@ _HELP_DNDX = (
     "  示例：.dndx ｜ .dndx 5 开卡"
 )
 
-dndx_matcher = base.on_dnd_command("dndx", _HELP_DNDX)
+dndx_matcher = base.on_dnd_command("dndx", _HELP_DNDX, doc="guide/character-card")
 
 
 class DndTimesOutOfRange(ValueError):

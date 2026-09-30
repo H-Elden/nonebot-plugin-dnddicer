@@ -110,11 +110,21 @@ _HELP_BOOKS = (
     "  目录缩写：3PP / ADV / FR / MISC"
 )
 
-query_matcher = base.on_dnd_command("查询", _HELP_QUERY, aliases=("q",))
-search_matcher = base.on_dnd_command("搜索", _HELP_SEARCH, aliases=("s", "检索"))
-image_matcher = base.on_dnd_command("查询图片", _HELP_IMAGE, aliases=("qimg",))
-scope_matcher = base.on_dnd_command("查询范围", _HELP_SCOPE, aliases=("qscope",))
-books_matcher = base.on_dnd_command("规则书", _HELP_BOOKS, aliases=("qbooks",))
+query_matcher = base.on_dnd_command(
+    "查询", _HELP_QUERY, aliases=("q",), doc="guide/query"
+)
+search_matcher = base.on_dnd_command(
+    "搜索", _HELP_SEARCH, aliases=("s", "检索"), doc="guide/query"
+)
+image_matcher = base.on_dnd_command(
+    "查询图片", _HELP_IMAGE, aliases=("qimg",), doc="guide/query"
+)
+scope_matcher = base.on_dnd_command(
+    "查询范围", _HELP_SCOPE, aliases=("qscope",), doc="guide/query-scope"
+)
+books_matcher = base.on_dnd_command(
+    "规则书", _HELP_BOOKS, aliases=("qbooks",), doc="guide/query-scope"
+)
 
 
 # =========================================================================

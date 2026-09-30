@@ -49,7 +49,7 @@ def _register(kind: str, example: str) -> Matcher:
     label = atlas_mod.KIND_LABELS[kind]
     name = f"查询{label}"
     help_text = cmd_text.TXT_ATLAS_HELP.format(kind=label, example=example)
-    matcher = base.on_dnd_command(name, help_text)
+    matcher = base.on_dnd_command(name, help_text, doc="guide/query")
 
     @matcher.handle()
     async def _handle(bot: Bot, event: MessageEvent) -> None:

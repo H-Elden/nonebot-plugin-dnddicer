@@ -96,6 +96,19 @@ class Config(BaseModel):
     #: 运行中不自动重建，需要时骰主用 .查询索引 手动刷新。
     dnddicer_query_atlas_build_on_startup: bool = True
 
+    # ── 骰主联系（.help 联系 / .master，2026-09-30）──────────────────────
+    #: 骰主 QQ 号（**单个**）：``.master`` 反馈转发的唯一收件人。留空时
+    #: ``.master`` 回「骰主未配置」、不外呼。刻意不复用宿主 ``SUPERUSERS``
+    #: ——那是集合、可能配了多个号，与「发给骰主本人」不是一回事。
+    dnddicer_master_qq: str = ""
+
+    #: 骰主联系方式（QQ / 邮箱 / 群号等自由文本）：仅用于 ``.help 联系`` 展示，
+    #: 留空即不显示该行；不参与 ``.master`` 投递（骰主 QQ 本身不外显）。
+    dnddicer_master_contact: str = ""
+
+    #: 骰主交流群群号：仅用于 ``.help 联系`` 展示，留空即不显示该行。
+    dnddicer_master_group: str = ""
+
     # 注：更多配置项（第一期落地时逐步补充，例如连掷上限、暗骰私聊开关等）
     # 将在对应功能实现时按需追加，保持「全部有默认值」的零配置原则。
 

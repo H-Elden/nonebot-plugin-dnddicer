@@ -115,9 +115,10 @@ def _initiative_rule() -> Rule:
 
 
 for _name in ("init", "先攻"):
-    base.register_command(_name, _HELP_INIT)
-base.register_command("ri", _HELP_RI)
-base.register_command("投掷先攻", _HELP_RI)  # 帮助关键字别名（同文不重复列表）
+    base.register_command(_name, _HELP_INIT, doc="guide/initiative")
+base.register_command("ri", _HELP_RI, doc="guide/initiative")
+# 帮助关键字别名（同文不重复列表）
+base.register_command("投掷先攻", _HELP_RI, doc="guide/initiative")
 
 initiative_matcher: Matcher = on_message(
     _initiative_rule(), priority=get_config().dnddicer_command_priority, block=True

@@ -42,7 +42,7 @@ _HELP = (
     "  示例：.r2d6+3 ｜ .rd优势+4"
 )
 
-roll_matcher = on_dnd_command("r", _HELP)
+roll_matcher = on_dnd_command("r", _HELP, doc="guide/roll-basics")
 
 
 def _render_roll_result(res_list: List[RollResult], is_show_info: bool) -> str:

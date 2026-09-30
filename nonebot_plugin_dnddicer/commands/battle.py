@@ -49,10 +49,14 @@ _HELP_ED = (
     "  一轮走完自动进入下一轮"
 )
 
-br_matcher = base.on_dnd_command("br", _HELP_BR, aliases=("battleroll", "战斗轮"))
-turn_matcher = base.on_dnd_command("turn", _HELP_TURN, aliases=("回合",))
-round_matcher = base.on_dnd_command("round", _HELP_ROUND, aliases=("轮次",))
-ed_matcher = base.on_dnd_command("ed", _HELP_ED, aliases=("结束",))
+br_matcher = base.on_dnd_command(
+    "br", _HELP_BR, aliases=("battleroll", "战斗轮"), doc="guide/battle"
+)
+turn_matcher = base.on_dnd_command("turn", _HELP_TURN, aliases=("回合",), doc="guide/battle")
+round_matcher = base.on_dnd_command(
+    "round", _HELP_ROUND, aliases=("轮次",), doc="guide/battle"
+)
+ed_matcher = base.on_dnd_command("ed", _HELP_ED, aliases=("结束",), doc="guide/battle")
 
 
 async def _load_battle(event: GroupMessageEvent) -> InitList:
