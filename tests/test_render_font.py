@@ -8,9 +8,32 @@ Noto Sans CJK JP，同一行两套字体导致字重与基线不一致。方案�
 
 from __future__ import annotations
 
+import asyncio
+
 from nonebot_plugin_dnddicer.render import engine
 
 CSS_FILES = ("rich_card.css", "rule_card.css", "books_card.css")
+HTML_FILES = ("rich_card.html", "rule_card.html", "books_card.html")
+
+
+def _render_template(name: str) -> str:
+    """渲染任一卡片模板（传入全部模板变量，多余的会被 Jinja 忽略）。"""
+    template = engine._get_env().get_template(name)  # pyright: ignore[reportPrivateUsage]
+    return asyncio.run(
+        template.render_async(
+            title="T",
+            category="C",
+            body_html="<p>直</p>",
+            blocks=[],
+            sections=[],
+            hint="",
+            footer="",
+            fallback_note="",
+            source_path="p.htm",
+            css=engine._css_text(name.replace(".html", ".css")),  # pyright: ignore[reportPrivateUsage]
+            font_rule='.card { font-family: "Noto Sans CJK SC"; }',
+        )
+    )
 
 
 def test_stylesheets_prefer_cjk_family_first() -> None:
@@ -44,3 +67,18 @@ def test_font_rule_from_config(monkeypatch) -> None:
         raising=False,
     )
     assert engine.font_rule() == ""
+
+
+def test_template_css_is_not_html_escaped() -> None:
+    """模板渲染出的样式表不得被 autoescape 转义（2026-09-30 回归）。
+
+    Jinja 的 autoescape 会把 CSS 里的 ``"`` 输出成 ``&#34;``，字体名随之变成
+    ``&#34;Noto Sans CJK SC&#34;`` 这类查不到的家族，整个字体栈逐个失配、卡片回落到
+    sans-serif（拉丁走 DejaVu Sans、汉字走 Noto Sans CJK JP），表现为日文字形与
+    同一行中英文基线不一致；配置项注入的字体规则同样会失效。
+    """
+    for name in HTML_FILES:
+        html = _render_template(name)
+        assert "&#34;" not in html, name
+        assert 'font-family: "Noto Sans CJK SC"' in html, name
+        assert '.card { font-family: "Noto Sans CJK SC"; }' in html, name
