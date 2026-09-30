@@ -7,11 +7,12 @@
    （实测每张卡多出 140+px 空白带），三个模板统一按「容器内无裸空白」写；
 2. **版式常量与样式表一致**：卡片宽、左右内边距、列表缩进在
    ``card_geometry`` 与样式表里必须是同一组数字（折行预算据此推算，改一边就错位）。
+
+第 1 条断言在**模板源码**上（不需渲染依赖），另有一条装了可选 ``[render]``
+依赖才跑的真实渲染冒烟，保证模板在 CI 与本地都被检查到。
 """
 
 from __future__ import annotations
-
-import re
 
 import pytest
 
@@ -55,8 +56,40 @@ CARDS = [
 ]
 
 
+def _template_text(name: str) -> str:
+    """模板源码文本（不经 Jinja，因而与是否装了可选渲染依赖无关）。"""
+    return (engine._TEMPLATE_DIR / name).read_text(  # pyright: ignore[reportPrivateUsage]
+        encoding="utf-8"
+    )
+
+
+def _content_inner(html: str) -> str:
+    """取 ``<div class="content">`` 与其**配对** ``</div>`` 之间的片段。
+
+    容器内还有嵌套 ``<div>``（note / row / para 等），按「第一个 ``</div>``」截断
+    会停在嵌套元素上，故用深度计数找配对闭合标签。
+    """
+    marker = '<div class="content">'
+    opening = html.index(marker) + len(marker)
+    depth = 1
+    cursor = opening
+    while depth:
+        open_at = html.find("<div", cursor)
+        close_at = html.find("</div>", cursor)
+        assert close_at >= 0, '<div class="content"> 没有配对闭合标签'
+        if 0 <= open_at < close_at:
+            depth += 1
+            cursor = open_at + len("<div")
+        else:
+            depth -= 1
+            if depth == 0:
+                return html[opening:close_at]
+            cursor = close_at + len("</div>")
+    raise AssertionError("不可达：深度计数未收敛")
+
+
 def _render(template_name: str, css_name: str, context: dict) -> str:
-    """用**生产 Jinja 环境**同步渲染模板（与图片模式同一套配置）。"""
+    """用**生产 Jinja 环境**同步渲染模板（需要可选的渲染依赖）。"""
     template = engine._get_env().get_template(template_name)  # pyright: ignore[reportPrivateUsage]
     return template.render(
         css=engine._css_text(css_name),  # pyright: ignore[reportPrivateUsage]
@@ -69,15 +102,25 @@ def _render(template_name: str, css_name: str, context: dict) -> str:
 def test_content_container_has_no_template_whitespace(
     template_name: str, css_name: str, context: dict
 ) -> None:
-    """正文容器开标签之后不得紧跟模板换行/缩进（pre-wrap 下会变成空行）。"""
-    html = _render(template_name, css_name, context)
-    opening = html.index('<div class="content">') + len('<div class="content">')
-    # 容器内的第一个字符必须是内容（标签或文字），不能是换行/缩进
-    assert html[opening] != "\n", template_name
-    assert not html[opening:].startswith(" "), template_name
-    inner_end = html.index("</div>", opening)
-    assert not html[opening:inner_end].endswith("\n"), template_name
-    assert not re.search(r"\n\s*$", html[opening:inner_end]), template_name
+    """正文容器开标签之后、配对闭合标签之前不得有模板换行/缩进（pre-wrap 下会变成空行）。
+
+    查的是**模板源码**：容器里的空白是模板自己写出来的，与渲染依赖装没装无关
+    （2026-09-30 修订：原实现断言在 Jinja 渲染结果上，而 Jinja2 随可选依赖
+    ``[render]`` 提供，CI 不装该可选依赖时会 ModuleNotFoundError，纪律在 CI 失守）。
+    """
+    inner = _content_inner(_template_text(template_name))
+    assert inner, template_name
+    assert not inner[0].isspace(), f"{template_name}: 容器开标签后紧跟模板空白"
+    assert not inner[-1].isspace(), f"{template_name}: 容器闭合标签前还有模板空白"
+
+
+def test_templates_render_with_production_env() -> None:
+    """三个模板能被生产 Jinja 环境渲染出完整 HTML（装了可选渲染依赖时才跑）。"""
+    pytest.importorskip("jinja2", reason="模板渲染需要可选的 [render] 依赖（含 Jinja2）")
+    for template_name, css_name, context in CARDS:
+        html = _render(template_name, css_name, context)
+        assert html.lstrip().startswith("<!DOCTYPE html>"), template_name
+        assert '<div class="content">' in html, template_name
 
 
 def test_card_geometry_matches_stylesheets() -> None:

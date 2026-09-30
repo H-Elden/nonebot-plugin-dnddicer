@@ -1139,6 +1139,7 @@ async def test_image_default_on_view_state_reports_image(
     app: App, enabled_query, image_mode, image_default_on
 ):
     """默认图片时查看：直接报当前为图片（不区分是默认还是手动开的）。"""
+    render.set_renderer(_fake_renderer())
     await _expect(
         app,
         query_cmd.image_matcher,
