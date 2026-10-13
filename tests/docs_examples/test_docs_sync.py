@@ -40,6 +40,8 @@ SYNCED_PAGES = [
     "guide/checks.md",
     "guide/weapons.md",
     "guide/hp-advanced.md",
+    "guide/death-save.md",
+    "guide/rules-version.md",
     "guide/dm-proxy.md",
     "guide/dm-settlement.md",
     "guide/query-scope.md",

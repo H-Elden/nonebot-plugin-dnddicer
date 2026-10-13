@@ -58,6 +58,8 @@ export default defineConfig({
           { text: '检定与豁免', link: '/guide/checks' },
           { text: '武器与攻击', link: '/guide/weapons' },
           { text: 'HP 进阶与长休', link: '/guide/hp-advanced' },
+          { text: '死亡豁免', link: '/guide/death-save' },
+          { text: '规则版本与击晕', link: '/guide/rules-version' },
         ],
       },
       {

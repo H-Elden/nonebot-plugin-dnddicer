@@ -708,6 +708,7 @@ battle_zero_down = Scene(
     title="倒地与唤醒（薇拉）",
     steps=[
         # DM 直接结算一记致命伤害（数值由 DM 按桌面裁定输入），正好打到 0
+        # （未达 HP 上限 54，故进入濒死而非即死；伤害 ≥ 上限会直接判死）
         Step("白鸦", ".hp 薇拉 -51"),
         Step("阿岩", ".hp 薇拉 +15"),
     ],
@@ -1193,6 +1194,85 @@ dm_scope_setup = Scene(
     ],
 )
 
+rules_version_switch = Scene(
+    id="rules_version_switch",
+    title="规则版本：本群可切 5e / 5r（影响各处两版差异点）",
+    steps=[
+        # 未设置时跟随骰主默认（2024）；本群切到 5e 演示差异
+        Step("白鸦", ".规则版本"),
+        Step("白鸦", ".规则版本 5e"),
+        Step("白鸦", ".规则版本"),
+        # 回到 5r（站点示例统一按 2024 口径讲解），并恢复跟随默认
+        Step("白鸦", ".规则版本 5r"),
+        Step("白鸦", ".规则版本 默认"),
+    ],
+)
+
+# 死亡豁免：本批①的主功能。放在时间线末尾（前面的战斗与收尾示例不再受它的
+# 状态影响；用 .hp 先把 HP 设到所需值，场景自身可读）。
+death_save_flow = Scene(
+    id="death_save_flow",
+    title="死亡豁免：濒死中受击记失败、掷豁免成功、第三次稳定",
+    steps=[
+        # 先把 薇拉 设到 20/54 再打到 0（进入濒死），随后一发打在濒死者身上：失败 +1
+        Step("白鸦", ".hp 薇拉 20/54"),
+        Step("白鸦", ".hp 薇拉 -20"),
+        Step("白鸦", ".hp 薇拉 -9"),
+        Step("阿茶", ".ds", dice=[15]),
+        Step("阿茶", ".ds", dice=[12]),
+        Step("阿茶", ".ds", dice=[11]),
+        Step("阿茶", ".ds"),                      # 稳定后不再需要掷
+        Step("阿茶", ".ds 状态"),
+    ],
+)
+
+death_save_manual = Scene(
+    id="death_save_manual",
+    title="死亡豁免的手动裁决与重置（DM 用）",
+    steps=[
+        # 伤势稳定中再受伤 → 解除稳定、重新开始死亡豁免
+        Step("白鸦", ".hp 薇拉 -5"),
+        # 连续失败三次即死亡
+        Step("阿茶", ".ds", dice=[1]),
+        Step("阿茶", ".ds", dice=[5]),
+        Step("阿茶", ".ds 状态"),
+        # DM 裁决复活：.ds 重置 由**本人**执行（清除死亡标记），再回血到 1 点
+        Step("阿茶", ".ds 重置"),
+        Step("白鸦", ".hp 薇拉 +1"),
+    ],
+)
+
+death_save_instant = Scene(
+    id="death_save_instant",
+    title="即死：单次伤害 ≥ HP 上限时直接死亡（不进入濒死）",
+    steps=[
+        # 塔莉 满血 43，一发 43 点：伤害等于上限 → 直接判死
+        Step("白鸦", ".hp 塔莉 43/43"),
+        Step("白鸦", ".hp 塔莉 -43"),
+    ],
+)
+
+hp_stun_variant = Scene(
+    id="hp_stun_variant",
+    title="击晕（2024 口径）：改为把目标打到 1 点 HP 并昏迷",
+    steps=[
+        Step("白鸦", ".hp 薇拉 20/54"),
+        Step("白鸦", ".hp 薇拉 -20 击晕"),
+    ],
+)
+
+# 击晕两版都有、结果不同：上面的场景是 5r（本群默认），这里显式切到 5e 演示差异。
+hp_stun_2014 = Scene(
+    id="hp_stun_2014",
+    title="击晕（2014 口径）：HP 归 0、昏迷但伤势稳定",
+    steps=[
+        Step("白鸦", ".规则版本 5e"),
+        Step("白鸦", ".hp 薇拉 20/54"),
+        Step("白鸦", ".hp 薇拉 -20 击晕"),
+        Step("白鸦", ".规则版本 默认"),     # 演示完切回骰主默认
+    ],
+)
+
 master_forward = Scene(
     id="master_forward",
     title="联系骰主：反馈交由骰娘私聊转达（群聊与私聊都可用）",
@@ -1333,5 +1413,13 @@ TIMELINE = [
     query_index_master,     # 骰主命令：索引状态与按类刷新（仅骰主私聊）
     dm_scope_setup,      # DM 给本团定可查书目（核心三书；置尾以免影响上面的开放范围示例）
     master_forward,      # 反馈给骰主（私聊转达；需临时配置骰主 QQ）
+    rules_version_switch,  # 群级规则版本（5e / 5r 切换与恢复默认）
+    # 第九幕：死亡豁免与击晕（《死亡豁免与规则版本》页；放在末尾以免影响前面的
+    # 战斗与收尾示例——场景内先用 .hp 把 HP 设到所需值）
+    death_save_flow,
+    death_save_manual,
+    death_save_instant,
+    hp_stun_variant,
+    hp_stun_2014,
     quickstart_bot_off,  # 压轴：服务关闭后本群不再响应其他命令
 ]

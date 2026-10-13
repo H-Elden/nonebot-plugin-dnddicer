@@ -77,6 +77,7 @@ Ubuntu / Debian 安装：`apt install fonts-noto-cjk`。
 | `dnddicer_default_face` | `int` | `20` | 全局默认骰面（DND 惯例 D20）。当某群设置了默认骰面（`.dset`）时以群配置为准 |
 | `dnddicer_enabled` | `bool` | `true` | 插件功能总开关。设为 `false` 时只加载骨架、不注册任何命令<br>（供开发者临时禁用本插件） |
 | `dnddicer_use_host_command_starts` | `bool` | `false` | 是否兼容宿主 `COMMAND_START` 起始符，详见下文「[命令起始符](#命令起始符)」一节 |
+| `dnddicer_default_rules_version` | `str` | `2024` | **默认规则版本**：群内未用 `.规则版本` 单独设置时按它结算（影响长休生命骰恢复量与击晕结果等差异点）。可写 `2024` / `5r` / `5.5e` / `2014` / `5e`，玩家侧用法见[规则版本与击晕](./rules-version.md) |
 
 ### 联系骰主
 
@@ -156,6 +157,8 @@ DNDDICER_DEFAULT_FACE=20
 DNDDICER_ENABLED=TRUE
 # # 是否兼容宿主 COMMAND_START 起始符
 DNDDICER_USE_HOST_COMMAND_STARTS=FALSE
+# # 默认规则版本（群内未用 .规则版本 设置时按它结算；可写 2024 / 5r / 2014 / 5e）
+DNDDICER_DEFAULT_RULES_VERSION=2024
 
 # 骰主联系
 # # 骰主 QQ 号（单个）：.master 反馈的收件人
