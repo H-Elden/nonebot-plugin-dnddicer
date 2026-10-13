@@ -62,3 +62,15 @@ def test_defaults_unchanged() -> None:
     assert config.dnddicer_master_qq == ""
     assert config.dnddicer_master_contact == ""
     assert config.dnddicer_master_group == ""
+
+
+def test_default_rules_version_field() -> None:
+    """默认规则版本（2026-10-01 新增）：未配置为 "2024"，数字写法按文本读入。
+
+    对应 .env 写法：``DNDDICER_DEFAULT_RULES_VERSION=2024`` 会被 NoneBot 解码成
+    int 2024，``=5r`` 则是字符串；两种都必须能加载（开发约定第 19 条）。
+    """
+    assert Config().dnddicer_default_rules_version == "2024"
+    assert Config(dnddicer_default_rules_version=json.loads("2024")).dnddicer_default_rules_version == "2024"
+    assert Config(dnddicer_default_rules_version="5r").dnddicer_default_rules_version == "5r"
+    assert Config(dnddicer_default_rules_version="5e").dnddicer_default_rules_version == "5e"

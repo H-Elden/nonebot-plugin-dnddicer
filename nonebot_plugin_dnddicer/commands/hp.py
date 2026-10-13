@@ -1,4 +1,16 @@
-"""HP 管理命令：``.hp`` + 长休 ``.长休``。
+"""HP 管理命令：``.hp`` + 长休 ``.长休`` + 死亡豁免 ``.死亡豁免`` / ``.ds``。
+
+死亡豁免闭环（2026-10-01 新增）：``.hp`` 的伤害使角色卡 HP 归 0 时自动进入濒死
+（播报「请在自己回合开始时掷 .死亡豁免」），此后本人用 ``.死亡豁免`` / ``.ds``
+掷 1d20（≥10 成功、≤9 失败；自然 20 回 1 点 HP、自然 1 记两次失败；3 成功稳定、
+3 失败死亡）；濒死或稳定中再受伤自动记失败（武器重击 +2），单次伤害 ≥ HP 上限
+直接判死；治疗把 HP 拉回正数即清空计数。手动裁决用 ``.ds 成功+1`` / ``失败+1`` /
+``状态`` / ``重置``（死亡后治疗不复活，复活走重置）。**NPC 血量不做死亡豁免**
+（怪物 0 HP 即昏迷倒下）；结算规则集中在 ``character/services.py::HPService``。
+
+击晕参数（2026-10-01 新增，两版规则都有、结果不同）：伤害末尾加 ``击晕``（如
+``.hp 薇拉 -20 击晕``）时留活口、不进入濒死——2014 归 0 且伤势稳定、2024 降为
+1 HP；群级规则版本由 ``.规则版本`` 设置、经 ``character/rules.py`` 读取。
 
 目标搜索覆盖三类（优先级由高到低）：PC 角色卡 → NPC 血量条目 → 先攻表；
 NPC 血量条目在目标经先攻表解析时按需创建——即 NPC 需先 ``.ri`` 入先攻表
@@ -43,7 +55,8 @@ from typing import List, NamedTuple, Optional, Tuple, Union
 
 from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, Message, MessageEvent
 
-from ..character.models import DNDCharacter, HPInfo
+from ..character import rules as char_rules
+from ..character.models import DNDCharacter, HPInfo, npc_hp_info
 from ..character.services import HPService, WEAPON_BONUS_RE
 from ..data.characters import (
     get_character,
@@ -88,9 +101,26 @@ _HELP = (
     "  记录 / 伤害 / 治疗 / 查看生命值\n"
     "  查看：.hp（自己）、.hp @玩家、.hp list\n"
     "  清理：.hp del 名称（NPC）、.hp clr\n"
-    "  武器写法：.hp 地精 -刺剑伤害（可加后缀）"
+    "  武器写法：.hp 地精 -刺剑伤害（可加后缀）\n"
+    "  伤害可加 击晕：留活口（5e 归 0 稳定、5r 归 1）"
 )
 hp_matcher = base.on_dnd_command("hp", _HELP, doc="guide/hp")
+
+
+# =========================================================================
+# .死亡豁免 命令（别名 .ds）
+# =========================================================================
+
+_HELP_DS = (
+    ".死亡豁免 [优势|劣势][±加值]（.ds）\n"
+    "  HP 为 0 时掷 1d20：≥10 成功、≤9 失败\n"
+    "  3 次成功稳定、3 次失败死亡；自然 20 回 1 点 HP\n"
+    "  手动裁决：.ds 成功+1 / 失败+1 / 状态 / 重置\n"
+    "  进入濒死：HP 归 0 即自动开始，无需手动开启"
+)
+ds_matcher = base.on_dnd_command(
+    "死亡豁免", _HELP_DS, aliases=("ds",), doc="guide/death-save"
+)
 
 
 # =========================================================================
@@ -99,7 +129,8 @@ hp_matcher = base.on_dnd_command("hp", _HELP, doc="guide/hp")
 
 _HELP_LONG_REST = (
     ".长休 [@玩家]\n"
-    "  恢复生命值至上限、清除临时生命值、回复一半生命骰\n"
+    "  恢复生命值至上限、清除临时生命值、回复生命骰\n"
+    "  并清除死亡豁免状态与昏迷\n"
     "  @玩家 用于 DM 替不在场玩家收尾"
 )
 long_rest_matcher = base.on_dnd_command("长休", _HELP_LONG_REST, doc="guide/hp-advanced")
@@ -217,6 +248,9 @@ async def search_target(
 # 参数解析
 # =========================================================================
 
+#: 全角数字 → 半角（``.死亡豁免 成功+１`` 这类全角输入容错）
+_FULLWIDTH_DIGITS = str.maketrans("０１２３４５６７８９", "0123456789")
+
 
 def _split_target_intents(target_part: str) -> List[str]:
     """拆分 .hp 目标段为多个目标意图。
@@ -285,6 +319,30 @@ def _parse_hp_args(arg_str: str) -> Tuple[
             return None, None, None, e.info
 
     return hp_cur_result, hp_max_result, hp_temp_result, None
+
+
+#: 击晕参数（5r「击晕」变体）：伤害表达式后的尾随关键字，可用空格分隔
+_STUN_KEYWORD_RE = re.compile(r"(\s|^)击晕$")
+
+
+def _split_stun_keyword(expr_str: str) -> Optional[Tuple[str, bool]]:
+    """拆出伤害表达式尾部的 ``击晕`` 参数 → (剩余表达式, 是否击晕)。
+
+    没有该关键字时返回 None（调用方沿用原有解析路径）。识别条件是「击晕」
+    位于末尾、且**前一个字符不是数字或加号**——``.hp 地精 -15 击晕`` 与
+    ``.hp 地精 -15击晕`` 都算关键字；``-15击晕`` 这种表达式里「5击晕」不是
+    合法数值写法的情形也按关键字处理（否则引擎会报错、更难理解）。
+    """
+    stripped = expr_str.strip()
+    if not stripped.endswith("击晕"):
+        return None
+    matched = _STUN_KEYWORD_RE.search(stripped)
+    if matched is None:
+        return None
+    body = stripped[: matched.start()].strip()
+    if not body:
+        return None
+    return body, True
 
 
 # =========================================================================
@@ -721,6 +779,16 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
         target_list = [("pc", str(event.user_id), 1.0)]
 
     # 解析调整表达式（arg_str 已剥离目标前缀与操作符）
+    # 伤害位置的 击晕 参数先摘出，其余按原有路径解析（两版规则都有击晕，
+    # 只是结果不同：见下方结算分支，按群级规则版本决定归 0 还是归 1）
+    stun_request = False
+    if cmd_type == "-":
+        stun_split = _split_stun_keyword(arg_str)
+        if stun_split is not None:
+            arg_str, stun_request = stun_split
+    elif _split_stun_keyword(arg_str) is not None:
+        # 击晕只描述「打到 0 HP 时的处置」，设置/治疗写法里没有意义
+        await hp_matcher.finish(text.TXT_HP_STUN_DMG_ONLY)
     # 伤害位置的武器写法（-武器名[副手/重击/偷袭]伤害[±加值]（来源））先解析为表达式
     weapon_damage: Optional[_WeaponDamageExpr] = None
     if cmd_type == "-":
@@ -747,8 +815,9 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
     # 多武器写法（2026-09-27）改由逐项行 + 合计行输出（与 .X伤害 同一套组装）
     if weapon_damage is not None and hp_cur is not None:
         raw_total = hp_cur.get_val()
+        # 表头数值与实际生效伤害同口径（抗性/易伤只施加一次，见 HPService.effective_damage）
         total = (
-            HPService.apply_damage_factor(raw_total, target_list[0][2])
+            HPService.effective_damage(hp_cur, target_list[0][2])
             if len(target_list) == 1
             else max(0, raw_total)
         )
@@ -781,10 +850,11 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
             ) + "\n"
     for source_key, target_id, damage_factor in target_list:
         if source_key == "npc":
-            # NPC/怪物：血量条目按需创建（目标经先攻表/已有记录解析而来）
+            # NPC/怪物：血量条目按需创建（目标经先攻表/已有记录解析而来）；
+            # 怪物不做死亡豁免（击晕参数对 NPC 也不适用——NPC 直接被打到 0）
             hp_info = await get_npc_health(event.group_id, target_id)
             if hp_info is None:
-                hp_info = HPInfo()
+                hp_info = npc_hp_info()
             mod_info = HPService.process_roll_result(
                 hp_info, cmd_type, hp_cur, hp_max, hp_temp,
                 short_feedback=(len(target_list) > 1),
@@ -798,20 +868,169 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
         if character is None:
             character = DNDCharacter(group_id=str(event.group_id), user_id=target_id)
 
+        # 击晕（留活口）：近战把目标打到 0 HP 时可改为不杀。两版都有这条规则，
+        # 差别在结果（2026-10-01 修订，此前误按「仅 2024 可用」实现）：
+        # - 2014：HP 降到 0、陷入昏迷，**但伤势稳定**（不再掷死亡豁免）；
+        # - 2024：改为降到 1 点 HP，昏迷并开始一次短休。
+        # 两版都直接结束战斗状态下的死亡豁免流程，不走濒死。
+        if stun_request and cmd_type == "-" and character.hp_info.is_init:
+            rules_version = await char_rules.rules_version(event.group_id)
+            hp_info = character.hp_info
+            hp_info.hp_temp = 0
+            hp_info.clear_death_state()
+            if rules_version == char_rules.RULES_2024:
+                hp_info.hp_cur = 1
+                hp_info.is_alive = True
+                stun_text = text.TXT_HP_STUN_2024
+            else:
+                hp_info.hp_cur = 0
+                hp_info.is_alive = False
+                hp_info.is_stable = True
+                stun_text = text.TXT_HP_STUN_2014
+            character.is_init = True
+            await save_character(character)
+            name = await base.resolve_display_name(
+                bot, event, target_id, char_name=character.name
+            )
+            feedback += text.TXT_HP_STUN.format(name=name, effect=stun_text) + "\n"
+            continue
+
+        # 死亡豁免联动（2026-10-01）：伤害使 HP 归 0 → 进入濒死；
+        # 濒死/稳定中再受伤 → 记失败（重击 +2）、伤害 ≥ HP 上限即死。
+        # 「本来就在 0 HP 挨打」与「这一击打到 0」扣血后都是 0，故在扣血前
+        # 先取昏迷状态（is_alive）；治疗使 HP 回正 → heal() 内已清死亡豁免状态
+        was_unconscious = not character.hp_info.is_alive
         mod_info = HPService.process_roll_result(
             character.hp_info, cmd_type, hp_cur, hp_max, hp_temp,
             short_feedback=(len(target_list) > 1),
             damage_factor=damage_factor,
         )
         character.is_init = True
+
+        death_line = ""
+        if cmd_type == "-" and hp_cur is not None and character.hp_info.is_init:
+            damage = HPService.effective_damage(hp_cur, damage_factor)
+            is_critical = weapon_damage is not None and "重击" in weapon_damage.note
+            transition, death_line = HPService.apply_death_save_on_damage(
+                character.hp_info, damage,
+                critical=is_critical, was_unconscious=was_unconscious,
+            )
+            if transition == HPService.DEATH_TRANSITION_ENTERED:
+                death_line = text.TXT_DS_ENTER
+            elif transition == HPService.DEATH_TRANSITION_RESTART:
+                death_line = text.TXT_DS_RESTART
+            if death_line:
+                # HP 状态行由 process_roll_result 在死亡豁免结算**之前**生成，
+                # 濒死计数会落在数值后面（如「濒死(成功0 失败0)」却已记 1 次失败）。
+                # 结算完重新生成一次，状态行与播报取同一份数据（2026-10-01 修订）。
+                mod_info = HPService.refresh_hp_status(
+                    character.hp_info, mod_info, short_feedback=(len(target_list) > 1)
+                )
+
         await save_character(character)
 
         name = await base.resolve_display_name(
             bot, event, target_id, char_name=character.name
         )
         feedback += text.TXT_HP_MOD.format(name=name, hp_mod=mod_info) + "\n"
+        if death_line:
+            feedback += f"{death_line}\n"
 
     await hp_matcher.finish(feedback.strip())
+
+
+@ds_matcher.handle()
+async def handle_death_save(bot: Bot, event: MessageEvent) -> None:
+    """处理 .死亡豁免（.ds）：掷豁免 / 手动裁决 / 状态 / 重置。
+
+    目标恒为发送者本人（死亡豁免是本人回合开始时的动作；DM 代掷用 @玩家
+    仍可后续按需追加——当前不做，见设计文档「明确不做」）。
+    """
+    if not isinstance(event, GroupMessageEvent):
+        await ds_matcher.finish(text.TXT_GROUP_ONLY)
+
+    rest = (base.get_command_rest_with_mentions(event) or "").strip()
+    character = await get_character(event.group_id, event.user_id)
+    if character is None or not character.is_init:
+        await ds_matcher.finish(text.TXT_CHAR_MISS)
+    hp_info = character.hp_info
+    name = await base.resolve_display_name(bot, event, char_name=character.name)
+
+    if not hp_info.is_init:
+        await ds_matcher.finish(text.TXT_DS_NO_HP.format(name=name))
+
+    # ── 状态查询
+    if rest == "状态":
+        await ds_matcher.finish(
+            text.TXT_DS_STATUS.format(name=name, hp_info=hp_info.get_info())
+        )
+
+    # ── 手动裁决：成功+N / 失败+N（N 缺省 1，全角数字容错）
+    manual = re.match(r"^(成功|失败)\s*\+?\s*([0-9０-９]+)?$", rest)
+    if manual is not None:
+        kind, count_str = manual.group(1), manual.group(2)
+        count = int(count_str.translate(_FULLWIDTH_DIGITS)) if count_str else 1
+        fatal = (
+            hp_info.add_death_success(count) if kind == "成功"
+            else hp_info.add_death_failure(count)
+        )
+        await save_character(character)
+        if fatal:
+            message = (
+                text.TXT_DS_MANUAL_STABLE if kind == "成功"
+                else text.TXT_DS_MANUAL_DEATH
+            )
+            await ds_matcher.finish(f"{name}：{message}")
+        template = (
+            text.TXT_DS_MANUAL_SUCCESS if kind == "成功"
+            else text.TXT_DS_MANUAL_FAILURE
+        )
+        await ds_matcher.finish(template.format(
+            n=count, success=hp_info.ds_success, failure=hp_info.ds_failure
+        ))
+
+    # ── 重置（复活裁决）：清空计数、稳定与死亡标记
+    if rest == "重置":
+        hp_info.clear_death_state()
+        if hp_info.hp_cur < 0:
+            hp_info.hp_cur = 0
+        await save_character(character)
+        await ds_matcher.finish(text.TXT_DS_RESET.format(
+            name=name, hp_info=hp_info.get_info()
+        ))
+
+    # ── 掷死亡豁免：先解析修饰串（写法无效时给用法引导，不掷骰）
+    advantage = 0
+    if rest.startswith("优势"):
+        advantage, rest = 1, rest[2:]
+    elif rest.startswith("劣势"):
+        advantage, rest = -1, rest[2:]
+    mod_str = rest.strip()
+    if mod_str and not mod_str.startswith(("+", "-")):
+        await ds_matcher.finish(text.TXT_DS_USAGE)
+    if mod_str and not WEAPON_BONUS_RE.match(mod_str):
+        await ds_matcher.finish(text.TXT_DS_BAD_MOD.format(mod=mod_str))
+
+    if hp_info.is_dead:
+        await ds_matcher.finish(text.TXT_DS_DEAD)
+    if hp_info.is_stable:
+        await ds_matcher.finish(text.TXT_DS_STABLE)
+    if hp_info.hp_cur > 0:
+        await ds_matcher.finish(text.TXT_DS_NOT_DYING)
+    # 首次调用即为「开始死亡豁免」：HP 归 0 但尚未掷过时清空残留计数
+    if hp_info.ds_success == 0 and hp_info.ds_failure == 0:
+        hp_info.clear_death_state(revive=False)
+
+    try:
+        result_str, state, _value, _nat20, _nat1 = HPService.roll_death_save(
+            hp_info, advantage, mod_str
+        )
+    except AssertionError as exc:
+        await ds_matcher.finish(str(exc))
+    await save_character(character)
+    await ds_matcher.finish(text.TXT_DS_RESULT.format(
+        name=name, result=result_str, state=state, hp_info=hp_info.get_info()
+    ))
 
 
 @long_rest_matcher.handle()
@@ -837,7 +1056,11 @@ async def handle_long_rest(bot: Bot, event: MessageEvent) -> None:
             name = await base.resolve_display_name(bot, event)
             await long_rest_matcher.finish(text.TXT_LONG_REST_MISS.format(name=name))
         name = await base.resolve_display_name(bot, event, char_name=character.name)
-    rest_info = character.hp_info.long_rest()
+    # 生命骰恢复量按群级规则版本：2024 恢复全部已消耗、2014 回复总枚数的一半
+    rules_version = await char_rules.rules_version(event.group_id)
+    rest_info = character.hp_info.long_rest(
+        dice_full=rules_version == char_rules.RULES_2024
+    )
     if not rest_info:
         rest_info = "没有需要恢复的内容"
     result = f"{name}进行了一次长休\n{rest_info}"

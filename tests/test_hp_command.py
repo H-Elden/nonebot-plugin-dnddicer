@@ -61,6 +61,14 @@ async def _expect(app: App, matcher, event, expected: str):
         ctx.receive_event(bot, event)
 
 
+async def _set_rules_version(group_id: int, version: str) -> None:
+    """直接写群级规则版本（供长休生命骰恢复量两版口径用例铺垫）。"""
+    from nonebot_plugin_dnddicer.character import rules
+    from nonebot_plugin_dnddicer.data.group_config import set_group_config_field
+
+    await set_group_config_field(group_id, rules.RULES_VERSION_FIELD, version)
+
+
 # =========================================================================
 # .hp 查看
 # =========================================================================
@@ -121,29 +129,31 @@ async def test_hp_damage(app: App):
 
 @pytest.mark.asyncio
 async def test_hp_damage_to_unconscious(app: App):
-    """.hp -30 → 伤害至 0，昏迷。"""
+    """.hp -30 → 伤害至 0：昏迷并进入濒死（伤害 ≥ HP 上限则即死，见 30 点用例）。"""
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
 
     await _expect(app, hp_matcher, _event(".hp 20/30", user_id=20005), "test: HP=20/30\n当前HP:20/30")
     await _expect(
-        app, hp_matcher, _event(".hp -30", user_id=20005),
-        "test: 当前HP减少30\nHP:20/30 -> HP:0/30 昏迷",
+        app, hp_matcher, _event(".hp -25", user_id=20005),
+        "test: 当前HP减少25\nHP:20/30 -> HP:0/30 昏迷 濒死(成功0 失败0)\n"
+        "已进入濒死，请在自己回合开始时掷 .死亡豁免（3 次成功稳定、3 次失败死亡）。",
     )
 
 
 @pytest.mark.asyncio
 async def test_hp_recover_from_unconscious(app: App):
-    """从昏迷中治疗恢复（20/30 -20 → 0/30 昏迷，+15 → 15/30）。"""
+    """从昏迷中治疗恢复（20/30 -20 → 0/30 昏迷濒死，+15 → 15/30 状态清空）。"""
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
 
     await _expect(app, hp_matcher, _event(".hp 20/30", user_id=20006), "test: HP=20/30\n当前HP:20/30")
     await _expect(
         app, hp_matcher, _event(".hp -20", user_id=20006),
-        "test: 当前HP减少20\nHP:20/30 -> HP:0/30 昏迷",
+        "test: 当前HP减少20\nHP:20/30 -> HP:0/30 昏迷 濒死(成功0 失败0)\n"
+        "已进入濒死，请在自己回合开始时掷 .死亡豁免（3 次成功稳定、3 次失败死亡）。",
     )
     await _expect(
         app, hp_matcher, _event(".hp +15", user_id=20006),
-        "test: 当前HP增加15\nHP:0/30 昏迷 -> HP:15/30",
+        "test: 当前HP增加15\nHP:0/30 昏迷 濒死(成功0 失败0) -> HP:15/30",
     )
 
 
@@ -548,6 +558,56 @@ async def test_long_rest_mention_target(app: App):
     )
 
 
+@pytest.mark.asyncio
+async def test_long_rest_restores_all_dice_in_2024_group(app: App):
+    """.长休 生命骰按群级规则版本恢复：2024 恢复全部已消耗。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.hp import long_rest_matcher
+
+    group, uid = 99106, 23020
+    await _set_rules_version(group, "2024")
+    record = (
+        "$姓名$ test\n$等级$ 4\n$生命值$ 20/30\n"
+        "$生命骰$ 1/4 D8\n$属性$ 10/10/10/10/10/10"
+    )
+    await _expect(
+        app, char_matcher,
+        _event_in_group(group, f".角色卡记录 {record}", user_id=uid),
+        "角色卡已设置",
+    )
+    await _expect(
+        app, long_rest_matcher, _event_in_group(group, ".长休", user_id=uid),
+        "test进行了一次长休\n"
+        "生命值回复至上限(30)\n"
+        "回复3个生命骰, 当前拥有4/4个D8生命骰",
+    )
+
+
+@pytest.mark.asyncio
+async def test_long_rest_restores_half_dice_in_2014_group(app: App):
+    """.长休 生命骰按群级规则版本恢复：2014 回复总枚数的一半（至少 1 枚）。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.hp import long_rest_matcher
+
+    group, uid = 99107, 23021
+    await _set_rules_version(group, "2014")
+    record = (
+        "$姓名$ test\n$等级$ 4\n$生命值$ 20/30\n"
+        "$生命骰$ 1/4 D8\n$属性$ 10/10/10/10/10/10"
+    )
+    await _expect(
+        app, char_matcher,
+        _event_in_group(group, f".角色卡记录 {record}", user_id=uid),
+        "角色卡已设置",
+    )
+    await _expect(
+        app, long_rest_matcher, _event_in_group(group, ".长休", user_id=uid),
+        "test进行了一次长休\n"
+        "生命值回复至上限(30)\n"
+        "回复2个生命骰, 当前拥有3/4个D8生命骰",
+    )
+
+
 # =========================================================================
 # HPInfo 单元测试
 # =========================================================================
@@ -621,14 +681,20 @@ def test_hp_info_is_record_normal():
 
 
 def test_hp_info_get_info_modes():
-    """get_info 在不同 HP 模式下的输出。"""
-    from nonebot_plugin_dnddicer.character.models import HPInfo
+    """get_info 在不同 HP 模式下的输出（PC 的 0 HP 附死亡豁免摘要）。"""
+    from nonebot_plugin_dnddicer.character.models import HPInfo, npc_hp_info
 
     hp = HPInfo(is_init=True, hp_cur=20, hp_max=30, hp_temp=5)
     assert hp.get_info() == "HP:20/30 (5)"
 
     hp2 = HPInfo(is_init=True, hp_cur=0, hp_max=30, is_alive=False)
-    assert hp2.get_info() == "HP:0/30 昏迷"
+    assert hp2.get_info() == "HP:0/30 昏迷 濒死(成功0 失败0)"
+
+    # NPC 血量条目不做死亡豁免：0 HP 只显示昏迷
+    npc = npc_hp_info()
+    npc.is_init = True
+    npc.hp_cur, npc.hp_max, npc.is_alive = 0, 30, False
+    assert npc.get_info() == "HP:0/30 昏迷"
 
     hp3 = HPInfo(is_init=True, hp_cur=-10, hp_max=30, is_alive=True)
     assert hp3.get_info() == "损失HP:10"

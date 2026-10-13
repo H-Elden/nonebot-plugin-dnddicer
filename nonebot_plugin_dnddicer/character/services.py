@@ -633,6 +633,30 @@ class HPService:
         return mod_info
 
     @staticmethod
+    def refresh_hp_status(
+        hp_info: HPInfo, mod_info: str, *, short_feedback: bool = False
+    ) -> str:
+        """把结算描述里的「当前 HP 状态」换成最新的 ``get_info()``。
+
+        ``process_roll_result`` 在描述最后一行写的是结算当下的 HP 状态（形如
+        ``HP:20/30 -> HP:0/30 昏迷``，设置/治疗为 ``当前HP:20/30``）；若之后
+        又改了 HP 状态（当前只有死亡豁免计数这一处：伤害结算完才记失败、转为
+        稳定或死亡），那一行就会过期。本方法只重写**最后一段状态**：保留原有的
+        ``旧 -> 新`` 形态（旧值那一侧原样留着做对照），中间的掷骰与折算过程
+        也一并保留（``short_feedback`` 为多目标结算的 ``; `` 形态）。
+        """
+        status = hp_info.get_info()
+        normalized = mod_info.replace("; ", "\n")
+        lines = normalized.split("\n")
+        if len(lines) > 1:
+            head, arrow, _old_status = lines[-1].partition(" -> ")
+            lines[-1] = f"{head}{arrow}{status}" if arrow else status
+            normalized = "\n".join(lines)
+        else:
+            normalized = status
+        return normalized.replace("\n", "; ") if short_feedback else normalized
+
+    @staticmethod
     def apply_damage_factor(value: int, damage_factor: float = 1.0) -> int:
         """按承伤因子折算伤害：抗性减半（向下取整、最少 1）、易伤加倍、全额原样。
 
@@ -647,6 +671,20 @@ class HPService:
         if damage_factor == 2.0:
             return int(damage) * 2
         return damage
+
+    @staticmethod
+    def effective_damage(
+        hp_cur_mod_result: Optional[RollResult], damage_factor: float = 1.0
+    ) -> int:
+        """本次伤害实际生效的数值（掷骰结果 → 最低 0 → 抗性/易伤折算）。
+
+        供「表头显示的伤害」与「死亡豁免判定用的伤害」共用同一口径：调用方
+        **不要**在 ``process_roll_result`` 之后再自行折算一次，否则会二次施加
+        抗性/易伤（伤害翻倍或再减半）。
+        """
+        if hp_cur_mod_result is None:
+            return 0
+        return HPService.apply_damage_factor(hp_cur_mod_result.get_val(), damage_factor)
 
     @staticmethod
     def process_roll_result(
@@ -754,3 +792,152 @@ class HPService:
         if short_feedback:
             mod_info = mod_info.replace("\n", "; ")
         return mod_info
+
+    # ── 死亡豁免（2026-10-01，批①）───────────────────────────────────────
+    # 全部为纯函数式结算（不掷骰、不落盘），由 commands/hp.py 在 HP 变动后调用；
+    # NPC 血量不走这里（怪物不做死亡豁免）。
+
+    #: ``apply_death_save_on_damage`` 的结果类型：本次伤害使目标进入濒死
+    DEATH_TRANSITION_ENTERED = "entered"
+    #: 同上：伤势稳定中受击，解除稳定并重新开始死亡豁免
+    DEATH_TRANSITION_RESTART = "restart"
+    #: 同上：濒死/稳定中受击（已记失败，附播报文本）
+    DEATH_TRANSITION_DAMAGE = "damage"
+    #: 同上：本次伤害致死（即死或失败满 3 次，附播报文本）
+    DEATH_TRANSITION_DEATH = "death"
+    #: 同上：无需处理（未初始化 / 已死亡）
+    DEATH_TRANSITION_NONE = ""
+
+    @staticmethod
+    def apply_death_save_on_damage(
+        hp_info: HPInfo,
+        damage: int,
+        *,
+        critical: bool = False,
+        was_unconscious: bool = False,
+    ) -> Tuple[str, str]:
+        """HP 伤害后的死亡豁免结算，返回 ``(结果类型, 播报文本)``。
+
+        结果类型见 ``DEATH_TRANSITION_*`` 常量：``entered`` 本次伤害使目标进入
+        濒死、``restart`` 稳定中受击重新开始死亡豁免（这两种的引导文案由调用方
+        给），``damage`` 记失败（文本即播报），``death`` 本次伤害致死。
+
+        覆盖三条规则（5e 与 5r 一致）：
+
+        - **进入濒死**：HP 归 0 且未即死 → 昏迷并开始死亡豁免（计数清零）；
+        - **0 HP 期间受伤**：失败 +1（武器重击 +2）；已稳定者先解除稳定并
+          重新开始计数；伤害 ≥ HP 上限则直接死亡（先判即死，不看计数）；
+        - **已死亡**：不再叠加失败（复活走 ``.死亡豁免 重置``）。
+
+        Args:
+            hp_info: 已结算完本次伤害的 HP 信息。
+            damage: 实际生效的伤害（已过抗性/易伤折算，见 ``effective_damage``）。
+            critical: 伤害是否来自武器重击（失败记 2 次）。
+            was_unconscious: **本次伤害之前**目标是否已昏迷（由调用方在扣血前
+                取 ``not hp_info.is_alive`` 传入）——「这一击打到 0」与「本来
+                就在 0 HP 挨打」扣血后都是 0 HP，只有扣血前的状态能区分两者。
+                已稳定者（``is_stable``）无论昏迷标记如何都按「重新开始」处理，
+                故该参数只影响普通昏迷与「尚未昏迷」的区分。
+
+        注：HP 上限未设置（``hp_max == 0``）时不做即死判定，避免拿
+        「损失记录」当上限误杀。
+        """
+        if not hp_info.is_init or hp_info.is_dead:
+            return HPService.DEATH_TRANSITION_NONE, ""
+        if hp_info.hp_cur > 0 and not hp_info.is_stable:
+            # 还有 HP 且不在稳定态：本次伤害没把人打倒，死亡豁免完全不涉及
+            return HPService.DEATH_TRANSITION_NONE, ""
+        if hp_info.hp_cur < 0:
+            # 未设上限的「损失记录」模式被继续扣到负数：夹到 0（5e 的 HP 不为负）
+            hp_info.hp_cur = 0
+            hp_info.is_alive = False
+
+        limit = hp_info.hp_max
+        if limit > 0 and damage >= limit:
+            hp_info.is_stable = False
+            hp_info.is_dead = True
+            return (
+                HPService.DEATH_TRANSITION_DEATH,
+                f"受到{damage}点伤害（≥生命值上限 {limit}）——死亡。",
+            )
+
+        if not was_unconscious or hp_info.is_stable:
+            # 从「有 HP」或「已稳定」被打到 0：开始死亡豁免。进入濒死那一击
+            # 本身不记失败（5e：只有「已在 0 HP 时受伤」才记）
+            was_stable = hp_info.is_stable
+            hp_info.clear_death_state(revive=False)
+            kind = (
+                HPService.DEATH_TRANSITION_RESTART if was_stable
+                else HPService.DEATH_TRANSITION_ENTERED
+            )
+            return kind, ""
+
+        fatal = hp_info.add_death_failure(2 if critical else 1)
+        if fatal:
+            return HPService.DEATH_TRANSITION_DEATH, "死亡豁免失败累计3次——死亡。"
+        return (
+            HPService.DEATH_TRANSITION_DAMAGE,
+            "正在濒死中受到伤害：死亡豁免失败"
+            f"+{2 if critical else 1}（成功{hp_info.ds_success} 失败{hp_info.ds_failure}）",
+        )
+
+    @staticmethod
+    def roll_death_save(
+        hp_info: HPInfo, advantage: int = 0, mod_str: str = ""
+    ) -> Tuple[str, str, str, bool, bool]:
+        """掷一次 d20 死亡豁免并按出目结算，返回 (过程文本, 播报行, 数值, 自然20, 自然1)。
+
+        判定与属性无关（5e/5r 一致）：自然 20 → 回复 1 点 HP 并结束濒死；
+        自然 1 → 记两次失败；出目 ≥10 → 成功 +1；≤9 → 失败 +1。
+        成功累计 3 次即伤势稳定、失败累计 3 次即死亡。
+
+        ``advantage`` 1 优势 / -1 劣势 / 0 无；``mod_str`` 为房规加值片段
+        （如 ``"+2"`` / ``"-1"``），只影响出目、不影响自然 20/1 的判定
+        （自然 20/1 看的是**保留的 d20 点数**）。
+
+        Raises:
+            AssertionError: 表达式无效或掷骰失败（消息面向用户）。
+        """
+        roll_exp = "D20优势" if advantage > 0 else ("D20劣势" if advantage < 0 else "D20")
+        if mod_str:
+            roll_exp += mod_str
+        try:
+            roll_result = exec_roll_exp_unified(roll_exp)
+        except RollDiceError as exc:
+            raise AssertionError(f"无效的死亡豁免加值:{mod_str}（{exc.info}）")
+
+        natural = roll_result.d20_list[-1] if roll_result.d20_list else 0
+        value = roll_result.get_val()
+        result_str = roll_result.get_complete_result()
+
+        if natural == 20:
+            hp_info.revive_with_hp(1)
+            return result_str, "死亡豁免·自然20：回复 1 点 HP，伤势脱离濒死！", value, True, False
+        if natural == 1:
+            if hp_info.add_death_failure(2):
+                return result_str, "死亡豁免·自然1：失败 +2，累计 3 次——死亡。", value, False, True
+            return (
+                result_str,
+                f"死亡豁免·自然1：失败 +2（成功{hp_info.ds_success} 失败{hp_info.ds_failure}）",
+                value, False, True,
+            )
+        if value >= 10:
+            if hp_info.add_death_success(1):
+                return (
+                    result_str,
+                    "死亡豁免成功：伤势稳定，不再需要掷死亡豁免"
+                    "（再受伤则重新开始死亡豁免）。",
+                    value, False, False,
+                )
+            return (
+                result_str,
+                f"死亡豁免成功 +1（成功{hp_info.ds_success} 失败{hp_info.ds_failure}）",
+                value, False, False,
+            )
+        if hp_info.add_death_failure(1):
+            return result_str, "死亡豁免失败 +1，累计 3 次——死亡。", value, False, False
+        return (
+            result_str,
+            f"死亡豁免失败 +1（成功{hp_info.ds_success} 失败{hp_info.ds_failure}）",
+            value, False, False,
+        )

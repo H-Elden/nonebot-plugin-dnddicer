@@ -30,7 +30,17 @@ from .constants import (
 
 
 class HPInfo(BaseModel):
-    """生命值信息（当前/最大/临时 HP 与生命骰）。"""
+    """生命值信息（当前/最大/临时 HP、生命骰与死亡豁免）。
+
+    昏迷语义沿用 ``is_alive``：``False`` = HP 归 0 后昏迷。死亡豁免四字段
+    （``ds_success`` / ``ds_failure`` / ``is_stable`` / ``is_dead``）在
+    2026-10-01 加入，均有默认值——旧存档缺字段时按默认值读入，无需迁移。
+
+    ``death_saves`` 区分「玩家角色卡」与「NPC 血量」：只有玩家走死亡豁免流程
+    （濒死计数、稳定、死亡），NPC 的 0 HP 就是昏迷/倒下。NPC 血量条目
+    （``NPCHealth``）用 ``npc_hp_info()`` 建默认值关掉它，怪物卡上便不会出现
+    死亡豁免字样，也不会进濒死判定。
+    """
 
     is_init: bool = False
     is_alive: bool = True
@@ -40,6 +50,11 @@ class HPInfo(BaseModel):
     hp_dice_type: int = 0  # 生命骰面数
     hp_dice_num: int = 0   # 当前生命骰数量
     hp_dice_max: int = 0   # 生命骰最大数量
+    ds_success: int = 0    # 死亡豁免成功次数（0~3）
+    ds_failure: int = 0    # 死亡豁免失败次数（0~3）
+    is_stable: bool = False  # 伤势已稳定（稳定后不再需要掷豁免）
+    is_dead: bool = False    # 已死亡（治疗不自动复活，需 .死亡豁免 重置）
+    death_saves: bool = True  # 是否适用死亡豁免（NPC 血量条目为 False）
 
     def initialize(
         self,
@@ -63,6 +78,80 @@ class HPInfo(BaseModel):
         self.hp_dice_type = hp_dice_type
         self.hp_dice_num = hp_dice_num
         self.hp_dice_max = hp_dice_max
+        self.clear_death_state()
+
+    def clear_death_state(self, *, revive: bool = True) -> None:
+        """清除死亡豁免进度（成功/失败计数与稳定标记）。
+
+        ``revive=True``（默认）连死亡标记一起清掉——用于重设角色卡、
+        ``.死亡豁免 重置`` 与治疗回正；``revive=False`` 只清计数，
+        用于「重新开始死亡豁免」（稳定中再受伤、或死亡已裁决后重新开始）。
+        """
+        self.ds_success = 0
+        self.ds_failure = 0
+        self.is_stable = False
+        if revive:
+            self.is_dead = False
+
+    def is_dying(self) -> bool:
+        """是否处于濒死（HP 归 0、昏迷、未稳定、未死亡）。
+
+        只看 ``hp_cur``（而不是 ``is_alive``）：未设上限的「损失记录」模式下
+        HP 会记成负数，同样属于濒死，不该因为标记位不同而漏判。NPC 血量
+        （``death_saves=False``）不适用死亡豁免，一律返回 False。
+        """
+        return (
+            self.death_saves
+            and self.is_init
+            and self.hp_cur <= 0
+            and not self.is_stable
+            and not self.is_dead
+        )
+
+    def add_death_success(self, count: int = 1) -> bool:
+        """记成功 N 次；到达 3 次即伤势稳定、计数清零，返回是否刚转为稳定。"""
+        if self.is_dead:
+            return False
+        self.ds_success += count
+        if self.ds_success >= 3:
+            self.is_stable = True
+            self.ds_success = 0
+            self.ds_failure = 0
+            return True
+        return False
+
+    def add_death_failure(self, count: int = 1) -> bool:
+        """记失败 N 次；到达 3 次即死亡，返回是否刚死亡。"""
+        if self.is_dead:
+            return False
+        self.ds_failure += count
+        if self.ds_failure >= 3:
+            self.is_stable = False
+            self.is_dead = True
+            return True
+        return False
+
+    def revive_with_hp(self, value: int) -> None:
+        """治疗回正：HP 至少 1 点并清除全部死亡豁免状态（死亡的卡不复活）。"""
+        if self.is_dead:
+            return
+        self.hp_cur = max(1, value)
+        self.is_alive = True
+        self.clear_death_state()
+
+    def get_death_info(self) -> str:
+        """死亡豁免摘要，如 ``濒死(成功1 失败2)`` / ``伤势稳定`` / ``已死亡``。
+
+        未进入濒死流程（HP 大于 0、角色卡未初始化、或不适用死亡豁免的 NPC
+        血量）时返回空串。
+        """
+        if not self.death_saves or not self.is_init or self.hp_cur > 0:
+            return ""
+        if self.is_dead:
+            return "已死亡"
+        if self.is_stable:
+            return "伤势稳定"
+        return f"濒死(成功{self.ds_success} 失败{self.ds_failure})"
 
     def is_record_normal(self) -> bool:
         """当前是否正常记录生命值（拥有 HP 值，而非单纯记录受损）。"""
@@ -73,7 +162,12 @@ class HPInfo(BaseModel):
         return not self.is_record_normal()
 
     def take_damage(self, value: int) -> None:
-        """受到伤害：临时 HP 先吸收，溢出扣当前 HP；降至 0 昏迷。"""
+        """受到伤害：临时 HP 先吸收，溢出扣当前 HP，降至 0 即昏迷。
+
+        只做数值结算；死亡豁免（濒死进入、受击记失败、即死）见
+        ``character.services.HPService.*death*``——NPC 血量也用本方法，
+        不应被玩家角色的濒死流程影响。
+        """
         if self.hp_temp > 0:
             if self.hp_temp >= value:
                 self.hp_temp -= value
@@ -92,7 +186,13 @@ class HPInfo(BaseModel):
                 self.hp_cur -= value
 
     def heal(self, value: int) -> None:
-        """治疗：不超过最大 HP；受损模式下向 0 恢复。"""
+        """治疗：不超过最大 HP；受损模式下向 0 恢复；HP 回正即清除死亡豁免状态。
+
+        已死亡（``is_dead``）的卡不复活（提示用 ``.死亡豁免 重置``）——
+        否则「给尸体加血」会让人直接站起来。
+        """
+        if self.is_dead:
+            return
         if self.is_record_normal():
             if self.hp_max == 0:
                 self.hp_cur += value
@@ -101,9 +201,16 @@ class HPInfo(BaseModel):
         else:
             self.hp_cur = min(0, self.hp_cur + value)
         self.is_alive = True
+        self.clear_death_state()
 
-    def long_rest(self) -> str:
-        """长休：恢复 HP 至上限、清除临时 HP、回复一半生命骰（至少 1）。"""
+    def long_rest(self, *, dice_full: bool = False) -> str:
+        """长休：恢复 HP 至上限、清除临时 HP、恢复生命骰、清死亡豁免状态。
+
+        ``dice_full=True`` 恢复**全部**已消耗生命骰（2024 口径）；默认
+        ``False`` 回复总枚数的一半（至少 1 枚，2014 口径）——两版差异由
+        调用方按群级规则版本传入，模型自己不读配置。
+        生命骰恢复量按卡面 ``$生命骰$`` 的录入值计算，不按职业/等级推导。
+        """
         info = ""
         if self.hp_max != 0:
             info = f"生命值回复至上限({self.hp_max})"
@@ -113,22 +220,31 @@ class HPInfo(BaseModel):
             self.hp_temp = 0
         if self.hp_dice_max != 0 and self.hp_dice_type != 0:
             prev_num = self.hp_dice_num
-            self.hp_dice_num = int(max(1, min(
-                self.hp_dice_max,
-                self.hp_dice_num + self.hp_dice_max // 2
-            )))
+            if dice_full:
+                self.hp_dice_num = self.hp_dice_max
+            else:
+                self.hp_dice_num = int(max(1, min(
+                    self.hp_dice_max,
+                    self.hp_dice_num + self.hp_dice_max // 2
+                )))
             info += f"\n回复{self.hp_dice_num - prev_num}个生命骰, "
             info += f"当前拥有{self.hp_dice_num}/{self.hp_dice_max}个D{self.hp_dice_type}生命骰"
+        # 长休使 HP 回满：濒死与死亡豁免进度一并结束、昏迷解除
+        self.is_alive = True
+        self.clear_death_state()
         return info.strip()
 
     def get_info(self) -> str:
-        """HP 摘要，如 ``HP:5/10 (4)`` 或 ``损失HP:3``。"""
+        """HP 摘要，如 ``HP:5/10 (4)``、``HP:0/10 昏迷 濒死(成功1 失败0)``。"""
         temp_info = f" ({self.hp_temp})" if self.hp_temp != 0 else ""
         if self.is_record_normal():
             max_info = f"/{self.hp_max}" if self.hp_max != 0 else ""
             info = f"HP:{self.hp_cur}{max_info}{temp_info}"
             if not self.is_alive:
                 info += " 昏迷"
+            death_info = self.get_death_info()
+            if death_info:
+                info += f" {death_info}"
         else:
             info = f"损失HP:{-self.hp_cur}{temp_info}"
         return info
@@ -145,6 +261,15 @@ class HPInfo(BaseModel):
         if self.hp_dice_type > 0:
             info += f"\n{CHAR_INFO_KEY_HP_DICE} {self.hp_dice_num}/{self.hp_dice_max} D{self.hp_dice_type}"
         return info
+
+
+def npc_hp_info() -> HPInfo:
+    """NPC 血量条目的默认 HP 信息（关闭死亡豁免流程）。
+
+    怪物只有「活着 / 打到 0 就倒下」，没有死亡豁免计数与稳定状态；
+    ``NPCHealth.hp_info`` 的默认值用它，PC 角色卡仍用 ``HPInfo()`` 默认值。
+    """
+    return HPInfo(death_saves=False)
 
 
 class AbilityInfo(BaseModel):
@@ -232,7 +357,8 @@ class WeaponInfo(BaseModel):
 class NPCHealth(BaseModel):
     """NPC/怪物血量条目（群级、按名称索引）。
 
-    名称即主键（同一群内 NPC 名唯一），血量复用 HPInfo（与 PC 同款结构）。
+    名称即主键（同一群内 NPC 名唯一），血量复用 HPInfo（与 PC 同款结构，
+    但 ``death_saves=False``：怪物不做死亡豁免，0 HP 即昏迷/倒下）。
     条目在 ``.hp 目标 ...`` 且目标经先攻表解析时按需创建——即 NPC 需先
     ``.ri`` 入先攻表（或已存在血量记录）。
 
@@ -243,7 +369,7 @@ class NPCHealth(BaseModel):
 
     group_id: str
     name: str
-    hp_info: HPInfo = Field(default_factory=HPInfo)
+    hp_info: HPInfo = Field(default_factory=npc_hp_info)
     persistent: bool = False
 
 
