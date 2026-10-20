@@ -39,6 +39,7 @@ SYNCED_PAGES = [
     "guide/character-card.md",
     "guide/checks.md",
     "guide/weapons.md",
+    "guide/resources.md",
     "guide/hp-advanced.md",
     "guide/death-save.md",
     "guide/rules-version.md",

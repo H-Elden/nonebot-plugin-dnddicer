@@ -1273,6 +1273,49 @@ hp_stun_2014 = Scene(
     ],
 )
 
+# 能力 / 法术 / 法术位（2026-10-20 批②）：示例团四张卡已在 cast.py 录入三段，
+# 这里演示查看、消耗恢复与准备标记；放在时间线末尾，不影响前面的战斗示例。
+resource_ability = Scene(
+    id="resource_ability",
+    title="能力次数：清单、详情、消耗恢复与录入删除",
+    steps=[
+        Step("阿岩", ".能力"),
+        Step("阿岩", ".能力 引导神力"),
+        Step("阿岩", ".能力 引导神力 -1"),
+        Step("阿岩", ".能力 引导神力 +1"),
+        Step("阿岩", ".设置能力 神圣干预:1/1长休"),
+        Step("阿岩", ".删除能力 神圣干预"),
+    ],
+)
+
+resource_spell = Scene(
+    id="resource_spell",
+    title="法术清单：准备标记切换与提醒开关",
+    steps=[
+        Step("小满", ".法术"),
+        Step("小满", ".法术 准备 闪电束"),
+        Step("小满", ".法术 取消 火球术"),
+        Step("小满", ".设置法术 魔法飞弹:2"),
+        Step("小满", ".删除法术 魔法飞弹"),
+        Step("小满", ".法术"),
+        Step("小满", ".法术 提醒"),
+        Step("小满", ".法术 提醒 off"),
+        Step("小满", ".法术 提醒 on"),
+    ],
+)
+
+resource_slots = Scene(
+    id="resource_slots",
+    title="法术位：查看、set、手动消耗与 reset",
+    steps=[
+        Step("小满", ".法术位"),
+        Step("小满", ".法术位 set 1:4, 2:3, 3:2/2"),
+        Step("小满", ".法术位 3 -1"),
+        Step("小满", ".ss"),
+        Step("小满", ".法术位 reset"),
+    ],
+)
+
 master_forward = Scene(
     id="master_forward",
     title="联系骰主：反馈交由骰娘私聊转达（群聊与私聊都可用）",
@@ -1421,5 +1464,9 @@ TIMELINE = [
     death_save_instant,
     hp_stun_variant,
     hp_stun_2014,
+    # 第十幕：能力与法术资源（《能力、法术与法术位》页）
+    resource_ability,
+    resource_spell,
+    resource_slots,
     quickstart_bot_off,  # 压轴：服务关闭后本群不再响应其他命令
 ]

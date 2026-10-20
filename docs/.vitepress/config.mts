@@ -57,6 +57,7 @@ export default defineConfig({
           { text: '角色卡与属性', link: '/guide/character-card' },
           { text: '检定与豁免', link: '/guide/checks' },
           { text: '武器与攻击', link: '/guide/weapons' },
+          { text: '能力、法术与法术位', link: '/guide/resources' },
           { text: 'HP 进阶与长休', link: '/guide/hp-advanced' },
           { text: '死亡豁免', link: '/guide/death-save' },
           { text: '规则版本与击晕', link: '/guide/rules-version' },
