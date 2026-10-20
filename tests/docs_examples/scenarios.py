@@ -1316,6 +1316,45 @@ resource_slots = Scene(
     ],
 )
 
+# 施法与休息（2026-10-20 批③）：接着 resource_spell 的末尾状态（火球术未准备、
+# 闪电束已准备、法术位 reset 满），演示环阶消耗、未准备提醒与短休/长休。
+cast_resources = Scene(
+    id="cast_resources",
+    title="施法：卡面环阶、升环、纯环阶、戏法与未准备提醒",
+    steps=[
+        Step("小满", ".施法 火球术"),       # 未准备 → 提醒
+        Step("小满", ".施法 闪电束"),       # 已准备
+        Step("小满", ".施法 护盾术2"),      # 1 环法术用 2 环位（绝对升环）
+        Step("小满", ".施法 护盾术+1"),     # 相对升环
+        Step("小满", ".施法 2"),            # 只指定环阶
+        Step("小满", ".施法 火焰箭"),       # 戏法 + 同名武器提示
+        Step("小满", ".施法 3"),            # 3 环位已用尽
+    ],
+)
+
+rest_short = Scene(
+    id="rest_short",
+    title="短休与生命骰：恢复短休能力、提示生命骰、花骰回血",
+    steps=[
+        Step("小满", ".能力 奥术回想 -1"),
+        Step("小满", ".短休"),
+        Step("白鸦", ".hp 洛恩 17/37"),
+        Step("小满", ".生命骰 1", dice=[4]),
+    ],
+)
+
+rest_long = Scene(
+    id="rest_long",
+    title="长休：恢复能力与法术位、生命骰按版本恢复、准备提示",
+    steps=[
+        Step("白鸦", ".hp 薇拉 20/54"),
+        Step("阿茶", ".能力 圣疗 -5"),
+        Step("阿茶", ".能力 引导神力 -1"),
+        Step("阿茶", ".法术位 1 -1"),
+        Step("阿茶", ".长休"),
+    ],
+)
+
 master_forward = Scene(
     id="master_forward",
     title="联系骰主：反馈交由骰娘私聊转达（群聊与私聊都可用）",
@@ -1468,5 +1507,9 @@ TIMELINE = [
     resource_ability,
     resource_spell,
     resource_slots,
+    # 第十一幕：施法与休息闭环（《休息与资源》页）
+    cast_resources,
+    rest_short,
+    rest_long,
     quickstart_bot_off,  # 压轴：服务关闭后本群不再响应其他命令
 ]
