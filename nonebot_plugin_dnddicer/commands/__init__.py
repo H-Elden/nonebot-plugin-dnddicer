@@ -13,6 +13,8 @@
 规划拆分（第一期 = T0 + T1 + 战斗轮简化版）：
 - roll.py          ★ 掷骰（.r / .rh，2026-09-02 已落地；暗骰/连掷/默认骰面/原因）
 - character.py     角色卡与检定（.角色卡/.状态 + 检定/豁免 点命令，已落地）
+- feature.py       能力次数（.能力/.设置能力/.删除能力，2026-10-20 落地）
+- spell.py         法术与法术位（.法术/.设置法术/.删除法术/.法术位(.ss)，2026-10-20 落地）
 - dnd.py           属性生成（.dnd 4D6K3 掷点，已落地；标准购点另行规划）
 - hp.py            HP 管理（.hp / .长休 / .死亡豁免(.ds)，群内共享、多目标伤害/治疗，已落地）
 - npc.py           NPC 血量跨战斗保持开关（.npc 持久 / .npc 临时，已落地）
@@ -30,6 +32,8 @@ from . import base  # noqa: F401  # 基础设施（注册表/起始符/解析）
 from . import roll  # noqa: F401  # .r / .rh 掷骰命令（模块顶层注册 matcher）
 from . import character  # noqa: F401  # .角色卡/.状态 + 检定/豁免 点命令
 from . import weapon  # noqa: F401  # .X攻击/.X命中 自定义武器攻击检定（模式匹配）
+from . import feature  # noqa: F401  # .能力/.设置能力/.删除能力 有次数的能力
+from . import spell  # noqa: F401  # .法术/.法术位(.ss) 法术清单、准备标记与法术位
 from . import dnd  # noqa: F401  # .dnd 属性生成
 from . import group_config  # noqa: F401  # .dset 群默认骰面
 from . import rules  # noqa: F401  # .规则版本 群级规则版本（5e / 5r）

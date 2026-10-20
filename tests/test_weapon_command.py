@@ -286,8 +286,8 @@ def test_template_char_weapons_recordable():
     """模板卡的武器段可被再次解析（与既有模板闭环测试同源）。"""
     text = gen_template_char().get_char_info()
     char = CharacterService.parse(text, "g2", "u2")
-    assert char.char_class == "游荡者"
-    assert char.weapons and char.weapons[0].name == "短剑"
+    assert char.char_class == "法师"
+    assert any(weapon.name == "匕首" for weapon in char.weapons)
 
 
 # ── 命令层：录入与查看 ──────────────────────────────────────────────────

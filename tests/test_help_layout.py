@@ -199,7 +199,7 @@ def test_registered_docs_exist():
 
 
 def test_group_docs_registered():
-    """7 个分组都要登记文档页（组清单末尾的链接行据此生成深链）。"""
+    """每个分组都要登记文档页（组清单末尾的链接行据此生成深链）。"""
     for name, _lines, doc in help_layout.HELP_GROUPS:
         assert doc, f"分组「{name}」未登记文档页"
 

@@ -99,6 +99,31 @@ WEAPON_NAME_FORBIDDEN_CHARS = ("/", ",", "，", "$", "+", "-")
 #: 伤害命令支持的后缀（写在「伤害」之前、可任意组合）
 WEAPON_DAMAGE_SUFFIX_LIST = ("副手", "重击", "偷袭")
 
+# ── 有使用次数的能力（$能力$ 段，2026-10-20 批②）────────────────────────
+#: 能力条数上限与名称长度上限
+FEATURE_MAX_COUNT = 20
+FEATURE_NAME_MAX_LEN = 20
+#: 能力名禁含字样（与武器口径一致，避免与命令切分/检定点歧义）
+FEATURE_NAME_FORBIDDEN_WORDS = ("攻击", "命中", "伤害", "检定", "豁免")
+#: 能力名禁含符号（条目内 ``:`` 分字段、``;`` 分条、``/`` 分当前上限）
+FEATURE_NAME_FORBIDDEN_CHARS = ("/", ",", "，", ":", "：", ";", "；", "$", "+", "-")
+#: 恢复档（顺序即展示顺序）：短休 / 长休 / 两者 / 手动；
+#: 可后缀 ``+N``（恢复 N 次）或 ``满``（回满，可省略）
+FEATURE_RECOVER_MODES = ("短休", "长休", "两者", "手动")
+
+# ── 法术清单与法术位（$法术$ / $法术位$ 段，2026-10-20 批②）─────────────
+#: 法术条数上限与名称长度上限
+SPELL_MAX_COUNT = 50
+SPELL_NAME_MAX_LEN = 20
+#: 法术名禁含符号（``:`` 分字段、``;`` 分条、``*`` 是准备标记）
+SPELL_NAME_FORBIDDEN_CHARS = ("/", ",", "，", ":", "：", ";", "；", "$", "*", "＊")
+#: 法术环阶上限（0 = 戏法）
+SPELL_LEVEL_MAX = 9
+#: 单级法术位上限（防止误写超大数字）
+SPELL_SLOT_MAX = 99
+#: ``$法术$`` 段首条可写的施法属性前缀
+SPELLCASTING_ABILITY_KEY = "施法属性"
+
 # ── 角色卡关键字（$xxx$ 模板段落）────────────────────────────────────────
 CHAR_INFO_KEY_NAME = "$姓名$"
 CHAR_INFO_KEY_RACE = "$种族$"
@@ -111,6 +136,9 @@ CHAR_INFO_KEY_ABILITY = "$属性$"
 CHAR_INFO_KEY_PROF = "$熟练$"
 CHAR_INFO_KEY_EXT = "$额外加值$"
 CHAR_INFO_KEY_WEAPON = "$武器$"
+CHAR_INFO_KEY_FEATURE = "$能力$"
+CHAR_INFO_KEY_SPELL = "$法术$"
+CHAR_INFO_KEY_SPELL_SLOTS = "$法术位$"
 CHAR_INFO_KEY_LIST = [
     CHAR_INFO_KEY_NAME,
     CHAR_INFO_KEY_RACE,
@@ -123,4 +151,7 @@ CHAR_INFO_KEY_LIST = [
     CHAR_INFO_KEY_PROF,
     CHAR_INFO_KEY_EXT,
     CHAR_INFO_KEY_WEAPON,
+    CHAR_INFO_KEY_FEATURE,
+    CHAR_INFO_KEY_SPELL,
+    CHAR_INFO_KEY_SPELL_SLOTS,
 ]

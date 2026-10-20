@@ -69,6 +69,7 @@ _CATALOG = (
     ".help 掷骰 查看掷骰相关命令\n"
     ".help 角色 查看角色卡命令\n"
     ".help 武器 查看武器使用命令\n"
+    ".help 资源 查看能力与法术命令\n"
     ".help 生命 查看生命值命令\n"
     ".help 先攻 查看先攻/战斗命令\n"
     ".help 查询 查看规则查询命令\n"
@@ -84,6 +85,16 @@ _LIFE_GROUP = (
     ".ds 成功+1/失败+1/状态/重置　#手动裁决\n"
     ".长休 [@玩家]　#长休结算\n"
     ".npc 持久/临时 名称　#NPC血量跨战斗保持开关"
+)
+
+_RESOURCE_GROUP = (
+    "【能力与法术命令】\n"
+    "⚠️以下命令需要先记录角色卡：\n"
+    ".能力 [名称] [±N]　#能力次数与恢复\n"
+    ".设置能力 名称:…　#记录或覆盖能力\n"
+    ".法术 [准备|取消]　#法术清单与准备\n"
+    ".设置法术 名称:环阶　#记录法术\n"
+    ".法术位 / .ss　#查看与调整法术位"
 )
 
 _QUERY_GROUP = (
@@ -169,7 +180,7 @@ async def test_landing_chinese_start(app: App):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("keyword", ["命令", "列表"])
 async def test_catalog(app: App, keyword: str):
-    """.help 命令：7 组目录（`列表` 为静默别名）。"""
+    """.help 命令：8 组目录（`列表` 为静默别名）。"""
     await _expect_group(app, f".help {keyword}", _CATALOG)
 
 
@@ -181,6 +192,12 @@ async def test_catalog(app: App, keyword: str):
 async def test_group_listing(app: App, keyword: str):
     """.help 生命：该组命令清单（`血量` 为静默别名）。"""
     await _expect_group(app, f".help {keyword}", _LIFE_GROUP)
+
+
+@pytest.mark.asyncio
+async def test_resource_group_listing(app: App):
+    """.help 资源：能力与法术命令组（2026-10-20 批②新增）。"""
+    await _expect_group(app, ".help 资源", _RESOURCE_GROUP)
 
 
 @pytest.mark.asyncio

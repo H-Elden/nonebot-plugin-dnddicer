@@ -23,6 +23,7 @@ from .constants import (
     CHAR_INFO_KEY_ABILITY,
     CHAR_INFO_KEY_CLASS,
     CHAR_INFO_KEY_EXT,
+    CHAR_INFO_KEY_FEATURE,
     CHAR_INFO_KEY_HP,
     CHAR_INFO_KEY_HP_DICE,
     CHAR_INFO_KEY_LEVEL,
@@ -30,6 +31,8 @@ from .constants import (
     CHAR_INFO_KEY_NAME,
     CHAR_INFO_KEY_PROF,
     CHAR_INFO_KEY_RACE,
+    CHAR_INFO_KEY_SPELL,
+    CHAR_INFO_KEY_SPELL_SLOTS,
     CHAR_INFO_KEY_SUBCLASS,
     CHAR_INFO_KEY_WEAPON,
     CHECK_ITEM_INDEX_DICT,
@@ -40,6 +43,11 @@ from .constants import (
     DAMAGE_TYPE_SYNONYM_DICT,
     EXT_ITEM_INDEX_DICT,
     EXT_ITEM_LIST,
+    FEATURE_MAX_COUNT,
+    FEATURE_NAME_FORBIDDEN_CHARS,
+    FEATURE_NAME_FORBIDDEN_WORDS,
+    FEATURE_NAME_MAX_LEN,
+    FEATURE_RECOVER_MODES,
     SAVING_ALL_KEY,
     SAVING_LIST,
     SAVING_PARENT_DICT,
@@ -47,12 +55,26 @@ from .constants import (
     SKILL_PARENT_DICT,
     SKILL_SYNONYM_DICT,
     SNEAK_ATTACK_CLASS,
+    SPELLCASTING_ABILITY_KEY,
+    SPELL_LEVEL_MAX,
+    SPELL_MAX_COUNT,
+    SPELL_NAME_FORBIDDEN_CHARS,
+    SPELL_NAME_MAX_LEN,
+    SPELL_SLOT_MAX,
     WEAPON_MAX_COUNT,
     WEAPON_NAME_FORBIDDEN_CHARS,
     WEAPON_NAME_FORBIDDEN_WORDS,
     WEAPON_NAME_MAX_LEN,
 )
-from .models import AbilityInfo, DNDCharacter, HPInfo, WeaponInfo
+from .models import (
+    AbilityInfo,
+    CharacterFeature,
+    DNDCharacter,
+    HPInfo,
+    SpellEntry,
+    SpellSlots,
+    WeaponInfo,
+)
 
 
 def _normalize_name(name: str) -> str:
@@ -221,6 +243,310 @@ def parse_weapon_list(content: str, reserved_names: Iterable[str] = ()) -> List[
         seen.add(weapon.name)
         weapons.append(weapon)
     return weapons
+
+
+# ── 能力次数 / 法术清单 / 法术位（2026-10-20 批②）────────────────────────
+
+
+def _split_semicolon_items(content: str) -> List[str]:
+    """按半角/全角分号切分段内容（新增三段统一口径）。"""
+    return [item.strip() for item in re.split(r"[;；]", content) if item.strip()]
+
+
+def validate_feature_name(name: str) -> None:
+    """能力名基础校验（解析与 .设置能力 共用；失败抛 AssertionError）。"""
+    if not name:
+        raise AssertionError("能力名称不能为空")
+    if len(name) > FEATURE_NAME_MAX_LEN:
+        raise AssertionError(f"能力名称过长（≤{FEATURE_NAME_MAX_LEN} 字）: {name}")
+    for ch in FEATURE_NAME_FORBIDDEN_CHARS:
+        if ch in name:
+            raise AssertionError(f"能力名称不能包含符号「{ch}」: {name}")
+    for word in FEATURE_NAME_FORBIDDEN_WORDS:
+        if word in name:
+            raise AssertionError(f"能力名称不能包含「{word}」字样: {name}")
+
+
+def _parse_recover_amount(text: str) -> str:
+    """解析恢复量后缀：空 / ``满`` → 回满（规范化后留空），``+N`` → ``+N``。"""
+    value = text.strip()
+    if not value or value == "满":
+        return ""
+    matched = re.fullmatch(r"\+(\d+)", value)
+    if not matched:
+        raise AssertionError(
+            f"能力恢复量无效: {text}（可写 +N 或 满，如 短休+1、长休满）"
+        )
+    count = int(matched.group(1))
+    if count <= 0:
+        raise AssertionError(f"能力恢复量必须大于 0: {text}")
+    return f"+{count}"
+
+
+def normalize_feature_recover(spec: str) -> str:
+    """规范化能力恢复档串，返回如 ``短休+1,长休``。
+
+    合法档位：``短休`` / ``长休`` / ``两者`` / ``手动``，多个用逗号连接；
+    可后缀 ``+N``（恢复 N 次）或 ``满``（回满，默认，输出省略）。
+    ``两者`` 表示短休与长休都回满，不得再与 ``短休`` / ``长休`` 同时写。
+    输出按固定顺序排列，便于卡面稳定回写。
+    """
+    raw = (spec or "").strip()
+    if not raw:
+        raise AssertionError(
+            "能力恢复方式不能为空"
+            "（可选：短休/长休/两者/手动，可加 +N 或 满）"
+        )
+    amounts: Dict[str, str] = {}
+    for piece in re.split(r"[,，]", raw):
+        token = piece.strip()
+        if not token:
+            continue
+        mode = next(
+            (item for item in FEATURE_RECOVER_MODES if token.startswith(item)),
+            None,
+        )
+        if mode is None:
+            raise AssertionError(
+                f"能力恢复方式无效: {token}"
+                "（可选：短休/长休/两者/手动，可加 +N 或 满）"
+            )
+        tail = token[len(mode):]
+        if mode == "手动" and tail.strip():
+            raise AssertionError(f"「手动」不能带恢复量: {token}")
+        if mode in amounts:
+            raise AssertionError(f"能力恢复方式重复: {token}")
+        amounts[mode] = _parse_recover_amount(tail)
+    if not amounts:
+        raise AssertionError("能力恢复方式不能为空")
+    if "两者" in amounts and ("短休" in amounts or "长休" in amounts):
+        raise AssertionError("「两者」已含短休与长休，不要再分别写")
+    return ",".join(
+        f"{mode}{amounts[mode]}"
+        for mode in FEATURE_RECOVER_MODES
+        if mode in amounts
+    )
+
+
+def parse_feature_item(item: str) -> CharacterFeature:
+    """解析单条能力：``名称:当前/上限恢复档``。
+
+    例：``引导神力:2/2短休+1,长休``、``圣疗:25/25长休``、``狂暴:3/3两者``。
+    恢复档可省略后缀（默认回满）。校验失败抛 AssertionError（消息面向用户）。
+    """
+    raw = item.strip()
+    normalized = raw.replace("：", ":")
+    name_part, separator, value_part = normalized.partition(":")
+    if not separator:
+        raise AssertionError(
+            f"能力条目不完整: {raw}（示例：引导神力:2/2短休+1,长休）"
+        )
+    name = name_part.strip()
+    validate_feature_name(name)
+    matched = re.match(r"^\s*(\d+)\s*/\s*(\d+)\s*(.*)$", value_part)
+    if not matched:
+        raise AssertionError(
+            f"能力次数无效: {raw}（写法：当前/上限恢复档，如 2/2短休+1,长休）"
+        )
+    uses_cur = int(matched.group(1))
+    uses_max = int(matched.group(2))
+    if uses_max <= 0:
+        raise AssertionError(f"能力上限必须大于 0: {raw}")
+    if uses_cur > uses_max:
+        raise AssertionError(f"能力当前次数不能超过上限: {raw}")
+    recover = normalize_feature_recover(matched.group(3))
+    return CharacterFeature(
+        name=name, uses_cur=uses_cur, uses_max=uses_max, recover=recover
+    )
+
+
+def parse_feature_list(content: str) -> List[CharacterFeature]:
+    """解析 ``$能力$`` 段全文（分号分条；名称卡内唯一、数量 ≤ 上限）。"""
+    items = _split_semicolon_items(content)
+    if len(items) > FEATURE_MAX_COUNT:
+        raise AssertionError(f"能力数量最多 {FEATURE_MAX_COUNT} 项")
+    features: List[CharacterFeature] = []
+    seen: set[str] = set()
+    for item in items:
+        feature = parse_feature_item(item)
+        if feature.name in seen:
+            raise AssertionError(f"能力名称重复: {feature.name}")
+        seen.add(feature.name)
+        features.append(feature)
+    return features
+
+
+def validate_spell_name(name: str) -> None:
+    """法术名基础校验（解析与 .设置法术 共用；失败抛 AssertionError）。"""
+    if not name:
+        raise AssertionError("法术名称不能为空")
+    if len(name) > SPELL_NAME_MAX_LEN:
+        raise AssertionError(f"法术名称过长（≤{SPELL_NAME_MAX_LEN} 字）: {name}")
+    for ch in SPELL_NAME_FORBIDDEN_CHARS:
+        if ch in name:
+            raise AssertionError(f"法术名称不能包含符号「{ch}」: {name}")
+
+
+def parse_spell_item(item: str) -> SpellEntry:
+    """解析单条法术：``名称:环阶[*已准备]``（环阶 0 = 戏法）。
+
+    例：``火球术:3*``、``火焰箭:0``。校验失败抛 AssertionError。
+    """
+    raw = item.strip()
+    normalized = raw.replace("：", ":")
+    name_part, separator, level_part = normalized.partition(":")
+    if not separator:
+        raise AssertionError(f"法术条目不完整: {raw}（示例：火球术:3*）")
+    name = name_part.strip()
+    validate_spell_name(name)
+    level_text = level_part.strip()
+    prepared = False
+    if level_text.endswith(("*", "＊")):
+        prepared = True
+        level_text = level_text[:-1].strip()
+    if not level_text.isdigit():
+        raise AssertionError(f"法术环阶无效: {raw}（写 0~9 的数字，0 = 戏法）")
+    level = int(level_text)
+    if level > SPELL_LEVEL_MAX:
+        raise AssertionError(f"法术环阶无效: {raw}（写 0~9 的数字，0 = 戏法）")
+    return SpellEntry(name=name, level=level, prepared=prepared)
+
+
+def parse_spell_setting(content: str) -> Tuple[str, List[SpellEntry]]:
+    """解析 ``$法术$`` 段全文 → (施法属性, 法术列表)。
+
+    首条可写 ``施法属性:魅力``（六属性名之一）；其余为 ``名称:环阶[*]``。
+    分号分条；名称卡内唯一、数量 ≤ 上限。校验失败抛 AssertionError。
+    """
+    items = _split_semicolon_items(content)
+    casting_ability = ""
+    spells: List[SpellEntry] = []
+    seen: set[str] = set()
+    for item in items:
+        normalized = item.replace("：", ":")
+        key, separator, value = normalized.partition(":")
+        if key.strip() == SPELLCASTING_ABILITY_KEY:
+            if not separator:
+                raise AssertionError(
+                    f"施法属性写法无效: {item}（示例：施法属性:魅力）"
+                )
+            ability = value.strip()
+            if ability not in ABILITY_LIST:
+                raise AssertionError(
+                    f"施法属性无效: {ability}（可选：{'/'.join(ABILITY_LIST)}）"
+                )
+            if casting_ability:
+                raise AssertionError("施法属性只能写一条")
+            casting_ability = ability
+            continue
+        spell = parse_spell_item(item)
+        if spell.name in seen:
+            raise AssertionError(f"法术名称重复: {spell.name}")
+        seen.add(spell.name)
+        spells.append(spell)
+    if len(spells) > SPELL_MAX_COUNT:
+        raise AssertionError(f"法术数量最多 {SPELL_MAX_COUNT} 条")
+    return casting_ability, spells
+
+
+def spell_slot_label(is_pact: bool, level: int) -> str:
+    """法术位展示名：``3环`` / ``契约魔法（3环）``。"""
+    return f"契约魔法（{level}环）" if is_pact else f"{level}环"
+
+
+def parse_spell_slot_entries(
+    content: str, *, allow_omitted_max: bool = False
+) -> List[Tuple[bool, int, int, int]]:
+    """解析法术位条目 → ``[(是否契约, 环阶, 当前, 上限), ...]``。
+
+    ``allow_omitted_max=False``（卡面 ``$法术位$``）要求写全 ``当前/上限``；
+    ``True``（``.法术位 set``）允许只写 ``环阶:当前``，此时上限 = 当前。
+    分号或逗号分条；环阶 1~9、数量 0~99、当前 ≤ 上限。失败抛 AssertionError。
+    """
+    items = [
+        item.strip()
+        for item in re.split(r"[;；,，]", content)
+        if item.strip()
+    ]
+    entries: List[Tuple[bool, int, int, int]] = []
+    seen: set[Tuple[bool, int]] = set()
+    for raw in items:
+        normalized = raw.replace("：", ":")
+        matched = re.match(
+            r"^(契约)?\s*(\d+)\s*:\s*(\d+)(?:\s*/\s*(\d+))?$", normalized
+        )
+        if not matched:
+            raise AssertionError(
+                f"法术位条目不完整: {raw}"
+                "（示例：1:4/4; 契约3:2/2）"
+            )
+        is_pact = matched.group(1) is not None
+        level = int(matched.group(2))
+        cur = int(matched.group(3))
+        if matched.group(4) is None:
+            if not allow_omitted_max:
+                raise AssertionError(
+                    f"法术位条目不完整: {raw}"
+                    "（书写 当前/上限，如 1:4/4；契约写 契约3:2/2）"
+                )
+            max_value = cur
+        else:
+            max_value = int(matched.group(4))
+        if not 1 <= level <= SPELL_LEVEL_MAX:
+            raise AssertionError(f"法术位环阶无效: {raw}（1~9 环）")
+        if not 0 <= cur <= SPELL_SLOT_MAX or not 0 <= max_value <= SPELL_SLOT_MAX:
+            raise AssertionError(f"法术位数量无效: {raw}（0~{SPELL_SLOT_MAX}）")
+        if cur > max_value:
+            raise AssertionError(f"法术位当前值不能超过上限: {raw}")
+        key = (is_pact, level)
+        if key in seen:
+            raise AssertionError(
+                f"法术位重复: {spell_slot_label(is_pact, level)}"
+            )
+        seen.add(key)
+        entries.append((is_pact, level, cur, max_value))
+    if not entries:
+        raise AssertionError("法术位内容不能为空（示例：1:4/4; 契约3:2/2）")
+    return entries
+
+
+def parse_spell_slots(content: str) -> SpellSlots:
+    """解析 ``$法术位$`` 段全文为 ``SpellSlots``。"""
+    slots = SpellSlots()
+    for is_pact, level, cur, max_value in parse_spell_slot_entries(content):
+        if is_pact:
+            # 上限 0 等同未记录（不保留一个没有容量的契约位条目）
+            if max_value > 0:
+                slots.pact_level = level
+                slots.pact_cur = cur
+                slots.pact_max = max_value
+        else:
+            slots.slots_cur[level - 1] = cur
+            slots.slots_max[level - 1] = max_value
+    return slots
+
+
+def match_features(
+    features: Iterable[CharacterFeature], name: str
+) -> List[CharacterFeature]:
+    """按名称匹配能力：精确（大小写不敏感）优先，其次子串模糊匹配。
+
+    与武器/目标搜索同款两级；返回空 = 未找到、多项 = 歧义（调用方列候选、不猜）。
+    """
+    lowered = name.lower()
+    for feature in features:
+        if feature.name.lower() == lowered:
+            return [feature]
+    return [feature for feature in features if lowered in feature.name.lower()]
+
+
+def match_spells(spells: Iterable[SpellEntry], name: str) -> List[SpellEntry]:
+    """按名称匹配法术（精确优先 → 子串），口径同 ``match_features``。"""
+    lowered = name.lower()
+    for spell in spells:
+        if spell.name.lower() == lowered:
+            return [spell]
+    return [spell for spell in spells if lowered in spell.name.lower()]
 
 
 def get_sneak_attack_dice(level: int, char_class: str) -> int:
@@ -474,7 +800,10 @@ class CharacterService:
         $属性$ 10/11/12/15/12/8
         $熟练$ 力量/2*隐匿/奥秘
         $额外加值$ 运动:优势/隐匿:优势+2/游说:-2
+        $能力$ 奥术回想:1/1短休
         $武器$ 短剑+6,1d4+4穿刺/长弓+5,1d8+3穿刺
+        $法术$ 施法属性:智力; 火球术:3*; 火焰箭:0
+        $法术位$ 1:4/4; 2:3/3; 契约3:2/2
 
         ``reserved_names`` 为保留名集合（插件固定命令名），武器名不得与之
         冲突（由命令层传入；缺省不检查，供纯函数调用与单测）。
@@ -556,6 +885,17 @@ class CharacterService:
         weapon_str = data.get(CHAR_INFO_KEY_WEAPON, "").strip()
         weapons = parse_weapon_list(weapon_str, reserved_names) if weapon_str else []
 
+        # ── 能力 / 法术 / 法术位（可选段，2026-10-20 批②）──
+        feature_str = data.get(CHAR_INFO_KEY_FEATURE, "").strip()
+        features = parse_feature_list(feature_str) if feature_str else []
+        spell_str = data.get(CHAR_INFO_KEY_SPELL, "").strip()
+        if spell_str:
+            spellcasting_ability, spells = parse_spell_setting(spell_str)
+        else:
+            spellcasting_ability, spells = "", []
+        slots_str = data.get(CHAR_INFO_KEY_SPELL_SLOTS, "").strip()
+        spell_slots = parse_spell_slots(slots_str) if slots_str else SpellSlots()
+
         return DNDCharacter(
             group_id=group_id,
             user_id=user_id,
@@ -566,29 +906,52 @@ class CharacterService:
             hp_info=hp_info,
             ability_info=ability_info,
             weapons=weapons,
+            features=features,
+            spells=spells,
+            spell_slots=spell_slots,
+            spellcasting_ability=spellcasting_ability,
             is_init=True,
         )
 
 
 def gen_template_char(group_id: str = "", user_id: str = "") -> DNDCharacter:
-    """生成一张示例角色卡（供 .角色卡模板 输出展示）。"""
+    """生成一张示例角色卡（供 .角色卡模板 输出展示）。
+
+    示例为 5 级法师：数值与 [2024 玩家手册] 示例一致（智力 18、熟练 +3），
+    覆盖新增的 ``$能力$`` / ``$法术$`` / ``$法术位$`` 三段。
+    """
     character = DNDCharacter(group_id=group_id, user_id=user_id, name="张三", is_init=True)
-    character.race = "半精灵"
-    character.char_class = "游荡者"  # 示例职业取游荡者（可用偷袭后缀）
-    character.subclass = "刺客"
-    character.hp_info.initialize(hp_cur=20, hp_max=30, hp_temp=5, hp_dice_type=8, hp_dice_num=3, hp_dice_max=4)
+    character.race = "高等精灵"
+    character.char_class = "法师"
+    character.subclass = "塑能师"
+    character.hp_info.initialize(hp_cur=37, hp_max=37, hp_dice_type=6, hp_dice_num=5, hp_dice_max=5)
     character.ability_info.is_init = True
-    character.ability_info.level = 4
-    character.ability_info.ability = [10, 15, 12, 13, 8, 11]
-    for name in ("敏捷豁免", "体操"):
+    character.ability_info.level = 5
+    character.ability_info.ability = [8, 15, 16, 18, 10, 8]
+    for name in ("智力豁免", "感知豁免", "历史", "调查", "宗教", "察觉"):
         character.ability_info.check_prof[CHECK_ITEM_INDEX_DICT[name]] = 1
-    character.ability_info.check_prof[CHECK_ITEM_INDEX_DICT["隐匿"]] = 2
-    character.ability_info.check_adv[EXT_ITEM_INDEX_DICT["隐匿"]] = 1
+    character.ability_info.check_prof[CHECK_ITEM_INDEX_DICT["奥秘"]] = 2
     character.ability_info.check_ext[EXT_ITEM_INDEX_DICT[SAVING_ALL_KEY]] = "+2"
-    # 示例武器与卡自洽：命中 +4 = 敏捷调整 +2 + 熟练 +2（4 级）；伤害 1d4+2（敏捷调整）
+    # 示例武器与卡自洽：匕首命中 +5 = 敏捷调整 +2 + 熟练 +3（5 级）；伤害 1d4+2
     character.weapons = [
-        WeaponInfo(name="短剑", attack_bonus="+4", damage_expr="1d4+2", damage_type="穿刺"),
+        WeaponInfo(name="火焰箭", damage_expr="2d10", damage_type="火焰", no_attack=True),
+        WeaponInfo(name="匕首", attack_bonus="+5", damage_expr="1d4+2", damage_type="穿刺"),
     ]
+    character.features = [
+        CharacterFeature(name="奥术回想", uses_cur=1, uses_max=1, recover="短休"),
+    ]
+    character.spellcasting_ability = "智力"
+    character.spells = [
+        SpellEntry(name="火球术", level=3, prepared=True),
+        SpellEntry(name="闪电束", level=3),
+        SpellEntry(name="魔法飞弹", level=1, prepared=True),
+        SpellEntry(name="护盾术", level=1, prepared=True),
+        SpellEntry(name="火焰箭", level=0),
+    ]
+    character.spell_slots = SpellSlots(
+        slots_cur=[4, 3, 2, 0, 0, 0, 0, 0, 0],
+        slots_max=[4, 3, 2, 0, 0, 0, 0, 0, 0],
+    )
     return character
 
 

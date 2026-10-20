@@ -16,16 +16,20 @@ from .constants import (
     CHAR_INFO_KEY_ABILITY,
     CHAR_INFO_KEY_CLASS,
     CHAR_INFO_KEY_EXT,
+    CHAR_INFO_KEY_FEATURE,
     CHAR_INFO_KEY_HP,
     CHAR_INFO_KEY_HP_DICE,
     CHAR_INFO_KEY_LEVEL,
     CHAR_INFO_KEY_NAME,
     CHAR_INFO_KEY_PROF,
     CHAR_INFO_KEY_RACE,
+    CHAR_INFO_KEY_SPELL,
+    CHAR_INFO_KEY_SPELL_SLOTS,
     CHAR_INFO_KEY_SUBCLASS,
     CHAR_INFO_KEY_WEAPON,
     EXT_ITEM_INDEX_DICT,
     EXT_ITEM_LIST,
+    SPELL_LEVEL_MAX,
 )
 
 
@@ -354,6 +358,87 @@ class WeaponInfo(BaseModel):
         return text
 
 
+class CharacterFeature(BaseModel):
+    """有使用次数的能力（``$能力$`` 段，2026-10-20 批②新增）。
+
+    录入与展示格式一致（可复制回 ``$能力$``）：
+    ``名称:当前/上限恢复档``，如 ``引导神力:2/2短休+1,长休``。
+    ``recover`` 为规范化后的恢复档串（``短休`` / ``长休`` / ``两者`` / ``手动``，
+    可带 ``+N``），解析与校验见 ``character/services.py`` 的
+    ``parse_feature_item``；恢复量在休息结算时读取（后续批次接入）。
+    """
+
+    name: str
+    uses_cur: int = 0
+    uses_max: int = 0
+    recover: str = "手动"
+
+    def get_info(self) -> str:
+        """展示/回写文本，如 ``引导神力:2/2短休+1,长休``。"""
+        return f"{self.name}:{self.uses_cur}/{self.uses_max}{self.recover}"
+
+    def get_recover_display(self) -> str:
+        """恢复档的中文展示（逗号转全角），如 ``短休+1，长休``。"""
+        return self.recover.replace(",", "，")
+
+
+class SpellEntry(BaseModel):
+    """已知/准备法术条目（``$法术$`` 段，2026-10-20 批②新增）。
+
+    ``level`` 0 = 戏法（不消耗法术位、无需准备）；``prepared`` 是「今日已准备」
+    标记（卡面写 ``*``），只由 ``.法术 准备/取消`` 切换，长休只做提醒、不自动改。
+    """
+
+    name: str
+    level: int = 0
+    prepared: bool = False
+
+    def get_info(self) -> str:
+        """展示/回写文本，如 ``火球术:3*``（``*`` = 今日已准备）。"""
+        mark = "*" if self.prepared else ""
+        return f"{self.name}:{self.level}{mark}"
+
+    def get_level_label(self) -> str:
+        """环阶展示：``戏法`` 或 ``3环``。"""
+        return "戏法" if self.level == 0 else f"{self.level}环"
+
+
+class SpellSlots(BaseModel):
+    """各环法术位与契约魔法（``$法术位$`` 段，2026-10-20 批②新增）。
+
+    ``slots_cur`` / ``slots_max`` 下标 0~8 对应 1~9 环；``pact_*`` 是契约魔法
+    （魔契师）的单列法术位：``pact_level`` 为其环阶，0 表示未记录。
+    """
+
+    slots_cur: List[int] = Field(default_factory=lambda: [0] * SPELL_LEVEL_MAX)
+    slots_max: List[int] = Field(default_factory=lambda: [0] * SPELL_LEVEL_MAX)
+    pact_level: int = 0
+    pact_cur: int = 0
+    pact_max: int = 0
+
+    def is_empty(self) -> bool:
+        """是否没有任何法术位记录。"""
+        return not any(self.slots_max) and self.pact_max == 0
+
+    def get_char_info(self) -> str:
+        """角色卡段落，如 ``$法术位$ 1:4/4; 2:3/3; 契约3:2/2``。"""
+        parts: List[str] = []
+        for level in range(1, SPELL_LEVEL_MAX + 1):
+            index = level - 1
+            if self.slots_max[index] <= 0:
+                continue
+            parts.append(
+                f"{level}:{self.slots_cur[index]}/{self.slots_max[index]}"
+            )
+        if self.pact_max > 0:
+            parts.append(
+                f"契约{self.pact_level}:{self.pact_cur}/{self.pact_max}"
+            )
+        if not parts:
+            return ""
+        return f"{CHAR_INFO_KEY_SPELL_SLOTS} {'; '.join(parts)}"
+
+
 class NPCHealth(BaseModel):
     """NPC/怪物血量条目（群级、按名称索引）。
 
@@ -385,10 +470,18 @@ class DNDCharacter(BaseModel):
     hp_info: HPInfo = Field(default_factory=HPInfo)
     ability_info: AbilityInfo = Field(default_factory=AbilityInfo)
     weapons: List[WeaponInfo] = Field(default_factory=list)  # 自定义武器/法术项
+    features: List[CharacterFeature] = Field(default_factory=list)  # 有次数的能力
+    spells: List[SpellEntry] = Field(default_factory=list)  # 已知/准备法术
+    spell_slots: SpellSlots = Field(default_factory=SpellSlots)  # 各环与契约法术位
+    spellcasting_ability: str = ""  # 施法属性（六属性名；空 = 未填写）
     is_init: bool = False
 
     def get_char_info(self) -> str:
-        """完整角色卡文本（$xxx$ 段落格式，可再次 .角色卡记录）。"""
+        """完整角色卡文本（$xxx$ 段落格式，可再次 .角色卡记录）。
+
+        段顺序：身份 → 数值 → 能力 → 装备 → 法术（新增三段只插在各自的
+        逻辑位置，既有段的先后保持不变，旧卡输出不受影响）。
+        """
         parts = []
         if self.name:
             parts.append(f"{CHAR_INFO_KEY_NAME} {self.name}")
@@ -404,7 +497,19 @@ class DNDCharacter(BaseModel):
         ability_part = self.ability_info.get_char_info()
         if ability_part:
             parts.append(ability_part)
+        if self.features:
+            feature_str = "; ".join(feature.get_info() for feature in self.features)
+            parts.append(f"{CHAR_INFO_KEY_FEATURE} {feature_str}")
         if self.weapons:
             weapon_str = "/".join(weapon.get_info() for weapon in self.weapons)
             parts.append(f"{CHAR_INFO_KEY_WEAPON} {weapon_str}")
+        spell_parts: List[str] = []
+        if self.spellcasting_ability:
+            spell_parts.append(f"施法属性:{self.spellcasting_ability}")
+        spell_parts.extend(spell.get_info() for spell in self.spells)
+        if spell_parts:
+            parts.append(f"{CHAR_INFO_KEY_SPELL} {'; '.join(spell_parts)}")
+        slots_part = self.spell_slots.get_char_info()
+        if slots_part:
+            parts.append(slots_part)
         return "\n".join(parts)

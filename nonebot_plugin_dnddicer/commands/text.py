@@ -93,12 +93,13 @@ TXT_HELP_LANDING = (
     ".help 骰主 查看骰主指令\n"
     ".help 联系 联系骰主"
 )
-#: `.help 命令`：7 组目录
+#: `.help 命令`：8 组目录
 TXT_HELP_CATALOG = (
     "屠龙骰命令一览\n"
     ".help 掷骰 查看掷骰相关命令\n"
     ".help 角色 查看角色卡命令\n"
     ".help 武器 查看武器使用命令\n"
+    ".help 资源 查看能力与法术命令\n"
     ".help 生命 查看生命值命令\n"
     ".help 先攻 查看先攻/战斗命令\n"
     ".help 查询 查看规则查询命令\n"
@@ -263,6 +264,109 @@ TXT_WEAPON_DEL_VAGUE_ITEM = "{name}（候选: {weapons}）"
 #: 同上（聚合行，{items} 为若干 TXT_WEAPON_DEL_VAGUE_ITEM 以「；」连接）
 TXT_WEAPON_DEL_VAGUE = "名称不明确: {items}（请写更完整的名称）"
 TXT_WEAPON_DEL_USAGE = "用法：.删除武器 名称（多个用 / 分隔）"
+
+# ── 能力次数（$能力$ / .能力 命令族，2026-10-20 批②）────────────────────
+#: 清单（{items} 为若干 TXT_FEATURE_ITEM 以换行连接）
+TXT_FEATURE_LIST = (
+    "当前能力（{count} 项）：\n{items}\n"
+    "用法：.能力 名称 查看详情；.能力 名称 -N 消耗、+N 恢复"
+)
+TXT_FEATURE_LIST_EMPTY = (
+    "还没有记录能力。用法：.设置能力 引导神力:2/2短休+1,长休"
+)
+#: 单个能力行（清单、设置反馈与删除反馈共用）
+TXT_FEATURE_ITEM = "{index}. {name} {cur}/{max}（{recover}）"
+TXT_FEATURE_DETAIL = "{name}：{cur}/{max}（{recover}）"
+TXT_FEATURE_NOT_FOUND = (
+    "找不到能力「{name}」（可用 .设置能力 录入，.能力 查看清单）"
+)
+TXT_FEATURE_VAGUE = "名称不明确「{name}」：候选 {names}（请写更完整的名称）"
+TXT_FEATURE_MOD = "{name}：{old}/{max} → {new}/{max}{note}"
+TXT_FEATURE_MOD_EXHAUSTED = "（已用尽）"
+TXT_FEATURE_MOD_FULL = "（已满）"
+TXT_FEATURE_USAGE = (
+    "用法：.能力 [名称[±N]]；"
+    "录入用 .设置能力 名称:当前/上限恢复，删除用 .删除能力 名称"
+)
+TXT_FEATURE_AMOUNT_INVALID = "次数至少为 1"
+TXT_FEATURE_SET = "已设置能力：{names}（当前共 {count} 项）\n{items}"
+TXT_FEATURE_SET_USAGE = (
+    "用法：.设置能力 名称:当前/上限恢复"
+    "（多项用 ; 分隔，如 引导神力:2/2短休+1,长休）"
+)
+TXT_FEATURE_DEL = "已删除能力: {deleted}"
+TXT_FEATURE_DEL_PARTIAL = "已删除能力: {deleted}；未找到: {missing}"
+TXT_FEATURE_DEL_MISS = "未找到能力: {missing}（可用 .设置能力 查看当前能力）"
+TXT_FEATURE_DEL_VAGUE_ITEM = "{name}（候选: {names}）"
+TXT_FEATURE_DEL_VAGUE = "名称不明确: {items}（请写更完整的名称）"
+TXT_FEATURE_DEL_USAGE = "用法：.删除能力 名称（多个用 / 分隔）"
+
+# ── 法术清单与准备（$法术$ / .法术 命令族，2026-10-20 批②）──────────────
+#: 清单标题的施法属性片段（未填写时为空串）
+TXT_SPELL_ABILITY_PART = "，施法属性：{ability}"
+TXT_SPELL_LIST = (
+    "当前法术（{count} 项{ability}）：\n{items}\n"
+    "用法：.法术 准备/取消 名称；记录用 .设置法术 名称:环阶"
+)
+TXT_SPELL_LIST_EMPTY = (
+    "还没有记录法术。用法：.设置法术 火球术:3"
+    "（多项用 ; 分隔；戏法写 0）"
+)
+TXT_SPELL_ITEM = "{index}. {name} {level}"
+TXT_SPELL_ITEM_PREPARED = "{index}. {name} {level}（已准备）"
+TXT_SPELL_PREPARED = "已将「{name}」标记为今日已准备（{level}）。"
+TXT_SPELL_UNPREPARED = "已取消「{name}」的准备标记（{level}）。"
+TXT_SPELL_ALREADY_PREPARED = "「{name}」已经是今日已准备状态（{level}）。"
+TXT_SPELL_ALREADY_UNPREPARED = "「{name}」当前没有准备标记（{level}）。"
+TXT_SPELL_PREPARE_CANTRIP = "「{name}」是戏法，无需准备标记。"
+TXT_SPELL_NOT_FOUND = (
+    "找不到法术「{name}」（可用 .设置法术 录入，.法术 查看清单）"
+)
+TXT_SPELL_VAGUE = "名称不明确「{name}」：候选 {names}（请写更完整的名称）"
+TXT_SPELL_USAGE = (
+    "用法：.法术 查看清单；.法术 准备/取消 名称；"
+    "录入用 .设置法术 名称:环阶"
+)
+TXT_SPELL_ABILITY_SET = "已设置施法属性：{ability}"
+TXT_SPELL_SET = "已设置法术：{names}（当前共 {count} 项）\n{items}"
+TXT_SPELL_SET_USAGE = (
+    "用法：.设置法术 名称:环阶（多项用 ; 分隔，如 火球术:3; 火焰箭:0；"
+    "可加 施法属性:智力）"
+)
+TXT_SPELL_DEL = "已删除法术: {deleted}"
+TXT_SPELL_DEL_PARTIAL = "已删除法术: {deleted}；未找到: {missing}"
+TXT_SPELL_DEL_MISS = "未找到法术: {missing}（可用 .设置法术 查看当前法术）"
+TXT_SPELL_DEL_VAGUE_ITEM = "{name}（候选: {names}）"
+TXT_SPELL_DEL_VAGUE = "名称不明确: {items}（请写更完整的名称）"
+TXT_SPELL_DEL_USAGE = "用法：.删除法术 名称（多个用 / 分隔）"
+#: 未准备提醒开关（按群持久；默认开，供后续施法命令判定）
+TXT_SPELL_REMIND_ON = "已开启本处的施法未准备提醒。"
+TXT_SPELL_REMIND_OFF = "已关闭本处的施法未准备提醒。"
+TXT_SPELL_REMIND_STATE_ON = "本处的施法未准备提醒：开启。发送 .法术 提醒 off 关闭。"
+TXT_SPELL_REMIND_STATE_OFF = "本处的施法未准备提醒：关闭。发送 .法术 提醒 on 开启。"
+TXT_SPELL_REMIND_USAGE = "用法：.法术 提醒 on|off"
+
+# ── 法术位（$法术位$ / .法术位 命令族，2026-10-20 批②）─────────────────
+TXT_SLOTS_LIST = "当前法术位：\n{items}"
+TXT_SLOTS_EMPTY = (
+    "还没有记录法术位。用法：.法术位 set 1:4,2:3"
+    "（当前/上限写 1:4/4；契约魔法写 契约3:2/2）"
+)
+TXT_SLOTS_ITEM = "{level}环：{cur}/{max}"
+TXT_SLOTS_PACT_ITEM = "契约魔法（{level}环）：{cur}/{max}"
+TXT_SLOTS_NOT_RECORDED = "尚未记录{label}（可用 .法术位 set {hint} 设置）"
+TXT_SLOTS_MOD = "{label}：{old}/{max} → {new}/{max}{note}"
+TXT_SLOTS_MOD_EXHAUSTED = "（已用尽）"
+TXT_SLOTS_MOD_FULL = "（已满）"
+TXT_SLOTS_AMOUNT_INVALID = "次数至少为 1"
+#: set 反馈里的单项写法（{label} 如 1环 / 契约魔法（3环））
+TXT_SLOTS_SET_NAME = "{label} {cur}/{max}"
+TXT_SLOTS_SET = "已设置法术位：{names}\n当前法术位：\n{items}"
+TXT_SLOTS_RESET = "已恢复全部法术位：\n{items}"
+TXT_SLOTS_USAGE = (
+    "用法：.法术位 [set 环阶:当前/上限]；"
+    ".法术位 1 -1 / 契约 -1 手动增减；.法术位 reset 恢复全部"
+)
 
 # ── HP 管理 .hp 文案 ────────────────────────────────────────────────────
 TXT_HP_INFO = "{name}: {hp_info}"
