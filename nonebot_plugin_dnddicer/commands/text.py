@@ -155,7 +155,8 @@ TXT_HELP_NOT_FOUND_HINT = ".help 命令 查看命令分组"
 TXT_BOT_HEAD = "屠龙骰（nonebot-plugin-dnddicer）v{version}"
 TXT_BOT_INTRO = (
     "专精 DND5e/5r 跑团的骰娘：掷骰表达式、角色卡与检定/豁免、"
-    "自定义武器与攻击、属性生成、HP 管理、先攻列表、战斗轮、规则查询、群配置。"
+    "自定义武器与攻击、能力与法术资源、属性生成、HP 管理、先攻列表、"
+    "战斗轮、规则查询、群配置。"
 )
 TXT_BOT_STATE_PRIVATE = (
     "私聊不受群聊服务开关限制：掷骰、属性生成等可直接使用，"
@@ -368,6 +369,35 @@ TXT_SLOTS_USAGE = (
     ".法术位 1 -1 / 契约 -1 手动增减；.法术位 reset 恢复全部"
 )
 
+# ── 施法 .施法 / .cast（2026-10-20 批③）────────────────────────────────
+TXT_CAST_USAGE = "用法：.施法 <法术名>[N环|+N环]；或 .施法 <环阶>"
+#: 法术施放标题（{level} 为「3环」或「戏法」）
+TXT_CAST_HEAD = "{name}施展了「{spell}」（{level}）"
+#: 只指定环阶的施法（普通位 / 契约位两种写法）
+TXT_CAST_LEVEL_ONLY = (
+    "{name}消耗了1个{level}环法术位：{old}/{max} → {new}/{max}"
+)
+TXT_CAST_LEVEL_ONLY_PACT = (
+    "{name}消耗了1个契约魔法法术位（{level}环）：{old}/{max} → {new}/{max}"
+)
+#: 消耗法术位行（{label} 如 3环 / 契约魔法（3环））
+TXT_CAST_SLOT = "消耗{label}法术位：{old}/{max} → {new}/{max}"
+TXT_CAST_CANTRIP = "戏法不消耗法术位。"
+#: 同名武器项的伤害提示
+TXT_CAST_WEAPON_HINT = "可用 .{weapon}伤害 掷伤害。"
+#: 未标记准备时的柔性提醒（按版本/职业/开关判定）
+TXT_CAST_PREP_HINT = "（未标记为已准备，如需标记：.法术 准备 {name}）"
+TXT_CAST_NOT_FOUND = (
+    "未录入该法术「{name}」，可用 .设置法术 {name}:<环阶> 录入，"
+    "或直接 .施法 <环阶>"
+)
+TXT_CAST_VAGUE = "名称不明确「{name}」：候选 {names}（请写更完整的名称）"
+TXT_CAST_TOO_LOW = "「{name}」最低为 {min}环，不能用 {level}环施展。"
+TXT_CAST_LEVEL_RANGE = "法术位环阶需在 1~9 环之间。"
+TXT_CAST_CANTRIP_UPCAST = "「{name}」是戏法，不能升环施法。"
+TXT_CAST_UPCAST_ZERO = "升环数至少为 1。"
+TXT_CAST_NO_SLOT = "没有可用的{level}环法术位（当前可用：{available}）。"
+
 # ── HP 管理 .hp 文案 ────────────────────────────────────────────────────
 TXT_HP_INFO = "{name}: {hp_info}"
 TXT_HP_INFO_MISS = "找不到{name}的生命值信息"
@@ -452,8 +482,29 @@ TXT_NPC_NO_RECORD = "找不到{name}的血量记录，请先用 .hp {name} 当�
 TXT_NPC_PC_TARGET = "「{name}」是玩家角色卡，不是NPC"
 
 # ── 长休 .长休 ─────────────────────────────────────────────────────────────
-TXT_LONG_REST = "{result}"
 TXT_LONG_REST_MISS = "找不到{name}的角色卡信息"
+#: 长休末尾的重新准备提示（只在卡上有法术时追加；不自动改 * 标记）
+TXT_LONG_REST_PREPARE_HINT = "可重新准备法术（.法术 准备 <名称>）。"
+
+# ── 休息闭环：.生命骰 / .短休（2026-10-20 批③）──────────────────────────
+TXT_HD_USAGE = "用法：.生命骰 [数量] [@玩家]（缺省 1 颗）"
+TXT_HD_AMOUNT_INVALID = "生命骰数量至少为 1"
+TXT_HD_DEAD = "该角色已死亡，无法使用生命骰。"
+TXT_HD_ZERO_HP = "HP 为 0，无法使用生命骰（请先治疗或稳定）。"
+#: 成功时：{name} + 服务层结算描述（已含 HP 前后对照）
+TXT_HD_RESULT = "{name}使用了生命骰：\n{result}"
+TXT_SHORT_REST = "{name}进行了一次短休"
+TXT_SHORT_REST_DEAD = "该角色已死亡，无法进行短休。"
+TXT_SHORT_REST_ZERO_HP = "HP 为 0，无法进行短休（请先治疗或稳定）。"
+TXT_SHORT_REST_NOTHING = "没有可自动恢复的能力或契约魔法法术位"
+#: 恢复行（能力与法术位共用；{items} 为若干 TXT_REST_CHANGE_ITEM 以「；」连接）
+TXT_REST_FEATURE_CHANGE = "恢复能力：{items}"
+TXT_REST_SLOT_CHANGE = "恢复法术位：{items}"
+TXT_REST_CHANGE_ITEM = "{label} {old}/{max} → {new}/{max}"
+#: 短休末尾的生命骰提示（三种状态：可用 / 已用尽 / 未记录）
+TXT_SHORT_REST_DICE = "可用生命骰{num}颗，需要回血请用 .生命骰 N"
+TXT_SHORT_REST_DICE_EMPTY = "生命骰已用尽（0/{max}），无法用 .生命骰 回血"
+TXT_SHORT_REST_NO_DICE = "未记录生命骰，无法用 .生命骰 回血"
 
 # ── 击晕参数（.hp 伤害写法；2026-10-01 批①，同日修订为两版都可用）────────
 # 规则原文（5e不全书）：两版都有「近战打到 0 HP 时可改为击晕」——

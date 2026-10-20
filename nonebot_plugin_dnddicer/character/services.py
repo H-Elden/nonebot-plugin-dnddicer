@@ -48,6 +48,9 @@ from .constants import (
     FEATURE_NAME_FORBIDDEN_WORDS,
     FEATURE_NAME_MAX_LEN,
     FEATURE_RECOVER_MODES,
+    PREPARED_CASTERS_2014,
+    REST_LONG,
+    REST_SHORT,
     SAVING_ALL_KEY,
     SAVING_LIST,
     SAVING_PARENT_DICT,
@@ -56,6 +59,7 @@ from .constants import (
     SKILL_SYNONYM_DICT,
     SNEAK_ATTACK_CLASS,
     SPELLCASTING_ABILITY_KEY,
+    SPELLCASTING_CLASSES_2024,
     SPELL_LEVEL_MAX,
     SPELL_MAX_COUNT,
     SPELL_NAME_FORBIDDEN_CHARS,
@@ -959,41 +963,96 @@ class HPService:
     """HP 相关服务（伤害/治疗结算、长休与生命骰）。"""
 
     @staticmethod
-    def use_hp_dice(hp_info: HPInfo, num: int, con_mod: int) -> str:
-        """使用生命骰恢复 HP，返回修改结果描述。"""
+    def use_hp_dice(
+        hp_info: HPInfo,
+        num: int,
+        con_mod: int,
+        *,
+        version_2024: bool = False,
+    ) -> str:
+        """使用生命骰恢复 HP，返回修改结果描述（旧接口，行为同默认 2014 口径）。"""
+        _ok, text = HPService.use_hp_dice_ex(
+            hp_info, num, con_mod, version_2024=version_2024
+        )
+        return text
+
+    @staticmethod
+    def use_hp_dice_ex(
+        hp_info: HPInfo,
+        num: int,
+        con_mod: int,
+        *,
+        version_2024: bool = False,
+    ) -> Tuple[bool, str]:
+        """使用生命骰恢复 HP，返回 ``(是否成功, 描述)``。
+
+        两版口径（2026-10-20 批③，规则原文见 doc30 §2.2）：
+
+        - **2014**：逐粒掷 ``1D面数 + 体质调整值``，每粒最低 0，累加；
+        - **2024**：掷 ``N D面数`` 的骰点总和（至少 1），再加
+          ``投掷枚数 × 体质调整值``（最终治疗最低 0）。
+
+        ``version_2024`` 由调用方按群级规则版本传入；默认 False 保留旧行为。
+        掷骰失败、未设置生命骰、数量不足时返回 ``(False, 面向用户的提示)``；
+        成功时已扣骰并治疗，返回 ``(True, 结算描述)``。
+        """
         if not hp_info.is_init or hp_info.hp_dice_type <= 0:
-            return "尚未设置生命骰"
+            return False, "尚未设置生命骰"
         if num <= 0 or num > 1000:
-            return f"无效的生命骰数量({num})"
+            return False, f"无效的生命骰数量({num})"
         if hp_info.hp_dice_num < num:
-            return f"生命骰数量不足, 还有{hp_info.hp_dice_num}颗生命骰"
+            return False, f"生命骰数量不足, 还有{hp_info.hp_dice_num}颗生命骰"
 
-        roll_exp = f"1D{hp_info.hp_dice_type}+{con_mod}"
+        hp_info_str_prev = hp_info.get_info()
+        dice_type = hp_info.hp_dice_type
 
-        roll_result_list = []
-        roll_result_val = 0
-        for _ in range(num):
+        if version_2024:
+            roll_exp = f"{num}D{dice_type}"
             try:
                 roll_result = exec_roll_exp_unified(roll_exp)
-            except RollDiceError as e:
-                return f"未知掷骰错误:{e.info}"
-            if num > 1:
-                roll_result_list.append(f"({roll_result.get_info()})")
-            else:
-                roll_result_list.append(roll_result.get_info())
-            roll_val = roll_result.get_val()
-            if roll_val < 0:
-                roll_val = 0
-                roll_result_list[-1] = f"({roll_result_list[-1]}->0)"
-            roll_result_val += roll_val
+            except RollDiceError as exc:
+                return False, f"未知掷骰错误:{exc.info}"
+            dice_total = max(1, roll_result.get_val())
+            adjust = num * con_mod
+            heal_total = max(0, dice_total + adjust)
+            note = "（最低为0）" if dice_total + adjust <= 0 else ""
+            mod_info = (
+                f"使用{num}颗D{dice_type}生命骰, 体质调整值为{con_mod}, "
+                f"骰点{roll_result.get_complete_result()}, "
+                f"调整{num}×{con_mod}={adjust:+d}, "
+                f"回复{heal_total}点生命值{note}\n"
+            )
+        else:
+            # 2014 口径：逐粒「骰值 + 体质调整值」，每粒最低 0
+            roll_exp = f"1D{dice_type}+{con_mod}"
+            roll_result_list = []
+            roll_result_val = 0
+            for _ in range(num):
+                try:
+                    roll_result = exec_roll_exp_unified(roll_exp)
+                except RollDiceError as exc:
+                    return False, f"未知掷骰错误:{exc.info}"
+                if num > 1:
+                    roll_result_list.append(f"({roll_result.get_info()})")
+                else:
+                    roll_result_list.append(roll_result.get_info())
+                roll_val = roll_result.get_val()
+                if roll_val < 0:
+                    roll_val = 0
+                    roll_result_list[-1] = f"({roll_result_list[-1]}->0)"
+                roll_result_val += roll_val
+            heal_total = roll_result_val
+            roll_result_str = f"{'+'.join(roll_result_list)}={roll_result_val}"
+            mod_info = (
+                f"使用{num}颗D{dice_type}生命骰, 体质调整值为{con_mod}, "
+                f"回复{roll_result_str}点生命值\n"
+            )
 
-        roll_result_str = f"{'+'.join(roll_result_list)}={roll_result_val}"
-        mod_info = f"使用{num}颗D{hp_info.hp_dice_type}生命骰, 体质调整值为{con_mod}, 回复{roll_result_str}点生命值\n"
-        hp_info_str_prev = hp_info.get_info()
         hp_info.hp_dice_num -= num
-        hp_info.heal(roll_result_val)
+        if heal_total > 0:
+            hp_info.heal(heal_total)
         mod_info += f"{hp_info_str_prev} -> {hp_info.get_info()}"
-        return mod_info
+        return True, mod_info
 
     @staticmethod
     def refresh_hp_status(
@@ -1304,3 +1363,164 @@ class HPService:
             f"死亡豁免失败 +1（成功{hp_info.ds_success} 失败{hp_info.ds_failure}）",
             value, False, False,
         )
+
+
+class RestService:
+    """休息结算：能力次数与法术位恢复、施法准备提醒判定（2026-10-20 批③）。
+
+    只做内存对象上的纯结算（不掷骰、不落盘）；命令层负责读取卡、播报与保存。
+    恢复档语义与 ``$能力$`` 录入一致：``短休`` / ``长休`` / ``两者`` +
+    可选 ``+N``（``满`` 已在录入时规范化为无后缀）。
+    """
+
+    @staticmethod
+    def feature_recovery_amount(recover: str, rest_kind: str) -> Optional[int]:
+        """返回某能力在指定休息中的恢复量：None=不恢复，-1=回满，N=恢复 N 次。"""
+        mapping: Dict[str, int] = {}
+        for piece in (recover or "").split(","):
+            token = piece.strip()
+            if not token:
+                continue
+            for mode in FEATURE_RECOVER_MODES:
+                if not token.startswith(mode):
+                    continue
+                tail = token[len(mode):].strip()
+                try:
+                    amount = -1 if not tail else int(tail[1:])
+                except ValueError:
+                    amount = -1
+                if mode == "两者":
+                    mapping[REST_SHORT] = amount
+                    mapping[REST_LONG] = amount
+                else:
+                    mapping[mode] = amount
+                break
+        return mapping.get(rest_kind)
+
+    @staticmethod
+    def recover_features(
+        features: Iterable[CharacterFeature], rest_kind: str
+    ) -> List[Tuple[str, int, int, int]]:
+        """按休息类型恢复能力次数，返回变更列表 ``(名称, 旧, 新, 上限)``。
+
+        只返回真正发生变化的能力；已满或恢复档不匹配的条目不动。
+        """
+        changes: List[Tuple[str, int, int, int]] = []
+        for feature in features:
+            amount = RestService.feature_recovery_amount(
+                feature.recover, rest_kind
+            )
+            if amount is None:
+                continue
+            old = feature.uses_cur
+            new = (
+                feature.uses_max
+                if amount == -1
+                else min(feature.uses_max, old + amount)
+            )
+            if new == old:
+                continue
+            feature.uses_cur = new
+            changes.append((feature.name, old, new, feature.uses_max))
+        return changes
+
+    @staticmethod
+    def restore_slots(
+        slots: SpellSlots, rest_kind: str
+    ) -> List[Tuple[str, int, int, int]]:
+        """按休息类型恢复法术位，返回变更列表 ``(展示名, 旧, 新, 上限)``。
+
+        - 短休：只恢复契约魔法法术位；
+        - 长休：恢复全部已消耗的普通法术位与契约魔法法术位。
+        """
+        changes: List[Tuple[str, int, int, int]] = []
+
+        def _restore(label: str, old: int, maximum: int) -> None:
+            if maximum <= 0 or old >= maximum:
+                return
+            changes.append((label, old, maximum, maximum))
+
+        if rest_kind == REST_SHORT:
+            _restore(
+                spell_slot_label(True, slots.pact_level) if slots.pact_max else "",
+                slots.pact_cur,
+                slots.pact_max,
+            )
+            if slots.pact_max > 0:
+                slots.pact_cur = slots.pact_max
+            return changes
+
+        if rest_kind == REST_LONG:
+            for level in range(1, SPELL_LEVEL_MAX + 1):
+                index = level - 1
+                _restore(
+                    spell_slot_label(False, level),
+                    slots.slots_cur[index],
+                    slots.slots_max[index],
+                )
+                slots.slots_cur[index] = slots.slots_max[index]
+            _restore(
+                spell_slot_label(True, slots.pact_level) if slots.pact_max else "",
+                slots.pact_cur,
+                slots.pact_max,
+            )
+            slots.pact_cur = slots.pact_max
+        return changes
+
+    @staticmethod
+    def should_remind_preparation(version_2024: bool, char_class: str) -> bool:
+        """按群级规则版本与职业判定是否提醒「未标记准备」。
+
+        2024：8 个施法职业都提醒；2014：只有牧师 / 德鲁伊 / 圣武士 / 法师
+        这些准备型职业提醒（已知型施法者与无施法职业不提醒）。
+        """
+        if not char_class:
+            return False
+        if version_2024:
+            return char_class in SPELLCASTING_CLASSES_2024
+        return char_class in PREPARED_CASTERS_2014
+
+    @staticmethod
+    def available_slots_summary(slots: SpellSlots) -> str:
+        """当前可用法术位摘要（只列还有剩余的法术位），如 ``3环 1/2、契约魔法（3环） 2/2``。"""
+        parts: List[str] = []
+        for level in range(1, SPELL_LEVEL_MAX + 1):
+            index = level - 1
+            if slots.slots_cur[index] <= 0:
+                continue
+            parts.append(
+                f"{spell_slot_label(False, level)} "
+                f"{slots.slots_cur[index]}/{slots.slots_max[index]}"
+            )
+        if slots.pact_max > 0 and slots.pact_cur > 0:
+            parts.append(
+                f"{spell_slot_label(True, slots.pact_level)} "
+                f"{slots.pact_cur}/{slots.pact_max}"
+            )
+        return "、".join(parts) if parts else "无"
+
+    @staticmethod
+    def consume_spell_slot(
+        slots: SpellSlots, level: int, *, allow_pact_upcast: bool = True
+    ) -> Optional[Tuple[bool, int, int, int]]:
+        """消耗一个指定环阶的法术位，返回 ``(是否契约, 实际环阶, 旧值, 上限)``。
+
+        优先消耗同环阶的普通法术位；没有时若契约魔法的环阶 ≥ 请求环阶
+        （``allow_pact_upcast``）且有剩余，则消耗契约位（魔契师用法术位）。
+        无法消耗返回 None（不修改对象）。
+        """
+        if 1 <= level <= SPELL_LEVEL_MAX:
+            index = level - 1
+            if slots.slots_max[index] > 0 and slots.slots_cur[index] > 0:
+                old = slots.slots_cur[index]
+                slots.slots_cur[index] -= 1
+                return False, level, old, slots.slots_max[index]
+        if slots.pact_max > 0 and slots.pact_cur > 0:
+            pact_ok = slots.pact_level == level or (
+                allow_pact_upcast and slots.pact_level > level
+            )
+            if pact_ok:
+                old = slots.pact_cur
+                slots.pact_cur -= 1
+                return True, slots.pact_level, old, slots.pact_max
+        return None

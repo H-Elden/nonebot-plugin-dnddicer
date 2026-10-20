@@ -19,11 +19,13 @@ from __future__ import annotations
 import re
 from typing import List, Optional
 
-from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageEvent
+from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, MessageEvent
 
+from ..character import rules as char_rules
 from ..character.constants import SPELL_LEVEL_MAX, SPELL_MAX_COUNT
-from ..character.models import SpellEntry, SpellSlots
+from ..character.models import DNDCharacter, SpellEntry, SpellSlots
 from ..character.services import (
+    RestService,
     match_spells,
     parse_spell_setting,
     parse_spell_slot_entries,
@@ -32,6 +34,7 @@ from ..character.services import (
 from ..data import spell_settings
 from ..data.characters import get_character, save_character
 from . import base, text
+from .weapon import find_exact_weapon
 
 _HELP_SPELL = (
     ".法术 [准备|取消 名称] [提醒 on|off]\n"
@@ -490,4 +493,248 @@ async def handle_spell_slots(event: MessageEvent) -> None:
             new=new,
             note=note,
         )
+    )
+
+
+# =========================================================================
+# .施法 / .cast（2026-10-20 批③）
+# =========================================================================
+
+_HELP_CAST = (
+    ".施法 <法术名>[N环|+N环] / <环阶>（.cast）\n"
+    "  环阶一律来自卡面；升环写 火球术4环 或 火球术+1环\n"
+    "  .施法 3 直接消耗 1 个 3 环位；戏法不耗位\n"
+    "  未准备的法术照常施放，只附一句提醒\n"
+    "  示例：.施法 火球术 ｜ .施法 魔法飞弹2 ｜ .施法 2"
+)
+cast_matcher = base.on_dnd_command(
+    "施法", _HELP_CAST, aliases=("cast",), doc="guide/resources"
+)
+
+#: 全角数字与加号 → 半角（环阶写法容错）
+_FULLWIDTH_CAST_MAP = str.maketrans("０１２３４５６７８９＋", "0123456789+")
+#: 纯环阶写法（3 / 3环）
+_CAST_LEVEL_ONLY_RE = re.compile(r"^(\d+)\s*环?$")
+#: 尾部环阶修饰：法术名 + [+可选]数字 + 可选「环」
+_CAST_TAIL_RE = re.compile(r"^(.*?)\s*([+]?)(\d+)\s*环?$")
+
+
+def _find_exact_spell(spells: List[SpellEntry], name: str) -> Optional[SpellEntry]:
+    """按名称精确查找法术（大小写不敏感；供给 `.施法` 的整串优先匹配）。"""
+    lowered = name.lower()
+    for spell in spells:
+        if spell.name.lower() == lowered:
+            return spell
+    return None
+
+
+def _parse_cast_modifier(
+    arg: str,
+) -> Tuple[str, Optional[Tuple[int, bool]]]:
+    """把施法参数拆成 ``(法术名, (数值, 是否相对升环) 或 None)``。
+
+    整串精确命中的判断由调用方先做（``火球术4`` 这类带数字的法术名不会被
+    误拆）；本函数只处理「名称 + 尾部环阶修饰」，无修饰时返回 ``(arg, None)``。
+    """
+    matched = _CAST_TAIL_RE.match(arg)
+    if matched is None:
+        return arg, None
+    name = matched.group(1).strip()
+    if not name:
+        # 纯环阶/只有 +数字 的形态由调用方另行处理
+        return "", None
+    return name, (int(matched.group(3)), matched.group(2) == "+")
+
+
+async def _resolve_cast_spell(
+    spells: List[SpellEntry], name: str
+) -> Tuple[Optional[SpellEntry], List[SpellEntry]]:
+    """施法用的法术名匹配（精确优先 → 子串；多候选由调用方列清单）。"""
+    candidates = match_spells(spells, name)
+    if len(candidates) == 1:
+        return candidates[0], candidates
+    return None, candidates
+
+
+async def _finish_cast_no_slot(
+    matcher, character: DNDCharacter, level: int
+) -> None:
+    """环位不足的统一回复（列出当前可用法术位）。"""
+    summary = RestService.available_slots_summary(character.spell_slots)
+    await matcher.finish(
+        text.TXT_CAST_NO_SLOT.format(level=level, available=summary)
+    )
+
+
+async def _cast_spell(
+    matcher,
+    event: GroupMessageEvent,
+    character: DNDCharacter,
+    display_name: str,
+    spell: SpellEntry,
+    cast_level: int,
+    version_2024: bool,
+) -> None:
+    """执行一次已确定法术与环阶的施法结算并回复。"""
+    lines: List[str] = []
+
+    if spell.level == 0:
+        lines.append(
+            text.TXT_CAST_HEAD.format(
+                name=display_name,
+                spell=spell.name,
+                level=spell.get_level_label(),
+            )
+        )
+        lines.append(text.TXT_CAST_CANTRIP)
+    else:
+        consumed = RestService.consume_spell_slot(
+            character.spell_slots, cast_level
+        )
+        if consumed is None:
+            await _finish_cast_no_slot(matcher, character, cast_level)
+        is_pact, actual_level, old, maximum = consumed
+        lines.append(
+            text.TXT_CAST_HEAD.format(
+                name=display_name,
+                spell=spell.name,
+                # 契约位兜底时实际施法环阶以契约位为准（如 1 环法术用 3 环契约位）
+                level=f"{actual_level}环",
+            )
+        )
+        lines.append(
+            text.TXT_CAST_SLOT.format(
+                label=spell_slot_label(is_pact, actual_level),
+                old=old,
+                max=maximum,
+                new=old - 1,
+            )
+        )
+        await save_character(character)
+
+    weapon = find_exact_weapon(character.weapons, spell.name)
+    if weapon is not None:
+        lines.append(text.TXT_CAST_WEAPON_HINT.format(weapon=weapon.name))
+
+    # 未准备提醒固定在回复末尾（非戏法、成功消耗环位后才判定）
+    if (
+        spell.level > 0
+        and not spell.prepared
+        and RestService.should_remind_preparation(
+            version_2024, character.char_class
+        )
+        and await spell_settings.is_reminder_enabled(event.group_id)
+    ):
+        lines.append(text.TXT_CAST_PREP_HINT.format(name=spell.name))
+
+    await matcher.finish("\n".join(lines))
+
+
+@cast_matcher.handle()
+async def handle_cast(bot: Bot, event: MessageEvent) -> None:
+    """处理 .施法：卡面环阶 / 绝对升环 / 相对升环 / 纯环阶。"""
+    if not isinstance(event, GroupMessageEvent):
+        await cast_matcher.finish(text.TXT_GROUP_ONLY)
+
+    rest = (base.get_command_rest(event) or "").strip()
+    if not rest:
+        await cast_matcher.finish(text.TXT_CAST_USAGE)
+    character = await get_character(event.group_id, event.user_id)
+    if character is None or not character.is_init:
+        await cast_matcher.finish(text.TXT_CHAR_MISS)
+
+    arg = rest.translate(_FULLWIDTH_CAST_MAP).strip()
+    display_name = await base.resolve_display_name(
+        bot, event, char_name=character.name
+    )
+    version_2024 = (
+        await char_rules.rules_version(event.group_id)
+    ) == char_rules.RULES_2024
+
+    # ① 整串精确命中法术名（支持名称本身以数字结尾的卡面条目）
+    exact = _find_exact_spell(character.spells, arg)
+    if exact is not None:
+        await _cast_spell(
+            cast_matcher, event, character, display_name,
+            exact, exact.level, version_2024,
+        )
+        return
+
+    # ② 纯环阶：.施法 3 / .施法 3环
+    level_only = _CAST_LEVEL_ONLY_RE.fullmatch(arg)
+    if level_only is not None:
+        level = int(level_only.group(1))
+        if not 1 <= level <= SPELL_LEVEL_MAX:
+            await cast_matcher.finish(text.TXT_CAST_LEVEL_RANGE)
+        consumed = RestService.consume_spell_slot(
+            character.spell_slots, level, allow_pact_upcast=False
+        )
+        if consumed is None:
+            await _finish_cast_no_slot(cast_matcher, character, level)
+        is_pact, actual_level, old, maximum = consumed
+        await save_character(character)
+        template = (
+            text.TXT_CAST_LEVEL_ONLY_PACT
+            if is_pact
+            else text.TXT_CAST_LEVEL_ONLY
+        )
+        await cast_matcher.finish(
+            template.format(
+                name=display_name,
+                level=actual_level,
+                old=old,
+                max=maximum,
+                new=old - 1,
+            )
+        )
+
+    # ③ 法术名 + 可选环阶修饰（绝对 / 相对升环）
+    spell_name, modifier = _parse_cast_modifier(arg)
+    if not spell_name:
+        await cast_matcher.finish(text.TXT_CAST_USAGE)
+    spell, candidates = await _resolve_cast_spell(
+        character.spells, spell_name
+    )
+    if spell is None:
+        if candidates:
+            await cast_matcher.finish(
+                text.TXT_CAST_VAGUE.format(
+                    name=spell_name,
+                    names="/".join(item.name for item in candidates),
+                )
+            )
+        await cast_matcher.finish(
+            text.TXT_CAST_NOT_FOUND.format(name=spell_name)
+        )
+
+    cast_level = spell.level
+    if modifier is not None:
+        value, relative = modifier
+        if spell.level == 0:
+            # 戏法写 0 视作不升环；其余修饰一律拒绝
+            if not relative and value == 0:
+                modifier = None
+            else:
+                await cast_matcher.finish(
+                    text.TXT_CAST_CANTRIP_UPCAST.format(name=spell.name)
+                )
+        if modifier is not None:
+            if relative:
+                if value < 1:
+                    await cast_matcher.finish(text.TXT_CAST_UPCAST_ZERO)
+                cast_level = spell.level + value
+            else:
+                cast_level = value
+            if cast_level < spell.level:
+                await cast_matcher.finish(
+                    text.TXT_CAST_TOO_LOW.format(
+                        name=spell.name, min=spell.level, level=cast_level
+                    )
+                )
+            if not 1 <= cast_level <= SPELL_LEVEL_MAX:
+                await cast_matcher.finish(text.TXT_CAST_LEVEL_RANGE)
+
+    await _cast_spell(
+        cast_matcher, event, character, display_name,
+        spell, cast_level, version_2024,
     )

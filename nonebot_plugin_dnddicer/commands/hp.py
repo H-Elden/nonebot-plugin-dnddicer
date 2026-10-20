@@ -1,4 +1,11 @@
-"""HP 管理命令：``.hp`` + 长休 ``.长休`` + 死亡豁免 ``.死亡豁免`` / ``.ds``。
+"""HP 管理命令：``.hp`` + 休息 ``.短休`` / ``.生命骰`` / ``.长休`` + 死亡豁免 ``.死亡豁免`` / ``.ds``。
+
+休息闭环（2026-10-20 批③）：``.短休`` 恢复「短休 / 两者」类能力与契约魔法
+法术位、提示可用生命骰（不自动花骰）；``.生命骰 [N]`` 按卡面 ``$生命骰$``
+花费 N 颗回血，2014 逐粒「骰值 + 体质调整」、2024「骰点总和 + 枚数 × 体质
+调整」（群级规则版本经 ``character/rules.py`` 读取）；``.长休`` 在原有回满
+HP / 清死亡豁免 / 版本化生命骰恢复之外，追加恢复能力、全部法术位与重新准备
+法术提示（不自动改 ``*`` 标记）。三者都支持 ``@玩家`` 代操作。
 
 死亡豁免闭环（2026-10-01 新增）：``.hp`` 的伤害使角色卡 HP 归 0 时自动进入濒死
 （播报「请在自己回合开始时掷 .死亡豁免」），此后本人用 ``.死亡豁免`` / ``.ds``
@@ -54,10 +61,12 @@ import re
 from typing import List, NamedTuple, Optional, Tuple, Union
 
 from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, Message, MessageEvent
+from nonebot.matcher import Matcher
 
 from ..character import rules as char_rules
+from ..character.constants import ABILITY_LIST, REST_LONG, REST_SHORT
 from ..character.models import DNDCharacter, HPInfo, npc_hp_info
-from ..character.services import HPService, WEAPON_BONUS_RE
+from ..character.services import HPService, RestService, WEAPON_BONUS_RE
 from ..data.characters import (
     get_character,
     list_characters_by_group,
@@ -129,11 +138,30 @@ ds_matcher = base.on_dnd_command(
 
 _HELP_LONG_REST = (
     ".长休 [@玩家]\n"
-    "  恢复生命值至上限、清除临时生命值、回复生命骰\n"
-    "  并清除死亡豁免状态与昏迷\n"
+    "  回满 HP、清临时 HP、清死亡豁免、回复生命骰\n"
+    "  恢复长休类能力与全部法术位，并提示可重新准备法术\n"
+    "  生命骰回复量按本群规则版本（5e 一半 / 5r 全满）\n"
     "  @玩家 用于 DM 替不在场玩家收尾"
 )
 long_rest_matcher = base.on_dnd_command("长休", _HELP_LONG_REST, doc="guide/hp-advanced")
+
+_HELP_SHORT_REST = (
+    ".短休 [@玩家]\n"
+    "  恢复「短休 / 两者」类能力与契约魔法法术位\n"
+    "  不自动花生命骰、不改 HP；需要回血用 .生命骰 N\n"
+    "  @玩家 用于 DM 替不在场玩家操作"
+)
+short_rest_matcher = base.on_dnd_command(
+    "短休", _HELP_SHORT_REST, doc="guide/resources"
+)
+
+_HELP_HD = (
+    ".生命骰 [数量] [@玩家]\n"
+    "  花费生命骰回血（缺省 1 颗）；骰面与数量按卡面录入\n"
+    "  5e：每粒骰值 + 体质调整（每粒最低 0）\n"
+    "  5r：骰点总和（至少 1）+ 枚数 × 体质调整\n"
+)
+hp_dice_matcher = base.on_dnd_command("生命骰", _HELP_HD, doc="guide/resources")
 
 
 # =========================================================================
@@ -1033,18 +1061,23 @@ async def handle_death_save(bot: Bot, event: MessageEvent) -> None:
     ))
 
 
-@long_rest_matcher.handle()
-async def handle_long_rest(bot: Bot, event: MessageEvent) -> None:
-    """处理 .长休（.长休 @玩家 代不在场的玩家收尾）。"""
-    if not isinstance(event, GroupMessageEvent):
-        await long_rest_matcher.finish(text.TXT_GROUP_ONLY)
+async def _load_rest_character(
+    bot: Bot, event: MessageEvent, matcher: Matcher
+) -> Tuple[DNDCharacter, str, str]:
+    """取休息命令的目标角色卡 → ``(角色, 展示名, 去掉 @ 后的剩余文本)``。
 
+    @ 在本群无角色卡时以真 @ 消息段引导建卡并终止；无 @ 时取发送者本人。
+    目标解析对 ``.短休`` / ``.生命骰`` / ``.长休`` 三处共用。
+    """
     rest = (base.get_command_rest_with_mentions(event) or "").strip()
-    target_qq = onebot_v11.parse_mention_token(rest) if rest else None
+    mentions = onebot_v11.iter_mentions(rest)
+    target_qq = mentions[0] if mentions else None
+    remaining = onebot_v11.strip_mentions(rest).strip()
+
     if target_qq is not None:
         character = await get_character(event.group_id, target_qq)
         if character is None or not character.is_init:
-            await long_rest_matcher.finish(
+            await matcher.finish(
                 onebot_v11.at_reply(target_qq, text.TXT_MENTION_NO_CHAR)
             )
         name = await base.resolve_display_name(
@@ -1054,15 +1087,156 @@ async def handle_long_rest(bot: Bot, event: MessageEvent) -> None:
         character = await get_character(event.group_id, event.user_id)
         if character is None or not character.is_init:
             name = await base.resolve_display_name(bot, event)
-            await long_rest_matcher.finish(text.TXT_LONG_REST_MISS.format(name=name))
-        name = await base.resolve_display_name(bot, event, char_name=character.name)
+            await matcher.finish(text.TXT_LONG_REST_MISS.format(name=name))
+        name = await base.resolve_display_name(
+            bot, event, char_name=character.name
+        )
+    return character, name, remaining
+
+
+def _format_rest_changes(changes: List[Tuple[str, int, int, int]]) -> str:
+    """把恢复变更列表拼成「名称 旧/上限 → 新/上限」的顿号串。"""
+    return "；".join(
+        text.TXT_REST_CHANGE_ITEM.format(
+            label=label, old=old, new=new, max=maximum
+        )
+        for label, old, new, maximum in changes
+    )
+
+
+@long_rest_matcher.handle()
+async def handle_long_rest(bot: Bot, event: MessageEvent) -> None:
+    """处理 .长休：HP / 生命骰 / 能力 / 法术位 / 准备提示。"""
+    if not isinstance(event, GroupMessageEvent):
+        await long_rest_matcher.finish(text.TXT_GROUP_ONLY)
+
+    character, name, _rest = await _load_rest_character(
+        bot, event, long_rest_matcher
+    )
     # 生命骰恢复量按群级规则版本：2024 恢复全部已消耗、2014 回复总枚数的一半
     rules_version = await char_rules.rules_version(event.group_id)
-    rest_info = character.hp_info.long_rest(
-        dice_full=rules_version == char_rules.RULES_2024
+    version_2024 = rules_version == char_rules.RULES_2024
+    rest_info = character.hp_info.long_rest(dice_full=version_2024)
+    lines = [f"{name}进行了一次长休", rest_info or "没有需要恢复的内容"]
+
+    feature_changes = RestService.recover_features(
+        character.features, REST_LONG
     )
-    if not rest_info:
-        rest_info = "没有需要恢复的内容"
-    result = f"{name}进行了一次长休\n{rest_info}"
+    if feature_changes:
+        lines.append(
+            text.TXT_REST_FEATURE_CHANGE.format(
+                items=_format_rest_changes(feature_changes)
+            )
+        )
+    slot_changes = RestService.restore_slots(
+        character.spell_slots, REST_LONG
+    )
+    if slot_changes:
+        lines.append(
+            text.TXT_REST_SLOT_CHANGE.format(
+                items=_format_rest_changes(slot_changes)
+            )
+        )
+    # 只有「可准备法术」的职业才提示重新准备（2014 已知型施法者不提示）
+    if character.spells and RestService.should_remind_preparation(
+        version_2024, character.char_class
+    ):
+        lines.append(text.TXT_LONG_REST_PREPARE_HINT)
+
     await save_character(character)
-    await long_rest_matcher.finish(result)
+    await long_rest_matcher.finish("\n".join(lines))
+
+
+@short_rest_matcher.handle()
+async def handle_short_rest(bot: Bot, event: MessageEvent) -> None:
+    """处理 .短休：恢复短休类能力与契约魔法法术位，提示可用生命骰。"""
+    if not isinstance(event, GroupMessageEvent):
+        await short_rest_matcher.finish(text.TXT_GROUP_ONLY)
+
+    character, name, _rest = await _load_rest_character(
+        bot, event, short_rest_matcher
+    )
+    hp_info = character.hp_info
+    if hp_info.is_init and hp_info.is_dead:
+        await short_rest_matcher.finish(text.TXT_SHORT_REST_DEAD)
+    if hp_info.is_init and hp_info.hp_cur <= 0:
+        await short_rest_matcher.finish(text.TXT_SHORT_REST_ZERO_HP)
+
+    lines = [text.TXT_SHORT_REST.format(name=name)]
+    feature_changes = RestService.recover_features(
+        character.features, REST_SHORT
+    )
+    if feature_changes:
+        lines.append(
+            text.TXT_REST_FEATURE_CHANGE.format(
+                items=_format_rest_changes(feature_changes)
+            )
+        )
+    slot_changes = RestService.restore_slots(
+        character.spell_slots, REST_SHORT
+    )
+    if slot_changes:
+        lines.append(
+            text.TXT_REST_SLOT_CHANGE.format(
+                items=_format_rest_changes(slot_changes)
+            )
+        )
+    if not feature_changes and not slot_changes:
+        lines.append(text.TXT_SHORT_REST_NOTHING)
+
+    if hp_info.is_init and hp_info.hp_dice_type > 0 and hp_info.hp_dice_max > 0:
+        if hp_info.hp_dice_num <= 0:
+            lines.append(
+                text.TXT_SHORT_REST_DICE_EMPTY.format(max=hp_info.hp_dice_max)
+            )
+        else:
+            lines.append(
+                text.TXT_SHORT_REST_DICE.format(num=hp_info.hp_dice_num)
+            )
+    else:
+        lines.append(text.TXT_SHORT_REST_NO_DICE)
+
+    if feature_changes or slot_changes:
+        await save_character(character)
+    await short_rest_matcher.finish("\n".join(lines))
+
+
+@hp_dice_matcher.handle()
+async def handle_hp_dice(bot: Bot, event: MessageEvent) -> None:
+    """处理 .生命骰：按卡面骰面与群级规则版本花费生命骰回血。"""
+    if not isinstance(event, GroupMessageEvent):
+        await hp_dice_matcher.finish(text.TXT_GROUP_ONLY)
+
+    character, name, remaining = await _load_rest_character(
+        bot, event, hp_dice_matcher
+    )
+    amount = 1
+    if remaining:
+        if not remaining.isdigit():
+            await hp_dice_matcher.finish(text.TXT_HD_USAGE)
+        amount = int(remaining)
+    if amount < 1:
+        await hp_dice_matcher.finish(text.TXT_HD_AMOUNT_INVALID)
+
+    hp_info = character.hp_info
+    if hp_info.is_init and hp_info.is_dead:
+        await hp_dice_matcher.finish(text.TXT_HD_DEAD)
+    if hp_info.is_init and hp_info.hp_cur <= 0:
+        await hp_dice_matcher.finish(text.TXT_HD_ZERO_HP)
+
+    rules_version = await char_rules.rules_version(event.group_id)
+    con_mod = character.ability_info.get_modifier(
+        ABILITY_LIST.index("体质")
+    )
+    ok, mod_info = HPService.use_hp_dice_ex(
+        hp_info,
+        amount,
+        con_mod,
+        version_2024=rules_version == char_rules.RULES_2024,
+    )
+    if not ok:
+        await hp_dice_matcher.finish(mod_info)
+    await save_character(character)
+    await hp_dice_matcher.finish(
+        text.TXT_HD_RESULT.format(name=name, result=mod_info)
+    )
