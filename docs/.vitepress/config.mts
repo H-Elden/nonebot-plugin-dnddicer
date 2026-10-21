@@ -57,6 +57,7 @@ export default defineConfig({
           { text: '角色卡与属性', link: '/guide/character-card' },
           { text: '网页建卡器', link: '/guide/card-builder' },
           { text: '角色卡图与立绘', link: '/guide/card-image' },
+          { text: '立绘裁切', link: '/guide/portrait' },
           { text: '检定与豁免', link: '/guide/checks' },
           { text: '武器与攻击', link: '/guide/weapons' },
           { text: '休息与资源', link: '/guide/resources' },
