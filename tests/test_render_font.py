@@ -12,12 +12,15 @@ import asyncio
 
 from nonebot_plugin_dnddicer.render import engine
 
-CSS_FILES = ("rich_card.css", "rule_card.css", "books_card.css")
-HTML_FILES = ("rich_card.html", "rule_card.html", "books_card.html")
+CSS_FILES = ("rich_card.css", "rule_card.css", "books_card.css", "char_card.css")
+HTML_FILES = ("rich_card.html", "rule_card.html", "books_card.html", "char_card.html")
 
 
 def _render_template(name: str) -> str:
     """渲染任一卡片模板（传入全部模板变量，多余的会被 Jinja 忽略）。"""
+    from nonebot_plugin_dnddicer.character.card_view import build_card_view
+    from nonebot_plugin_dnddicer.character.services import gen_template_char
+
     template = engine._get_env().get_template(name)  # pyright: ignore[reportPrivateUsage]
     return asyncio.run(
         template.render_async(
@@ -30,6 +33,7 @@ def _render_template(name: str) -> str:
             footer="",
             fallback_note="",
             source_path="p.htm",
+            view=build_card_view(gen_template_char()),
             css=engine._css_text(name.replace(".html", ".css")),  # pyright: ignore[reportPrivateUsage]
             font_rule='.card { font-family: "Noto Sans CJK SC"; }',
         )

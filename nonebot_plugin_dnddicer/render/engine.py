@@ -1,10 +1,11 @@
 """渲染引擎适配：条件 require htmlkit、模板渲染与调用。
 
 设计：
-- **条件 require**：仅在「NoneBot 已初始化 **且** 配置开启 **且** 依赖已装」时
-  ``require("nonebot_plugin_htmlkit")``——默认装机零加载、零内存增量；判定结果
-  进程内缓存（``ensure_available()``），插件加载期即先行判定一次（fontconfig 的
-  初始化挂在驱动的 startup 钩子上，延后到首次查询就来不及了）；
+- **条件 require**：仅在「NoneBot 已初始化 **且** 查询图片 / 角色卡图至少一个
+  开关开启 **且** 依赖已装」时 ``require("nonebot_plugin_htmlkit")``——默认装机
+  零加载、零内存增量；判定结果进程内缓存（``_ensure_htmlkit()``），插件加载期
+  即先行判定一次（fontconfig 的初始化挂在驱动的 startup 钩子上，延后到首次
+  查询就来不及了）；
 - 渲染在 htmlkit 的独立线程内执行（不阻塞事件循环）；``html_to_pic`` 需在事件
   循环内 await，故对外渲染器为 **async**；
 - **禁网**：``img_fetch_fn`` / ``css_fetch_fn`` 均传 ``none_fetcher``（模板内联
@@ -22,17 +23,23 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from nonebot import logger
 
 if TYPE_CHECKING:
+    from ..character.card_view import CharacterCardView
     from . import Renderer
 
-#: 卡片渲染宽度（px）——与 `card_geometry.CARD_WIDTH` 同值（版式常量集中在
+#: 规则查询卡片渲染宽度（px）——与 `card_geometry.CARD_WIDTH` 同值（版式常量集中在
 #: `card_geometry`，此处保留别名避免调用点全量改写）
 CARD_WIDTH = 700
+
+#: 角色卡图渲染宽度（px）——单页高密度版式专用，与查询卡片的折行几何无关
+#: （2026-10-21 改版：旧 700px 两栏版式已废弃）
+CHAR_CARD_WIDTH = 940
 
 #: 模板目录与模板名
 _TEMPLATE_DIR = Path(__file__).parent / "templates"
 _TEMPLATE_NAME = "rule_card.html"
 _RICH_TEMPLATE_NAME = "rich_card.html"
 _BOOKS_TEMPLATE_NAME = "books_card.html"
+_CHAR_TEMPLATE_NAME = "char_card.html"
 
 #: 自定义字体家族允许的字符（只放行 CSS font-family 列表本身，杜绝注入）
 _FONT_FAMILY_SAFE_RE = re.compile(r"^[A-Za-z0-9 ,\"'\-_]+$")
@@ -82,10 +89,28 @@ def _nonebot_initialized() -> bool:
         return False
 
 
-def ensure_available() -> bool:
-    """判定渲染是否可用（首次调用时执行条件 require）。
+def _query_image_enabled() -> bool:
+    """规则查询图片总开关（未初始化时按关闭处理）。"""
+    if not _nonebot_initialized():
+        return False
+    from ..config import get_config
 
-    - 配置关闭 → 不 require（默认装机零负担）；
+    return bool(get_config().dnddicer_query_image_enabled)
+
+
+def _card_image_enabled() -> bool:
+    """角色卡图总开关（未初始化时按关闭处理）。"""
+    if not _nonebot_initialized():
+        return False
+    from ..config import get_config
+
+    return bool(get_config().dnddicer_card_image_enabled)
+
+
+def _ensure_htmlkit() -> bool:
+    """判定 htmlkit 是否可用（首次调用时执行条件 require）。
+
+    - 两个图片开关都关 → 不 require（默认装机零负担）；
     - 依赖未装 → 不 require，记一条警示日志（命令层回退文字）；
     - 二者齐备 → require 并缓存为可用。
     """
@@ -95,15 +120,12 @@ def ensure_available() -> bool:
     if not _nonebot_initialized():
         # 未初始化：不缓存，等 NoneBot 就绪后再判
         return False
-
-    from ..config import get_config
-
-    if not get_config().dnddicer_query_image_enabled:
+    if not (_query_image_enabled() or _card_image_enabled()):
         _ready = False
         return False
     if not htmlkit_installed():
         logger.warning(
-            "规则查询图片模式已开启，但未安装渲染依赖，将回退文字输出；"
+            "DNDDicer 图片渲染已开启，但未安装渲染依赖，将回退文字输出；"
             "如需出图请安装：pip install nonebot-plugin-dnddicer[render]"
         )
         _ready = False
@@ -116,9 +138,30 @@ def ensure_available() -> bool:
         logger.exception("DNDDicer 加载渲染依赖 nonebot-plugin-htmlkit 失败，将回退文字输出")
         _ready = False
         return False
-    logger.info("DNDDicer 规则查询图片模式已启用（nonebot-plugin-htmlkit）")
+    logger.info("DNDDicer 图片渲染已启用（nonebot-plugin-htmlkit）")
     _ready = True
     return True
+
+
+def ensure_available() -> bool:
+    """规则查询图片是否可用（开关开启 + htmlkit 可用）。"""
+    return _query_image_enabled() and _ensure_htmlkit()
+
+
+def ensure_char_available() -> bool:
+    """角色卡图是否可用（开关开启 + htmlkit 可用）。"""
+    return _card_image_enabled() and _ensure_htmlkit()
+
+
+def prime_availability() -> bool:
+    """插件加载期预判一次：任一图片功能开启时尽早 require。
+
+    htmlkit 的字体初始化挂在驱动 startup 钩子上，延后到首次出图会来不及；
+    两个开关都关时不加载，保持默认装机零负担。
+    """
+    if not (_query_image_enabled() or _card_image_enabled()):
+        return False
+    return _ensure_htmlkit()
 
 
 def reset_availability() -> None:
@@ -243,6 +286,29 @@ async def _render_books(
     )
 
 
+async def _render_char(view: "CharacterCardView") -> bytes:
+    """渲染角色卡图为 PNG 字节（内部实现）。
+
+    立绘已由调用方放进 ``view.portrait_data_uri``（data URI），渲染过程不读
+    文件、不发网络请求。
+    """
+    from nonebot_plugin_htmlkit import html_to_pic, none_fetcher
+
+    template = _get_env().get_template(_CHAR_TEMPLATE_NAME)
+    html = await template.render_async(
+        view=view,
+        css=_css_text("char_card.css"),
+        font_rule=font_rule(),
+    )
+    return await html_to_pic(
+        html,
+        max_width=CHAR_CARD_WIDTH,
+        allow_refit=False,
+        img_fetch_fn=none_fetcher,
+        css_fetch_fn=none_fetcher,
+    )
+
+
 def build_renderer() -> Optional["Renderer"]:
     """构建词条卡片渲染器；不可用时返回 None。"""
     return _render if ensure_available() else None
@@ -258,6 +324,11 @@ def build_books_renderer():
     return _render_books if ensure_available() else None
 
 
+def build_char_renderer():
+    """构建角色卡图渲染器；不可用时返回 None。"""
+    return _render_char if ensure_char_available() else None
+
+
 # 插件加载期先行判定一次（使条件 require 尽早生效）；
 # 单测在 NoneBot 未初始化时直接导入本模块不会报错，判定留待 NoneBot 就绪后重试。
-ensure_available()
+prime_availability()

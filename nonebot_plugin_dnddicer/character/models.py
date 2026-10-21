@@ -5,30 +5,48 @@
 
 from __future__ import annotations
 
-from typing import List
+from typing import Dict, List
 
 from pydantic import BaseModel, Field
 
 from .constants import (
+    ABILITY_LIST,
     ABILITY_NUM,
+    BACKGROUND_KEY_LIST,
     CHECK_ITEM_INDEX_DICT,
     CHECK_ITEM_LIST,
     CHAR_INFO_KEY_ABILITY,
+    CHAR_INFO_KEY_ABILITY_DISPLAY,
+    CHAR_INFO_KEY_BACKGROUND,
     CHAR_INFO_KEY_CLASS,
+    CHAR_INFO_KEY_COINS,
+    CHAR_INFO_KEY_COMBAT,
+    CHAR_INFO_KEY_COMBAT_NOTES,
     CHAR_INFO_KEY_EXT,
     CHAR_INFO_KEY_FEATURE,
+    CHAR_INFO_KEY_FEATS,
     CHAR_INFO_KEY_HP,
     CHAR_INFO_KEY_HP_DICE,
+    CHAR_INFO_KEY_ITEMS,
     CHAR_INFO_KEY_LEVEL,
     CHAR_INFO_KEY_NAME,
     CHAR_INFO_KEY_PROF,
+    CHAR_INFO_KEY_PROGRESS,
     CHAR_INFO_KEY_RACE,
+    CHAR_INFO_KEY_SAVES,
+    CHAR_INFO_KEY_SKILLS,
     CHAR_INFO_KEY_SPELL,
     CHAR_INFO_KEY_SPELL_SLOTS,
+    CHAR_INFO_KEY_STORY,
     CHAR_INFO_KEY_SUBCLASS,
+    CHAR_INFO_KEY_TRAITS,
     CHAR_INFO_KEY_WEAPON,
+    COIN_KEY_LIST,
+    COMBAT_KEY_LIST,
     EXT_ITEM_INDEX_DICT,
     EXT_ITEM_LIST,
+    PROFICIENCY_GROUP_LIST,
+    SKILL_LIST,
     SPELL_LEVEL_MAX,
 )
 
@@ -292,6 +310,25 @@ class AbilityInfo(BaseModel):
     check_prof: List[int] = Field(default_factory=lambda: [0] * len(CHECK_ITEM_LIST))
     check_ext: List[str] = Field(default_factory=lambda: [""] * len(EXT_ITEM_LIST))
     check_adv: List[int] = Field(default_factory=lambda: [0] * len(EXT_ITEM_LIST))
+    #: ``$熟练$`` 扩展分组（护甲/武器/工具/语言），仅展示，不参与检定计算
+    prof_armor: List[str] = Field(default_factory=list)
+    prof_weapons: List[str] = Field(default_factory=list)
+    prof_tools: List[str] = Field(default_factory=list)
+    prof_languages: List[str] = Field(default_factory=list)
+
+    def get_prof_groups(self) -> List[tuple[str, List[str]]]:
+        """返回 ``[(分组名, 条目列表), ...]``（只含有内容的分组，固定顺序）。"""
+        mapping = {
+            "护甲": self.prof_armor,
+            "武器": self.prof_weapons,
+            "工具": self.prof_tools,
+            "语言": self.prof_languages,
+        }
+        return [
+            (label, mapping[label])
+            for label in PROFICIENCY_GROUP_LIST
+            if mapping[label]
+        ]
 
     def get_prof_bonus(self) -> int:
         """熟练加值：2 + (等级-1)//4（5e 规则）。"""
@@ -301,17 +338,26 @@ class AbilityInfo(BaseModel):
         """属性调整值：(值-10)//2（5e 向下取整）。"""
         return (self.ability[ability_index] - 10) // 2
 
-    def get_char_info(self) -> str:
-        """角色卡属性段落（可直接复制再记录，用于自行保存多卡）。"""
-        info = f"{CHAR_INFO_KEY_LEVEL} {self.level}\n"
-        info += f"{CHAR_INFO_KEY_ABILITY} {'/'.join(str(v) for v in self.ability)}\n"
+    def get_level_ability_info(self) -> str:
+        """``$等级$`` 与 ``$属性$`` 两行（完整卡面插入新段时先输出这两行）。"""
+        return (
+            f"{CHAR_INFO_KEY_LEVEL} {self.level}\n"
+            f"{CHAR_INFO_KEY_ABILITY} {'/'.join(str(v) for v in self.ability)}"
+        )
 
+    def get_prof_info(self) -> str:
+        """``$熟练$`` 与 ``$额外加值$`` 两行（无内容时为空串）。"""
+        info = ""
         prof_parts = []
         for index, scale in enumerate(self.check_prof):
             if scale <= 0:
                 continue
             name = CHECK_ITEM_LIST[index]
             prof_parts.append(name if scale == 1 else f"{scale}*{name}")
+        # $熟练$ 的扩展分组与技能/豁免条目共用同一段：条目在前，分组在后
+        prof_parts.extend(
+            f"{label}:{'·'.join(items)}" for label, items in self.get_prof_groups()
+        )
         if prof_parts:
             info += f"{CHAR_INFO_KEY_PROF} {'/'.join(prof_parts)}\n"
 
@@ -333,13 +379,20 @@ class AbilityInfo(BaseModel):
 
         return info.strip()
 
+    def get_char_info(self) -> str:
+        """角色卡属性段落（可直接复制再记录，用于自行保存多卡）。"""
+        return "\n".join(
+            part for part in (self.get_level_ability_info(), self.get_prof_info()) if part
+        )
+
 
 class WeaponInfo(BaseModel):
     """自定义武器/法术项（玩家自行填写，机器人不做规则判断）。
 
     录入格式与展示格式一致（可复制回 ``$武器$`` 段）：
     ``名称±命中加值,伤害表达式+类型``，如 ``短剑+6,1d4+4穿刺``；
-    名称尾部 ``x`` 为「不可攻击检定」标记（如 ``火球术x,8d6火焰``）。
+    名称尾部 ``x`` 为「不可攻击检定」标记（如 ``火球术x,8d6火焰``）；
+    第三个逗号字段为卡面备注（2026-10-21 批②），如 ``匕首+5,1d4+2穿刺,灵巧·轻型``。
     解析与校验见 ``character/services.py`` 的 ``parse_weapon_item``。
     """
 
@@ -348,13 +401,16 @@ class WeaponInfo(BaseModel):
     damage_expr: str = ""     # 伤害表达式（骰子与常数的加减组合，如 "1d4+4"）
     damage_type: str = ""     # 伤害类型（规范名，如 "穿刺"；空 = 不提示类型）
     no_attack: bool = False   # x 标记：不可进行攻击检定（纯伤害法术，如 火球术）
+    note: str = ""            # 卡面备注（如 "灵巧·轻型"；空 = 不显示）
 
     def get_info(self) -> str:
-        """展示/回写文本，如 ``短剑+6,1d4+4穿刺``、``火球术x,8d6火焰``。"""
+        """展示/回写文本，如 ``短剑+6,1d4+4穿刺``、``匕首+5,1d4+2穿刺,灵巧·轻型``。"""
         mark = "x" if self.no_attack else ""
         text = f"{self.name}{mark}{self.attack_bonus},{self.damage_expr}"
         if self.damage_type:
             text += self.damage_type
+        if self.note:
+            text += f",{self.note}"
         return text
 
 
@@ -362,7 +418,8 @@ class CharacterFeature(BaseModel):
     """有使用次数的能力（``$能力$`` 段，2026-10-20 批②新增）。
 
     录入与展示格式一致（可复制回 ``$能力$``）：
-    ``名称:当前/上限恢复档``，如 ``引导神力:2/2短休+1,长休``。
+    ``名称:当前/上限恢复档``，如 ``引导神力:2/2短休+1,长休``；
+    末尾可加 ``|说明``（2026-10-21 批②，卡面只展示、不参与结算）。
     ``recover`` 为规范化后的恢复档串（``短休`` / ``长休`` / ``两者`` / ``手动``，
     可带 ``+N``），解析与校验见 ``character/services.py`` 的
     ``parse_feature_item``；恢复量在休息结算时读取（后续批次接入）。
@@ -372,10 +429,14 @@ class CharacterFeature(BaseModel):
     uses_cur: int = 0
     uses_max: int = 0
     recover: str = "手动"
+    text: str = ""  # 卡面说明（如 "短休时回复一个已消耗的法术位"）
 
     def get_info(self) -> str:
-        """展示/回写文本，如 ``引导神力:2/2短休+1,长休``。"""
-        return f"{self.name}:{self.uses_cur}/{self.uses_max}{self.recover}"
+        """展示/回写文本，如 ``引导神力:2/2短休+1,长休``、``奥术回想:1/1短休|短休时…``。"""
+        text = f"{self.name}:{self.uses_cur}/{self.uses_max}{self.recover}"
+        if self.text:
+            text += f"|{self.text}"
+        return text
 
     def get_recover_display(self) -> str:
         """恢复档的中文展示（逗号转全角），如 ``短休+1，长休``。"""
@@ -387,16 +448,48 @@ class SpellEntry(BaseModel):
 
     ``level`` 0 = 戏法（不消耗法术位、无需准备）；``prepared`` 是「今日已准备」
     标记（卡面写 ``*``），只由 ``.法术 准备/取消`` 切换，长休只做提醒、不自动改。
+
+    卡面展示用的五项元数据与备注（2026-10-21 批②）：
+    ``cast_time`` / ``range`` / ``concentration`` / ``ritual`` / ``material`` /
+    ``note``，写在条目末尾的 ``|`` 之后（``时间=1动作,距离=150尺,专注=是``），
+    只用于渲染卡面图，不参与施法与结算。
     """
 
     name: str
     level: int = 0
     prepared: bool = False
+    cast_time: str = ""       # 施法时间（如 "1动作"）
+    range: str = ""           # 施法距离（如 "150尺"、"自身"）
+    concentration: bool = False  # 专注
+    ritual: bool = False         # 仪式
+    material: bool = False       # 材料
+    note: str = ""               # 备注（如 "8d6 火焰 / 敏捷"）
+
+    def get_detail_text(self) -> str:
+        """详情的回写片段（只输出已填项，固定键序）。"""
+        parts: List[str] = []
+        if self.cast_time:
+            parts.append(f"时间={self.cast_time}")
+        if self.range:
+            parts.append(f"距离={self.range}")
+        if self.concentration:
+            parts.append("专注=是")
+        if self.ritual:
+            parts.append("仪式=是")
+        if self.material:
+            parts.append("材料=是")
+        if self.note:
+            parts.append(f"备注={self.note}")
+        return ",".join(parts)
 
     def get_info(self) -> str:
-        """展示/回写文本，如 ``火球术:3*``（``*`` = 今日已准备）。"""
+        """展示/回写文本，如 ``火球术:3*|时间=1动作,距离=150尺,材料=是``。"""
         mark = "*" if self.prepared else ""
-        return f"{self.name}:{self.level}{mark}"
+        text = f"{self.name}:{self.level}{mark}"
+        detail = self.get_detail_text()
+        if detail:
+            text += f"|{detail}"
+        return text
 
     def get_level_label(self) -> str:
         """环阶展示：``戏法`` 或 ``3环``。"""
@@ -474,12 +567,75 @@ class DNDCharacter(BaseModel):
     spells: List[SpellEntry] = Field(default_factory=list)  # 已知/准备法术
     spell_slots: SpellSlots = Field(default_factory=SpellSlots)  # 各环与契约法术位
     spellcasting_ability: str = ""  # 施法属性（六属性名；空 = 未填写）
+    #: 立绘相对文件名（如 ``portraits/<群>_<QQ>.png``；空 = 未设置）
+    portrait: str = ""
+    # 完整卡面扩展（2026-10-21；全部有默认值，旧卡零迁移）
+    ability_display: Dict[str, str] = Field(default_factory=dict)  # $属性值$
+    combat: Dict[str, str] = Field(default_factory=dict)  # $战斗$
+    saves: Dict[str, str] = Field(default_factory=dict)  # $豁免$
+    skills: Dict[str, str] = Field(default_factory=dict)  # $技能$
+    feats: List[str] = Field(default_factory=list)  # $专长$
+    traits: List[str] = Field(default_factory=list)  # $特性$
+    items: List[str] = Field(default_factory=list)  # $物品$
+    background: Dict[str, str] = Field(default_factory=dict)  # $背景$
+    combat_notes: List[str] = Field(default_factory=list)  # $战斗记录$
+    story: str = ""  # $故事$（长文本，卡面「背景故事」面板）
+    progress: Dict[str, str] = Field(default_factory=dict)  # $进度$（经验/激励）
+    coins: Dict[str, int] = Field(default_factory=dict)  # $钱币$（CP/SP/EP/GP/PP）
+    spell_dc: str = ""  # 法术豁免 DC（$法术$ 头键）
+    spell_attack: str = ""  # 法术攻击加值（$法术$ 头键）
     is_init: bool = False
+
+    def _background_items(self) -> List[str]:
+        """``$背景$`` 条目：常用键按固定顺序，未列出的键按录入顺序追加。"""
+        items = [
+            f"{key}:{self.background[key]}"
+            for key in BACKGROUND_KEY_LIST
+            if self.background.get(key)
+        ]
+        items.extend(
+            f"{key}:{value}"
+            for key, value in self.background.items()
+            if key not in BACKGROUND_KEY_LIST and value
+        )
+        return items
+
+    def _combat_items(self) -> List[str]:
+        """``$战斗$`` 条目：固定顺序，仅输出已填项。"""
+        return [
+            f"{key}:{self.combat[key]}"
+            for key in COMBAT_KEY_LIST
+            if self.combat.get(key)
+        ]
+
+    def _ability_display_items(self) -> List[str]:
+        """``$属性值$`` 条目：六属性固定顺序。"""
+        return [
+            f"{name}:{self.ability_display[name]}"
+            for name in ABILITY_LIST
+            if self.ability_display.get(name)
+        ]
+
+    def _save_items(self) -> List[str]:
+        """``$豁免$`` 条目：六属性固定顺序。"""
+        return [
+            f"{name}:{self.saves[name]}"
+            for name in ABILITY_LIST
+            if self.saves.get(name)
+        ]
+
+    def _skill_items(self) -> List[str]:
+        """``$技能$`` 条目：技能表固定顺序。"""
+        return [
+            f"{name}:{self.skills[name]}"
+            for name in SKILL_LIST
+            if self.skills.get(name)
+        ]
 
     def get_char_info(self) -> str:
         """完整角色卡文本（$xxx$ 段落格式，可再次 .角色卡记录）。
 
-        段顺序：身份 → 数值 → 能力 → 装备 → 法术（新增三段只插在各自的
+        段顺序：身份 → 数值 → 能力 → 装备 → 法术（新增段只插在各自的
         逻辑位置，既有段的先后保持不变，旧卡输出不受影响）。
         """
         parts = []
@@ -491,25 +647,76 @@ class DNDCharacter(BaseModel):
             parts.append(f"{CHAR_INFO_KEY_CLASS} {self.char_class}")
         if self.subclass:
             parts.append(f"{CHAR_INFO_KEY_SUBCLASS} {self.subclass}")
+        background_items = self._background_items()
+        if background_items:
+            parts.append(f"{CHAR_INFO_KEY_BACKGROUND} {'; '.join(background_items)}")
+        if self.story:
+            parts.append(f"{CHAR_INFO_KEY_STORY} {self.story}")
         hp_part = self.hp_info.get_char_info()
         if hp_part:
             parts.append(hp_part)
-        ability_part = self.ability_info.get_char_info()
-        if ability_part:
-            parts.append(ability_part)
+        combat_items = self._combat_items()
+        if combat_items:
+            parts.append(f"{CHAR_INFO_KEY_COMBAT} {'; '.join(combat_items)}")
+        progress_items: List[str] = []
+        if self.progress.get("经验"):
+            progress_items.append(f"经验:{self.progress['经验']}")
+        if self.progress.get("激励"):
+            progress_items.append(f"激励:{self.progress['激励']}")
+        if progress_items:
+            parts.append(f"{CHAR_INFO_KEY_PROGRESS} {'; '.join(progress_items)}")
+        level_ability_part = self.ability_info.get_level_ability_info()
+        if level_ability_part:
+            parts.append(level_ability_part)
+        display_items = self._ability_display_items()
+        if display_items:
+            parts.append(
+                f"{CHAR_INFO_KEY_ABILITY_DISPLAY} {'; '.join(display_items)}"
+            )
+        save_items = self._save_items()
+        if save_items:
+            parts.append(f"{CHAR_INFO_KEY_SAVES} {'; '.join(save_items)}")
+        skill_items = self._skill_items()
+        if skill_items:
+            parts.append(f"{CHAR_INFO_KEY_SKILLS} {'; '.join(skill_items)}")
+        prof_part = self.ability_info.get_prof_info()
+        if prof_part:
+            parts.append(prof_part)
+        if self.feats:
+            parts.append(f"{CHAR_INFO_KEY_FEATS} {'/'.join(self.feats)}")
+        if self.traits:
+            parts.append(f"{CHAR_INFO_KEY_TRAITS} {'/'.join(self.traits)}")
         if self.features:
             feature_str = "; ".join(feature.get_info() for feature in self.features)
             parts.append(f"{CHAR_INFO_KEY_FEATURE} {feature_str}")
         if self.weapons:
             weapon_str = "/".join(weapon.get_info() for weapon in self.weapons)
             parts.append(f"{CHAR_INFO_KEY_WEAPON} {weapon_str}")
+        if self.items:
+            parts.append(f"{CHAR_INFO_KEY_ITEMS} {'; '.join(self.items)}")
+        if self.coins:
+            coin_items = [
+                f"{key}:{self.coins[key]}"
+                for key in COIN_KEY_LIST
+                if key in self.coins
+            ]
+            if coin_items:
+                parts.append(f"{CHAR_INFO_KEY_COINS} {'; '.join(coin_items)}")
         spell_parts: List[str] = []
         if self.spellcasting_ability:
             spell_parts.append(f"施法属性:{self.spellcasting_ability}")
+        if self.spell_dc:
+            spell_parts.append(f"豁免DC:{self.spell_dc}")
+        if self.spell_attack:
+            spell_parts.append(f"法术攻击:{self.spell_attack}")
         spell_parts.extend(spell.get_info() for spell in self.spells)
         if spell_parts:
             parts.append(f"{CHAR_INFO_KEY_SPELL} {'; '.join(spell_parts)}")
         slots_part = self.spell_slots.get_char_info()
         if slots_part:
             parts.append(slots_part)
+        if self.combat_notes:
+            parts.append(
+                f"{CHAR_INFO_KEY_COMBAT_NOTES} {'; '.join(self.combat_notes)}"
+            )
         return "\n".join(parts)

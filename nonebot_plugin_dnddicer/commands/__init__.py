@@ -31,6 +31,7 @@
 from . import base  # noqa: F401  # 基础设施（注册表/起始符/解析）
 from . import roll  # noqa: F401  # .r / .rh 掷骰命令（模块顶层注册 matcher）
 from . import character  # noqa: F401  # .角色卡/.状态 + 检定/豁免 点命令
+from . import card_image  # noqa: F401  # .角色卡图 图片卡面（2026-10-21）
 from . import weapon  # noqa: F401  # .X攻击/.X命中 自定义武器攻击检定（模式匹配）
 from . import feature  # noqa: F401  # .能力/.设置能力/.删除能力 有次数的能力
 from . import spell  # noqa: F401  # .法术/.法术位(.ss) 法术清单、准备标记与法术位

@@ -10,7 +10,8 @@
 - ``get_group_member_nickname``：get_group_member_info 查询群成员展示名
   （统一回退链中查询他人/本人的 API 兜底；失败返回 None 由调用方继续回退，
   不影响命令主流程）；
-- ``send_private_msg``：私聊发送（.rh 暗骰结果，原 roll.py 直连 call_api）。
+- ``send_private_msg``：私聊发送（.rh 暗骰结果，原 roll.py 直连 call_api）；
+- ``image_segments``：按序提取消息中的图片段（``.立绘`` 上传用，2026-10-21）。
 - @ 提及目标（2026-09-22 新增）：``rebuild_text_with_mentions`` / ``list_mentions``
   / ``iter_mentions`` / ``parse_mention_token`` / ``strip_mentions`` /
   ``strip_leading_mentions`` / ``at_reply``——onebot v11 的 at 段不进
@@ -33,6 +34,18 @@ _MENTION_RE = re.compile(r"@(\d+)")
 def at_segment(user_id: Union[int, str]) -> MessageSegment:
     """构造 @ 消息段（OneBot V11）。"""
     return MessageSegment.at(str(user_id))
+
+
+def image_segments(event: MessageEvent) -> List[dict]:
+    """按消息顺序返回图片段的数据字典（原始 data，不做下载）。"""
+    message = getattr(event, "message", None)
+    if message is None:
+        return []
+    return [
+        dict(segment.data)
+        for segment in message
+        if getattr(segment, "type", "") == "image"
+    ]
 
 
 def rebuild_text_with_mentions(event: MessageEvent) -> str:

@@ -64,6 +64,13 @@ def test_defaults_unchanged() -> None:
     assert config.dnddicer_master_group == ""
 
 
+def test_card_image_enabled_default_false() -> None:
+    """角色卡图开关（2026-10-21）：默认关闭；.env 写 TRUE / true 均可读入。"""
+    assert Config().dnddicer_card_image_enabled is False
+    assert Config(dnddicer_card_image_enabled=json.loads("true")).dnddicer_card_image_enabled is True
+    assert Config(dnddicer_card_image_enabled=True).dnddicer_card_image_enabled is True
+
+
 def test_default_rules_version_field() -> None:
     """默认规则版本（2026-10-01 新增）：未配置为 "2024"，数字写法按文本读入。
 

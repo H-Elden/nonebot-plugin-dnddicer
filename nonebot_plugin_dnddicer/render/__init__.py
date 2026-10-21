@@ -1,11 +1,14 @@
-"""渲染模块：规则查询输出 → 图片卡片。
+"""渲染模块：规则查询与角色卡 → 图片卡片。
 
-两类卡片（共用同一套主题与渲染基建）：
+三类卡片（共用同一套主题与渲染基建）：
 - **词条卡片**（``render_rule_card``）：``.查询`` 的词条正文（仿 5e 不全书正文样式）；
-- **书目卡片**（``render_books_card``）：``.规则书`` 的可查询书目表（分组 + 缩写对照）。
+- **书目卡片**（``render_books_card``）：``.规则书`` 的可查询书目表（分组 + 缩写对照）；
+- **角色卡图**（``render_char_card``）：``.角色卡图`` 的单页高密度角色卡
+  （2026-10-21 新增，同日改为 940px 单页版式）。
 
 设计目标：
-- 对外暴露 ``render_available()`` / ``books_available()`` 与两个渲染函数（均 async）；
+- 对外暴露 ``render_available()`` / ``books_available()`` / ``char_card_available()``
+  与三个渲染函数（均 async）；
 - ``nonebot-plugin-htmlkit`` 为可选依赖：配置关闭或依赖未装时两者均返回 False，
   命令层据此回退文字输出；
 - 测试可注入假渲染器（``set_renderer`` / ``set_books_renderer``），CI 无需装 htmlkit；
@@ -20,9 +23,12 @@
 
 from __future__ import annotations
 
-from typing import Awaitable, Callable, List, Optional
+from typing import TYPE_CHECKING, Awaitable, Callable, List, Optional
 
 from . import engine
+
+if TYPE_CHECKING:
+    from ..character.card_view import CharacterCardView
 
 #: 词条卡片渲染器签名：(标题, 分类, 正文, 来源路径, 是否已定位) → PNG 字节（异步）
 Renderer = Callable[[str, str, str, str, bool], Awaitable[bytes]]
@@ -33,12 +39,17 @@ RichRenderer = Callable[[str, str, str, str, bool], Awaitable[bytes]]
 #: 书目卡片渲染器签名：(分组列表, 标题, 说明行, 底注) → PNG 字节（异步）
 BooksRenderer = Callable[[List[dict], str, str, str], Awaitable[bytes]]
 
+#: 角色卡图渲染器签名：(角色卡视图) → PNG 字节（异步）
+CharCardRenderer = Callable[["CharacterCardView"], Awaitable[bytes]]
+
 _renderer: Optional[Renderer] = None
 _resolved = False  # 是否已尝试过解析（含「解析结果为不可用」）
 _rich_renderer: Optional[RichRenderer] = None
 _rich_resolved = False
 _books_renderer: Optional[BooksRenderer] = None
 _books_resolved = False
+_char_renderer: Optional[CharCardRenderer] = None
+_char_resolved = False
 
 
 def render_available() -> bool:
@@ -54,6 +65,11 @@ def rich_available() -> bool:
 def books_available() -> bool:
     """书目卡片图片渲染是否可用（与词条卡片同一引擎判定，可独立注入）。"""
     return _resolve_books() is not None
+
+
+def char_card_available() -> bool:
+    """角色卡图渲染是否可用（卡图开关 + htmlkit，可独立注入）。"""
+    return _resolve_char() is not None
 
 
 async def render_rule_card(
@@ -102,6 +118,14 @@ async def render_books_card(
     return await renderer(sections, title, hint, footer)
 
 
+async def render_char_card(view: "CharacterCardView") -> bytes:
+    """渲染角色卡图为 PNG 字节。调用前应先检查 ``char_card_available()``。"""
+    renderer = _resolve_char()
+    if renderer is None:
+        raise RuntimeError("渲染器不可用")
+    return await renderer(view)
+
+
 def set_renderer(renderer: Optional[Renderer]) -> None:
     """替换词条卡片渲染器（测试注入用；传 None 等价于重置为按配置解析）。"""
     global _renderer, _resolved
@@ -123,6 +147,13 @@ def set_books_renderer(renderer: Optional[BooksRenderer]) -> None:
     _books_resolved = renderer is not None
 
 
+def set_char_renderer(renderer: Optional[CharCardRenderer]) -> None:
+    """替换角色卡图渲染器（测试注入用；传 None 恢复按配置解析）。"""
+    global _char_renderer, _char_resolved
+    _char_renderer = renderer
+    _char_resolved = renderer is not None
+
+
 def reset_renderer() -> None:
     """重置渲染器状态（测试清理用）。
 
@@ -130,13 +161,15 @@ def reset_renderer() -> None:
     改过配置（monkeypatch）后必须重判，否则会沿用加载期的旧结论。
     """
     global _renderer, _resolved, _rich_renderer, _rich_resolved
-    global _books_renderer, _books_resolved
+    global _books_renderer, _books_resolved, _char_renderer, _char_resolved
     _renderer = None
     _resolved = False
     _rich_renderer = None
     _rich_resolved = False
     _books_renderer = None
     _books_resolved = False
+    _char_renderer = None
+    _char_resolved = False
     engine.reset_availability()
 
 
@@ -165,3 +198,12 @@ def _resolve_books() -> Optional[BooksRenderer]:
         _books_renderer = engine.build_books_renderer()
         _books_resolved = True
     return _books_renderer
+
+
+def _resolve_char() -> Optional[CharCardRenderer]:
+    """解析角色卡图渲染器（首次调用时按配置与依赖构建，失败结果同样缓存）。"""
+    global _char_renderer, _char_resolved
+    if not _char_resolved:
+        _char_renderer = engine.build_char_renderer()
+        _char_resolved = True
+    return _char_renderer

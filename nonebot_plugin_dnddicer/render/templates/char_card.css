@@ -1,0 +1,706 @@
+/* 角色卡图样式（2026-10-21 单页高密度版）
+   版式来自 doc/refs/card-v2/sheet.css：940px 单页，页眉 + 左右两栏 + 底部法术区。
+   litehtml 无 flex/grid，整卡用 table 与 inline-block；表格列缝用「米色表底 +
+   白色数据行」补，钱币表首末列去侧边线避免与面板边框叠成双线。 */
+
+body {
+  margin: 0;
+  padding: 0;
+  background: #ffffff;
+}
+
+.sheet {
+  padding: 14px 16px 10px 16px;
+  background: #fffdf7;
+  border: 1px solid #d8c9a8;
+  /* 中文优先且中西文同源（与规则查询卡片同口径） */
+  font-family: "Noto Sans CJK SC", "Source Han Sans SC", "Microsoft YaHei",
+    "PingFang SC", "WenQuanYi Zen Hei", sans-serif;
+  font-size: 11px;
+  color: #242629;
+}
+
+/* ── 页眉：立绘 + 身份 + 核心数值 + HP 表 ─────────────────────── */
+.top {
+  width: 100%;
+  border-collapse: collapse;
+  background: #7a1f1f;
+  border-radius: 5px;
+}
+
+.photo-cell {
+  width: 158px;
+  padding: 8px 0 8px 8px;
+  vertical-align: middle;
+}
+
+.photo {
+  width: 146px;
+  height: 146px;
+  border: 2px solid #d8b98c;
+  background: #f3e8d6;
+}
+
+.photo.placeholder {
+  text-align: center;
+  line-height: 146px;
+  font-size: 52px;
+  font-weight: bold;
+  color: #7a1f1f;
+}
+
+.identity {
+  padding: 8px 10px 0 14px;
+  vertical-align: middle;
+  color: #ffffff;
+}
+
+.name {
+  font-size: 36px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  line-height: 1.1;
+}
+
+.subtitle {
+  font-size: 14.5px;
+  color: #f0d9b8;
+  margin-top: 8px;
+}
+
+.core-stats {
+  border-collapse: separate;
+  border-spacing: 8px 0;
+  margin-top: 15px;
+  margin-left: -4px;
+}
+
+.core-stats td {
+  border: 1px solid #a85a5a;
+  border-radius: 4px;
+  background: #8f2d2d;
+  padding: 3px 9px;
+  font-size: 15px;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.stat-label {
+  color: #f0d9b8;
+  margin-right: 4px;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.stat-value {
+  font-weight: bold;
+  color: #ffffff;
+  font-size: 17px;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.xp-line {
+  margin-top: 10px;
+  color: #f0d9b8;
+  font-size: 14px;
+  line-height: 24px;
+}
+
+.xp-label {
+  margin-right: 6px;
+}
+
+.xp-value {
+  font-weight: bold;
+  color: #ffffff;
+  font-size: 18px;
+  letter-spacing: 0.5px;
+}
+
+.xp-next {
+  margin-left: 10px;
+  color: #e3c799;
+  font-size: 12.5px;
+}
+
+.hp-cell {
+  width: 250px;
+  padding: 8px 8px 8px 0;
+  vertical-align: middle;
+}
+
+.hp-grid {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border-radius: 8px;
+  background: #8f2d2d;
+  border: 1px solid #a85a5a;
+}
+
+.hp-grid td {
+  border-bottom: 1px solid #a85a5a;
+  padding: 5px 6px;
+  font-size: 12px;
+  color: #ffffff;
+  vertical-align: middle;
+}
+
+.hp-ds td {
+  padding: 4px 6px;
+}
+
+.hp-last td {
+  border-bottom: 0;
+}
+
+.hp-label {
+  width: 68px;
+  color: #f0d9b8;
+}
+
+.hp-value {
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.hp-value-small {
+  font-size: 13px;
+  font-weight: bold;
+}
+
+.hp-state {
+  margin-left: 5px;
+  font-size: 11px;
+  font-weight: normal;
+  color: #f0c96a;
+}
+
+.hp-grid .box {
+  border-color: #f0d9b8;
+  background: transparent;
+}
+
+.hp-grid .box.filled {
+  background: #f0c96a;
+  border-color: #f0c96a;
+}
+
+/* ── 两栏主体 ─────────────────────────────────────────────────── */
+.main {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+  table-layout: fixed;
+}
+
+.left-col {
+  width: 220px;
+  vertical-align: top;
+  padding-right: 6px;
+}
+
+.right-col {
+  vertical-align: top;
+  padding-left: 6px;
+}
+
+/* 六属性卡 */
+.ability {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  border: 1px solid #b9a98a;
+  margin-bottom: 5px;
+  background: #fffefb;
+}
+
+.ab-name {
+  background: #7a1f1f;
+  color: #f8e9c6;
+  padding: 0;
+}
+
+.ab-head {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.ab-head td {
+  line-height: 12px;
+  padding: 0 6px 4px;
+  font-weight: bold;
+  font-size: 11.5px;
+  letter-spacing: 1.2px;
+  vertical-align: middle;
+}
+
+.ab-head-name {
+  text-align: left;
+}
+
+.ab-head-mod {
+  text-align: right;
+  color: #f0c96a;
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+.ab-score-cell {
+  width: 50px;
+  background: #f3ead8;
+  text-align: center;
+  border-right: 1px dotted #d8c9a8;
+  padding: 3px 1px 2px 1px;
+  vertical-align: top;
+}
+
+.ab-circle {
+  width: 32px;
+  height: 32px;
+  line-height: 30px;
+  border: 2px double #7a1f1f;
+  border-radius: 50%;
+  margin: 0 auto;
+  background: #fffefb;
+  font-size: 15px;
+  font-weight: bold;
+  color: #7a1f1f;
+}
+
+.ab-mod-line {
+  font-size: 8px;
+  color: #8a7a5a;
+  margin-top: 1px;
+}
+
+.ab-list {
+  padding: 1px 4px 2px 4px;
+  vertical-align: top;
+}
+
+.ab-save {
+  font-size: 10px;
+  color: #4a3c2a;
+  padding: 1px 0;
+  border-bottom: 1px dotted #d8c9a8;
+  margin-bottom: 1px;
+  white-space: nowrap;
+}
+
+.ab-skill {
+  font-size: 10px;
+  line-height: 1.45;
+  color: #3b3a36;
+  white-space: nowrap;
+}
+
+.skv {
+  color: #7a1f1f;
+  font-weight: bold;
+}
+
+/* 标记：方块 / 专精星 */
+.box {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border: 1px solid #7a1f1f;
+  margin-right: 4px;
+  vertical-align: middle;
+  background: #ffffff;
+}
+
+.box.filled {
+  background: #7a1f1f;
+}
+
+.star {
+  color: #7a1f1f;
+  font-size: 13px;
+  font-weight: bold;
+  margin-right: 3px;
+  vertical-align: -3px;
+}
+
+/* 面板 */
+.panel {
+  border: 1px solid #b9a98a;
+  background: #fffefb;
+  margin-bottom: 5px;
+}
+
+.panel-title {
+  background: #e9dcc3;
+  color: #7a1f1f;
+  font-weight: bold;
+  font-size: 11.5px;
+  padding: 2px 6px;
+  border-bottom: 1px solid #b9a98a;
+}
+
+/* 武器表（表头列缝由米色表底填，数据行再用白底盖回） */
+.weapons {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: #f6efe1;
+}
+
+.weapons tbody {
+  background: #fffefb;
+}
+
+.weapons-head {
+  background: #f6efe1;
+}
+
+.weapons th {
+  background: #f6efe1;
+  color: #5f4a2a;
+  font-size: 10.5px;
+  padding: 1px 4px;
+  border-bottom: 1px solid #b9a98a;
+}
+
+.weapons td {
+  font-size: 10.5px;
+  padding: 1px 4px;
+  border-bottom: 1px dotted #d8c9a8;
+  vertical-align: top;
+  background: #fffefb;
+}
+
+.w-name {
+  width: 13%;
+  text-align: left;
+}
+
+.w-hit {
+  width: 16%;
+  text-align: center;
+}
+
+.w-dmg {
+  width: 15.5%;
+  text-align: center;
+}
+
+.w-type {
+  width: 15.5%;
+  text-align: center;
+}
+
+.w-note {
+  width: 40%;
+  text-align: left;
+  padding-left: 28px;
+}
+
+/* 两列子块 */
+.sub-two {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.sub-col {
+  width: 50%;
+  vertical-align: top;
+  padding: 0;
+}
+
+.sub-col-left {
+  padding-right: 4px;
+}
+
+.sub-col-right {
+  padding-left: 4px;
+  padding-right: 1px;
+}
+
+.sub-col-full {
+  width: 100%;
+  vertical-align: top;
+  padding: 0;
+}
+
+.feature {
+  padding: 2px 5px;
+  border-bottom: 1px dotted #d8c9a8;
+}
+
+.f-name {
+  font-weight: bold;
+  color: #7a1f1f;
+  font-size: 11px;
+}
+
+.f-uses {
+  float: right;
+  font-size: 9.5px;
+  color: #5f4a2a;
+  background: #f3ead8;
+  border: 1px solid #d8c9a8;
+  padding: 0 3px;
+}
+
+.f-text {
+  font-size: 10px;
+  line-height: 1.4;
+  color: #3b3a36;
+  margin-top: 1px;
+}
+
+.plain-line {
+  font-size: 10.5px;
+  line-height: 1.55;
+  padding: 1px 6px;
+  border-bottom: 1px dotted #d8c9a8;
+}
+
+.note-line {
+  font-size: 10.5px;
+  line-height: 1.45;
+  padding: 1px 6px;
+  border-bottom: 1px dotted #d8c9a8;
+}
+
+.item-line {
+  font-size: 10.5px;
+  line-height: 1.45;
+  padding: 1px 6px;
+  border-bottom: 1px dotted #d8c9a8;
+}
+
+/* 钱币表（首末列去侧边线，外框由面板提供） */
+.coins {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.coins th {
+  width: 20%;
+  font-size: 9.5px;
+  color: #5f4a2a;
+  background: #f6efe1;
+  border: 1px solid #d8c9a8;
+  padding: 1px 2px;
+  text-align: center;
+}
+
+.coins td {
+  width: 20%;
+  text-align: center;
+  font-size: 12px;
+  font-weight: bold;
+  border: 1px solid #d8c9a8;
+  padding: 2px 2px;
+}
+
+.coins th:first-child,
+.coins td:first-child {
+  border-left: 0;
+}
+
+.coins th:last-child,
+.coins td:last-child {
+  border-right: 0;
+}
+
+/* 背景与个性 / 背景故事 */
+.bg-two-col {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.bg-two-col td {
+  width: 50%;
+  font-size: 10.5px;
+  line-height: 1.45;
+  padding: 1px 6px;
+  border-bottom: 1px dotted #d8c9a8;
+  vertical-align: top;
+}
+
+.bg-key {
+  display: inline-block;
+  width: 34px;
+  color: #7a1f1f;
+  font-weight: bold;
+  margin-right: 3px;
+}
+
+.story-text {
+  font-size: 10.5px;
+  line-height: 1.55;
+  padding: 4px 7px;
+  color: #3b3a36;
+}
+
+/* ── 底部法术区 ───────────────────────────────────────────────── */
+.spell-panel {
+  margin-top: 7px;
+}
+
+.spell-head {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.spell-cast {
+  width: 38%;
+  vertical-align: middle;
+  padding: 21px 6px 3px;
+  border-right: 1px solid #d8c9a8;
+}
+
+.spell-slots {
+  width: 62%;
+  vertical-align: top;
+  padding: 3px 6px;
+}
+
+.casting {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.casting td {
+  padding: 3px 4px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.c-label {
+  color: #5f4a2a;
+  font-size: 11px;
+}
+
+.c-value {
+  color: #7a1f1f;
+  font-weight: bold;
+  font-size: 14px;
+}
+
+.slot-grid {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.slot {
+  border: 1px solid #d8c9a8;
+  padding: 1px 3px;
+  vertical-align: middle;
+}
+
+.slot-label {
+  display: inline-block;
+  width: 30px;
+  font-size: 10.5px;
+  color: #7a1f1f;
+  font-weight: bold;
+}
+
+.slot-value {
+  display: inline-block;
+  width: 34px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.slot-pips {
+  color: #7a1f1f;
+  white-space: nowrap;
+}
+
+.slot-pips .box {
+  margin-right: 3px;
+  vertical-align: -1px;
+}
+
+.slot-pips .box:last-child {
+  margin-right: 0;
+}
+
+.slot-pact .slot-label {
+  width: 64px;
+}
+
+.spell-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.spell-table th {
+  background: #f6efe1;
+  color: #5f4a2a;
+  font-size: 10.5px;
+  padding: 2px 4px;
+  border-bottom: 1px solid #b9a98a;
+}
+
+.spell-table td {
+  font-size: 10.5px;
+  padding: 1px 4px;
+  border-bottom: 1px dotted #d8c9a8;
+  vertical-align: top;
+}
+
+.s-name {
+  width: 18%;
+  text-align: left;
+}
+
+.s-prep {
+  width: 7%;
+  text-align: center;
+}
+
+.s-time {
+  width: 10%;
+  text-align: center;
+}
+
+.s-range {
+  width: 10%;
+  text-align: center;
+}
+
+.s-conc,
+.s-ritual,
+.s-material {
+  width: 6%;
+  text-align: center;
+}
+
+.s-note {
+  width: 37%;
+  color: #5f5a50;
+  text-align: left;
+}
+
+.level-row td {
+  background: #f6efe1;
+  color: #7a1f1f;
+  font-weight: bold;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-top: 1px solid #d8c9a8;
+}
+
+.legend {
+  margin-top: 4px;
+  padding-top: 3px;
+  border-top: 1px solid #d8c9a8;
+  font-size: 9.5px;
+  color: #8a7a5a;
+  text-align: right;
+}

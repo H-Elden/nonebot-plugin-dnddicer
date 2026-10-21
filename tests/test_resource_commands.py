@@ -24,6 +24,14 @@ _CARD = "\n".join([
     "$法术位$ 1:4/4; 2:3/3; 契约3:2/2",
 ])
 
+_DETAIL_CARD = "\n".join([
+    "$姓名$ 测试",
+    "$等级$ 5",
+    "$属性$ 10/10/10/10/10/10",
+    "$法术$ 施法属性:智力; 豁免DC:15; "
+    "火球术:3*|时间=1动作,距离=150尺,材料=是,备注=8d6 火焰",
+])
+
 
 @pytest.fixture(autouse=True)
 def _clear_store():
@@ -317,10 +325,43 @@ async def test_set_and_delete_spell(app: App):
     )
 
 
+@pytest.mark.asyncio
+async def test_set_spell_details_and_header_keys(app: App):
+    """批②：不写详情保留原值，写了详情整组覆盖；头键可单独设置。"""
+    from nonebot_plugin_dnddicer.commands.spell import set_spell_matcher
+    from nonebot_plugin_dnddicer.data.characters import get_character
+
+    await _record(app, card=_DETAIL_CARD)
+    await _expect(
+        app, set_spell_matcher, _event(".设置法术 火球术:4"),
+        "已设置法术：火球术（当前共 1 项）\n"
+        "1. 火球术 4环（已准备）",
+    )
+    char = await get_character(_GROUP, 23001)
+    assert char.spells[0].cast_time == "1动作"
+    assert char.spells[0].material is True
+    assert char.spells[0].note == "8d6 火焰"
+
+    await _expect(
+        app, set_spell_matcher, _event(".设置法术 火球术:4|备注=新备注"),
+        "已设置法术：火球术（当前共 1 项）\n"
+        "1. 火球术 4环（已准备）",
+    )
+    char = await get_character(_GROUP, 23001)
+    assert char.spells[0].cast_time == ""
+    assert char.spells[0].note == "新备注"
+
+    await _expect(
+        app, set_spell_matcher, _event(".设置法术 豁免DC:16; 法术攻击:+8"),
+        "已设置豁免 DC：16\n已设置法术攻击：+8",
+    )
+    char = await get_character(_GROUP, 23001)
+    assert (char.spell_dc, char.spell_attack) == ("16", "+8")
+
+
 # =========================================================================
 # .法术位
 # =========================================================================
-
 
 @pytest.mark.asyncio
 async def test_spell_slots_view_modify_and_reset(app: App):

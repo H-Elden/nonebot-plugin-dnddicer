@@ -136,6 +136,94 @@ def test_card_geometry_matches_stylesheets() -> None:
     assert f"padding-left: {card_geometry.LIST_INDENT_EM}em" in rich
 
 
+def _render_char(view) -> str:
+    """渲染角色卡图模板（需要可选的渲染依赖）。"""
+    template = engine._get_env().get_template("char_card.html")  # pyright: ignore[reportPrivateUsage]
+    return template.render(
+        view=view,
+        css=engine._css_text("char_card.css"),  # pyright: ignore[reportPrivateUsage]
+        font_rule='.card { font-family: "Noto Sans CJK SC"; }',
+    )
+
+
+def test_char_card_template_renders_with_production_env() -> None:
+    """单页角色卡模板可渲染完整 HTML，且不引用任何外部资源。"""
+    pytest.importorskip("jinja2", reason="模板渲染需要可选的 [render] 依赖（含 Jinja2）")
+    from nonebot_plugin_dnddicer.character.card_view import build_card_view
+    from nonebot_plugin_dnddicer.character.services import gen_template_char
+
+    html = _render_char(build_card_view(gen_template_char()))
+    assert html.lstrip().startswith("<!DOCTYPE html>")
+    assert 'class="sheet card"' in html
+    for title in (
+        "武器与伤害",
+        "种族特性",
+        "专长",
+        "职业特性与能力",
+        "装备",
+        "背景与个性",
+        "戏法与已准备法术",
+    ):
+        assert f'<div class="panel-title">{title}</div>' in html, title
+    assert "sub-col-left" in html and "sub-col-right" in html
+    assert "张三" in html
+    assert "生命值" in html and "死亡豁免" in html and "英雄激励" in html
+    assert "http://" not in html and "https://" not in html
+    assert "&#34;" not in html
+
+
+def test_char_card_template_hides_empty_panels() -> None:
+    """空段不画空面板，但页眉与 HP 五行保留。"""
+    pytest.importorskip("jinja2", reason="模板渲染需要可选的 [render] 依赖（含 Jinja2）")
+    from nonebot_plugin_dnddicer.character.card_view import build_card_view
+    from nonebot_plugin_dnddicer.character.models import DNDCharacter
+
+    empty = DNDCharacter(group_id="g", user_id="u", name="空卡", is_init=True)
+    html = _render_char(build_card_view(empty))
+    for title in (
+        "武器与伤害",
+        "种族特性",
+        "专长",
+        "职业特性与能力",
+        "装备",
+        "背景与个性",
+        "戏法与已准备法术",
+    ):
+        assert f'<div class="panel-title">{title}</div>' not in html, title
+    assert "生命值" in html and "英雄激励" in html
+    assert 'class="sub-two"' not in html
+
+
+def test_char_card_sub_block_spans_when_one_side_empty() -> None:
+    """两列子块只有一侧有内容时，该侧占满整行。"""
+    pytest.importorskip("jinja2", reason="模板渲染需要可选的 [render] 依赖（含 Jinja2）")
+    from nonebot_plugin_dnddicer.character.card_view import build_card_view
+    from nonebot_plugin_dnddicer.character.models import DNDCharacter
+
+    items_only = DNDCharacter(group_id="g", user_id="u", name="测试", is_init=True)
+    items_only.items = ["火把x3"]
+    html = _render_char(build_card_view(items_only))
+    assert "装备" in html and "种族特性" not in html
+    assert 'colspan="2"' in html
+
+    traits_only = DNDCharacter(group_id="g", user_id="u", name="测试", is_init=True)
+    traits_only.traits = ["黑暗视觉（种族）"]
+    html = _render_char(build_card_view(traits_only))
+    assert "种族特性" in html and "装备" not in html
+    assert 'colspan="2"' in html
+
+def test_char_card_stylesheet_geometry() -> None:
+    """角色卡图样式：940 单页、146 方框、表格布局、字体栈中文优先。"""
+    css = engine._css_text("char_card.css")  # pyright: ignore[reportPrivateUsage]
+    assert engine.CHAR_CARD_WIDTH == 940
+    assert "padding: 14px 16px 10px 16px;" in css
+    assert "width: 146px;" in css and "height: 146px;" in css
+    assert "width: 158px;" in css
+    assert "table-layout: fixed;" in css
+    assert css.index('"Noto Sans CJK SC"') < css.index('"Microsoft YaHei"')
+    assert "Georgia" not in css
+
+
 def test_budget_leaves_margin_below_content_width() -> None:
     """折行预算必须留出余量：越界会触发 litehtml 二次折行（孤字行）。"""
     content = card_geometry.content_width()

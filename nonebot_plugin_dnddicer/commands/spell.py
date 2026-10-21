@@ -45,10 +45,10 @@ _HELP_SPELL = (
 spell_matcher = base.on_dnd_command("法术", _HELP_SPELL, doc="guide/resources")
 
 _HELP_SET_SPELL = (
-    ".设置法术 名称:环阶 （多项用 ; 分隔）\n"
-    "  环阶 0 = 戏法；尾部 * 表示今日已准备\n"
-    "  可写 施法属性:智力 记录施法属性\n"
-    "  示例：.设置法术 火球术:3; 火焰箭:0"
+    ".设置法术 名称:环阶[*] （多项用 ; 分隔）\n"
+    "  可写 施法属性:智力; 豁免DC:15; 法术攻击:+7\n"
+    "  卡面详情写在 | 后：时间=1动作,距离=150尺,专注=是,材料=是\n"
+    "  示例：.设置法术 火球术:3*|时间=1动作,距离=150尺,材料=是"
 )
 set_spell_matcher = base.on_dnd_command(
     "设置法术", _HELP_SET_SPELL, doc="guide/resources"
@@ -249,12 +249,22 @@ async def handle_set_spell(event: MessageEvent) -> None:
         await set_spell_matcher.finish(text.TXT_CHAR_MISS)
 
     try:
-        casting_ability, new_spells = parse_spell_setting(rest)
+        casting_ability, new_spells, spell_dc, spell_attack = parse_spell_setting(rest)
     except AssertionError as exc:
         await set_spell_matcher.finish(str(exc))
 
+    lines: List[str] = []
     if casting_ability:
         character.spellcasting_ability = casting_ability
+        lines.append(
+            text.TXT_SPELL_ABILITY_SET.format(ability=casting_ability)
+        )
+    if spell_dc:
+        character.spell_dc = spell_dc
+        lines.append(text.TXT_SPELL_DC_SET.format(dc=spell_dc))
+    if spell_attack:
+        character.spell_attack = spell_attack
+        lines.append(text.TXT_SPELL_ATTACK_SET.format(attack=spell_attack))
 
     merged: List[SpellEntry] = list(character.spells)
     set_names: List[str] = []
@@ -267,10 +277,18 @@ async def handle_set_spell(event: MessageEvent) -> None:
             None,
         )
         if existing is not None:
-            # 只改环阶；已准备标记不被普通设置抹掉（取消准备走 .法术 取消）
+            # 只改环阶；已准备标记不被普通设置抹掉（取消准备走 .法术 取消）；
+            # 卡面详情：写了 |详情 才整组覆盖，没写就保留原值（2026-10-21 批②）
             existing.level = spell.level
             if spell.prepared:
                 existing.prepared = True
+            if spell.get_detail_text():
+                existing.cast_time = spell.cast_time
+                existing.range = spell.range
+                existing.concentration = spell.concentration
+                existing.ritual = spell.ritual
+                existing.material = spell.material
+                existing.note = spell.note
         else:
             merged.append(spell)
         set_names.append(spell.name)
@@ -280,11 +298,6 @@ async def handle_set_spell(event: MessageEvent) -> None:
     character.spells = merged
     await save_character(character)
 
-    lines: List[str] = []
-    if casting_ability:
-        lines.append(
-            text.TXT_SPELL_ABILITY_SET.format(ability=casting_ability)
-        )
     if set_names:
         lines.append(
             text.TXT_SPELL_SET.format(

@@ -117,10 +117,11 @@ def test_feature_old_card_defaults():
 
 def test_spell_setting_with_ability_and_prepared():
     """施法属性 + 准备标记 + 戏法。"""
-    ability, spells = parse_spell_setting(
+    ability, spells, dc, attack = parse_spell_setting(
         "施法属性：魅力; 火球术:3*; 闪电束:3; 火焰箭:0"
     )
     assert ability == "魅力"
+    assert (dc, attack) == ("", "")
     assert [spell.name for spell in spells] == ["火球术", "闪电束", "火焰箭"]
     assert spells[0].prepared and spells[0].level == 3
     assert not spells[1].prepared
@@ -130,8 +131,8 @@ def test_spell_setting_with_ability_and_prepared():
 
 
 def test_spell_setting_without_ability():
-    ability, spells = parse_spell_setting("魔法飞弹:1*")
-    assert ability == ""
+    ability, spells, dc, attack = parse_spell_setting("魔法飞弹:1*")
+    assert (ability, dc, attack) == ("", "", "")
     assert spells[0].prepared
 
 
@@ -225,18 +226,23 @@ def test_spell_slots_empty_render():
 
 
 def test_template_contains_new_segments_and_roundtrips():
-    """模板覆盖三段新内容，且可再次解析回同一份记录。"""
+    """模板覆盖能力/法术/法术位三段，且可再次解析回同一份记录。"""
     text = gen_template_char().get_char_info()
-    assert "$能力$ 奥术回想:1/1短休" in text
-    assert "$法术$ 施法属性:智力; 火球术:3*" in text
-    assert "$法术位$ 1:4/4; 2:3/3; 3:2/2" in text
+    assert "$能力$ 奥术回想:1/1短休|" in text
+    assert "$法术$ 施法属性:智力; 豁免DC:15; 法术攻击:+7; 火焰箭:0*|" in text
+    assert "$法术位$ 1:3/4; 2:2/3; 3:1/2" in text
 
     char = CharacterService.parse(text, "g", "u")
     assert char.char_class == "法师"
-    assert char.features[0].get_info() == "奥术回想:1/1短休"
+    assert char.features[0].name == "奥术回想"
+    assert char.features[0].text
     assert char.spellcasting_ability == "智力"
-    assert char.spells[0].get_info() == "火球术:3*"
-    assert char.spell_slots.get_char_info() == "$法术位$ 1:4/4; 2:3/3; 3:2/2"
+    assert (char.spell_dc, char.spell_attack) == ("15", "+7")
+    by_name = {spell.name: spell for spell in char.spells}
+    assert by_name["火球术"].prepared is True
+    assert by_name["火球术"].cast_time == "1动作"
+    assert by_name["火球术"].material is True
+    assert char.spell_slots.get_char_info() == "$法术位$ 1:3/4; 2:2/3; 3:1/2"
 
 
 def test_full_card_parse_with_new_segments():

@@ -155,8 +155,8 @@ TXT_HELP_NOT_FOUND_HINT = ".help 命令 查看命令分组"
 TXT_BOT_HEAD = "屠龙骰（nonebot-plugin-dnddicer）v{version}"
 TXT_BOT_INTRO = (
     "专精 DND5e/5r 跑团的骰娘：掷骰表达式、角色卡与检定/豁免、"
-    "自定义武器与攻击、能力与法术资源、属性生成、HP 管理、先攻列表、"
-    "战斗轮、规则查询、群配置。"
+    "角色卡图与立绘、自定义武器与攻击、能力与法术资源、属性生成、"
+    "HP 管理、先攻列表、战斗轮、规则查询、群配置。"
 )
 TXT_BOT_STATE_PRIVATE = (
     "私聊不受群聊服务开关限制：掷骰、属性生成等可直接使用，"
@@ -177,6 +177,15 @@ TXT_BOT_BAD_ARG = (
 TXT_CHAR_SET = "角色卡已设置"
 TXT_CHAR_MISS = "找不到角色卡"
 TXT_CHAR_DEL = "角色卡已删除"
+#: .角色卡图 渲染不可用/失败时的回退提示（不暴露配置名与安装命令）
+TXT_CARD_IMAGE_FALLBACK = "（图片渲染未就绪，请联系骰主解决）"
+#: .立绘（2026-10-21）
+TXT_PORTRAIT_USAGE = "用法：发送一张图片并附带 .立绘"
+TXT_PORTRAIT_SET = "立绘已设置"
+TXT_PORTRAIT_MULTI = "（只保留第一张图片）"
+TXT_PORTRAIT_TOO_LARGE = "图片超过 4 MB，请压缩后再试"
+TXT_PORTRAIT_BAD_FORMAT = "无法识别图片格式，仅支持 PNG / JPG / WebP"
+TXT_PORTRAIT_FETCH_FAILED = "图片获取失败，请重新发送"
 # 检定反馈：{name} 角色名/昵称；{check} 检定条目展示名（豁免原名、
 # 属性/技能/先攻追加「检定」，见 commands/character.py）；{hint} 过程说明；
 # {result} 掷骰过程
@@ -329,10 +338,12 @@ TXT_SPELL_USAGE = (
     "录入用 .设置法术 名称:环阶"
 )
 TXT_SPELL_ABILITY_SET = "已设置施法属性：{ability}"
+TXT_SPELL_DC_SET = "已设置豁免 DC：{dc}"
+TXT_SPELL_ATTACK_SET = "已设置法术攻击：{attack}"
 TXT_SPELL_SET = "已设置法术：{names}（当前共 {count} 项）\n{items}"
 TXT_SPELL_SET_USAGE = (
     "用法：.设置法术 名称:环阶（多项用 ; 分隔，如 火球术:3; 火焰箭:0；"
-    "可加 施法属性:智力）"
+    "可加 施法属性:智力、豁免DC:15；卡面详情写在 | 后）"
 )
 TXT_SPELL_DEL = "已删除法术: {deleted}"
 TXT_SPELL_DEL_PARTIAL = "已删除法术: {deleted}；未找到: {missing}"
