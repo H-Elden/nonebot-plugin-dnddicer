@@ -830,3 +830,181 @@
     display: none;
   }
 }
+
+/* ============================================================
+   立绘裁切（PortraitCutter.vue）
+   ============================================================ */
+
+.pc {
+  margin: 20px 0 40px;
+}
+
+.pc-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.pc-file {
+  position: relative;
+  overflow: hidden;
+}
+
+.pc-file input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.pc-filename {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--vp-c-text-2);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pc-error {
+  margin: 0 0 10px;
+}
+
+.pc-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 340px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.pc-stage {
+  position: relative;
+  width: 100%;
+  max-width: 320px;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 10px;
+  background-color: var(--vp-c-bg-soft);
+  cursor: grab;
+  touch-action: none;
+}
+
+.pc-stage--dragging {
+  cursor: grabbing;
+}
+
+.pc-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.pc-frame {
+  position: absolute;
+  inset: 0;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.3) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.3) 1px, transparent 1px);
+  background-size: 33.33% 100%, 100% 33.33%;
+}
+
+.pc-side {
+  min-width: 0;
+}
+
+.pc-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.pc-zoom {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  align-items: center;
+  color: var(--vp-c-text-2);
+  font-size: 13px;
+}
+
+.pc-zoom input {
+  flex: 1;
+  min-width: 120px;
+}
+
+.pc-preview-block {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 10px;
+  background-color: var(--vp-c-bg-soft);
+}
+
+.pc-preview {
+  flex: none;
+  width: 146px;
+  height: 146px;
+  overflow: hidden;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 4px;
+  background-color: var(--vp-c-bg);
+}
+
+.pc-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.pc-preview-info {
+  min-width: 0;
+}
+
+.pc-preview__label {
+  margin-bottom: 8px;
+  color: var(--vp-c-text-2);
+  font-size: 12px;
+}
+
+.pc-status {
+  margin: 8px 0 0;
+  color: var(--vp-c-green-1, #047857);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.pc-empty {
+  padding: 18px;
+  border: 1px dashed var(--vp-c-divider);
+  border-radius: 10px;
+  color: var(--vp-c-text-3);
+  font-size: 13px;
+  line-height: 1.7;
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  .pc-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pc-stage {
+    margin: 0 auto;
+  }
+
+  .pc-preview-block {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
