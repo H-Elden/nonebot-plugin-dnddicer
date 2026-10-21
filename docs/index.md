@@ -25,6 +25,10 @@ features:
     details: 用 $…$ 模板建卡，或 .dnd/.dndx 以 4D6K3 掷点；完整卡面可用 .角色卡图 出图、.立绘 上传头像
     link: /guide/character-card
     linkText: 角色卡与属性
+  - title: 网页建卡器
+    details: 在浏览器里填表生成 .角色卡记录 命令，纯本地不上传；也能导入骰娘输出的卡继续改，整卡与分段命令都能复制
+    link: /guide/card-builder
+    linkText: 网页建卡器
   - title: 检定与豁免
     details: .力量检定 .敏捷豁免 .隐匿检定 自动代入调整值、熟练与卡上加值，也可用 @ 代掷
     link: /guide/checks

@@ -55,6 +55,7 @@ export default defineConfig({
         text: '第二章 · 玩家进阶',
         items: [
           { text: '角色卡与属性', link: '/guide/character-card' },
+          { text: '网页建卡器', link: '/guide/card-builder' },
           { text: '角色卡图与立绘', link: '/guide/card-image' },
           { text: '检定与豁免', link: '/guide/checks' },
           { text: '武器与攻击', link: '/guide/weapons' },
