@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import pytest
 
+from nonebot_plugin_dnddicer.character.constants import EXT_ITEM_INDEX_DICT
 from nonebot_plugin_dnddicer.character.services import (
     CharacterService,
     gen_template_char,
@@ -59,6 +60,21 @@ def test_old_card_output_unchanged() -> None:
     assert "$属性$ 15/14/13/12/10/8" in text
     assert "$熟练$ 力量/2*隐匿/奥秘" in text
     assert "$额外加值$ 隐匿:优势+2" in text
+
+
+def test_extra_advantage_only_roundtrip() -> None:
+    """只有 优势/劣势、没有数值的额外加值也要原样回写（否则再记录会丢）。"""
+    char = _parse(
+        "$等级$ 5\n$属性$ 10/10/10/10/10/10\n"
+        "$额外加值$ 隐匿:优势/游说:劣势/豁免:优势+2"
+    )
+    text = char.get_char_info()
+    assert "$额外加值$ 隐匿:优势/游说:劣势/豁免:优势+2" in text
+    again = _parse(text)
+    assert again.get_char_info() == text
+    assert again.ability_info.check_adv[EXT_ITEM_INDEX_DICT["隐匿"]] == 1
+    assert again.ability_info.check_adv[EXT_ITEM_INDEX_DICT["游说"]] == -1
+    assert again.ability_info.check_ext[EXT_ITEM_INDEX_DICT["豁免"]] == "+2"
 
 
 def test_template_roundtrip() -> None:

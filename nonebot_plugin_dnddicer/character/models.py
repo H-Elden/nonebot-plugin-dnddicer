@@ -361,18 +361,19 @@ class AbilityInfo(BaseModel):
         if prof_parts:
             info += f"{CHAR_INFO_KEY_PROF} {'/'.join(prof_parts)}\n"
 
-        adv_dict = {
-            EXT_ITEM_LIST[i]: flag
-            for i, flag in enumerate(self.check_adv) if flag != 0
-        }
         ext_parts = []
-        for index, ext_str in enumerate(self.check_ext):
-            if not ext_str:
+        # 2026-10-21 修：只有 优势/劣势 前缀、没有数值的条目（如 隐匿:优势）
+        # 此前只在 check_adv 里留了标记、回写时被跳过，重新记录就会丢。
+        for index, name in enumerate(EXT_ITEM_LIST):
+            ext_str = self.check_ext[index]
+            flag = self.check_adv[index]
+            if not ext_str and flag == 0:
                 continue
-            name = EXT_ITEM_LIST[index]
             prefix = ""
-            if name in adv_dict:
-                prefix = "优势" if adv_dict[name] > 0 else "劣势"
+            if flag > 0:
+                prefix = "优势"
+            elif flag < 0:
+                prefix = "劣势"
             ext_parts.append(f"{name}:{prefix}{ext_str}")
         if ext_parts:
             info += f"{CHAR_INFO_KEY_EXT} {'/'.join(ext_parts)}\n"
