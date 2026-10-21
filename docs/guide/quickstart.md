@@ -25,13 +25,13 @@ pip install nonebot-plugin-dnddicer
 plugins = ["nonebot_plugin_dnddicer"]
 ```
 
-安装完成后重启机器人，私聊机器人发送 `.bot` 即可验证插件已加载。需要词条卡片图（图片模式）的宿主，见下节[可选依赖项](#可选依赖项)。
+安装完成后重启机器人，私聊机器人发送 `.bot` 即可验证插件已加载。需要词条卡片图或角色卡图的宿主，见下节[可选依赖项](#可选依赖项)。
 
 ### 可选依赖项
 
 > 可选依赖**默认不安装**，请骰主按需补充，未装不影响基础功能。
 
-**图片模式所需的渲染依赖**：`[render]`，即 `nonebot-plugin-htmlkit` 插件，未安装时无法渲染查询词条的图片，查询结果只能显示为文字。同样可以通过以下两种方式进行安装：
+**图片模式与角色卡图所需的渲染依赖**：`[render]`，即 `nonebot-plugin-htmlkit` 插件，未安装时无法渲染查询词条或角色卡的图片，相关结果只能显示为文字。同样可以通过以下两种方式进行安装：
 
 使用 NB-CLI 直接安装（同时包含本插件和渲染依赖插件）：
 
@@ -61,7 +61,7 @@ fc-match ':charset=56fd'         # 汉字落到哪个文件（两者同族即为
 
 Ubuntu / Debian 安装：`apt install fonts-noto-cjk`。
 
-该依赖由插件按需加载，不必写进宿主 `[tool.nonebot]` 的 `plugins` 列表；装好后还需把 `dnddicer_query_image_enabled` 设为 `true` 才会出图，详见下文「[规则查询](#规则查询)」一节。
+该依赖由插件按需加载，不必写进宿主 `[tool.nonebot]` 的 `plugins` 列表；装好后还需把 `dnddicer_query_image_enabled` 或 `dnddicer_card_image_enabled` 设为 `true` 才会出图，详见下文「[角色卡图](#角色卡图)」与「[规则查询](#规则查询)」两节。
 
 ## 配置项
 
@@ -98,6 +98,21 @@ DNDDICER_MASTER_GROUP=87654321
 ```
 
 `dnddicer_master_qq` 是 `.master` 的投递地址，**不会展示给玩家**；想让玩家看到联系方式，把 `dnddicer_master_contact` 填上即可。玩家侧用法与转达格式见[群管理与 FAQ - 联系骰主](./faq.md#联系骰主)。
+
+### 角色卡图
+
+角色卡图**默认关闭**：开启并安装[可选依赖项](#可选依赖项)中的 `[render]` 后，`.角色卡图` 才会返回图片；未开启或渲染依赖缺失时回退文字卡。使用方式见[角色卡图与立绘](./card-image.md)。
+
+| 配置项 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `dnddicer_card_image_enabled` | `bool` | `false` | 角色卡图开关；需先安装 `[render]` |
+| `dnddicer_query_image_font_family` | `str` | 空（内置字体栈） | 图片卡片的字体家族，规则查询与角色卡图共用 |
+
+`.env` 示例：
+
+```bash
+DNDDICER_CARD_IMAGE_ENABLED=TRUE
+```
 
 ### 规则查询
 
@@ -168,6 +183,10 @@ DNDDICER_MASTER_CONTACT=
 # # 骰主交流群（仅 .help 联系 展示）
 DNDDICER_MASTER_GROUP=
 
+# 角色卡图（需安装 [render] 可选依赖）
+# # 角色卡图开关
+DNDDICER_CARD_IMAGE_ENABLED=FALSE
+
 # 规则查询
 # # 规则查询总开关
 DNDDICER_QUERY_ENABLED=FALSE
@@ -218,7 +237,7 @@ DNDDICER_QUERY_ENDPOINT_COOLDOWN=60.0
 ::: chat
 白鸦 | @屠龙骰 .bot
 屠龙骰 | 屠龙骰（nonebot-plugin-dnddicer）v0.4.4
-专精 DND5e/5r 跑团的骰娘：掷骰表达式、角色卡与检定/豁免、自定义武器与攻击、能力与法术资源、属性生成、HP 管理、先攻列表、战斗轮、规则查询、群配置。
+专精 DND5e/5r 跑团的骰娘：掷骰表达式、角色卡与检定/豁免、角色卡图与立绘、自定义武器与攻击、能力与法术资源、属性生成、HP 管理、先攻列表、战斗轮、规则查询、群配置。
 本群服务已开启，可直接使用本插件的全部命令。
 用法：.bot on / .bot off——仅限群聊，需群主或管理员权限。
 详细帮助文档：https://dnddicer.netlify.app
@@ -260,7 +279,7 @@ DNDDICER_QUERY_ENDPOINT_COOLDOWN=60.0
 | --- | --- | --- |
 | 群聊（服务已开启） | ✅ 全部命令 | 直接发送即可（`.bot` 系列命令需 @） |
 | 群聊（服务未开启） | 仅 `.bot` | `.bot` 系列需 @；`.bot on` / `.bot off` 需群主或管理员 |
-| 私聊 | 掷骰、属性生成与规则查询等 | `.r` / `.rh`、`.dnd` / `.dndx`、`.查询` / `.搜索`（及 `.查询图片` / `.查询范围` / `.规则书`）、`.帮助`、`.bot` 可用；<br>**角色卡、检定、HP、先攻与战斗轮、群配置等命令仅限群聊** |
+| 私聊 | 掷骰、属性生成与规则查询等 | `.r` / `.rh`、`.dnd` / `.dndx`、`.查询` / `.搜索`（及 `.查询图片` / `.查询范围` / `.规则书`）、`.帮助`、`.bot` 可用；<br>**角色卡（含 `.角色卡图` / `.立绘`）、检定、HP、先攻与战斗轮、群配置等命令仅限群聊** |
 
 仅限群聊的命令在私聊里发送，会收到明确提示：
 

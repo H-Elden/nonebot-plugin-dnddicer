@@ -1355,6 +1355,20 @@ rest_long = Scene(
     ],
 )
 
+# 角色卡图与立绘（2026-10-21）：单段补战斗数据 → 看图 → 看他人 → 无图提示。
+# 放在时间线末尾，避免改动洛恩的卡面影响前面的战斗与资源示例。
+card_image_demo = Scene(
+    id="card_image_demo",
+    title="角色卡图：单段补战斗数据、查看图片卡、立绘用法",
+    card_image=True,
+    steps=[
+        Step("小满", ".角色卡记录 $战斗$ AC:15; 先攻:+2; 速度:30; 被动察觉:13"),
+        Step("小满", ".角色卡图"),
+        Step("小满", ".角色卡图 @阿茶"),
+        Step("小满", ".立绘"),
+    ],
+)
+
 master_forward = Scene(
     id="master_forward",
     title="联系骰主：反馈交由骰娘私聊转达（群聊与私聊都可用）",
@@ -1511,5 +1525,7 @@ TIMELINE = [
     cast_resources,
     rest_short,
     rest_long,
+    # 第十二幕：角色卡图与立绘（《角色卡图与立绘》页）
+    card_image_demo,
     quickstart_bot_off,  # 压轴：服务关闭后本群不再响应其他命令
 ]

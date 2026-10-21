@@ -15,7 +15,7 @@
 DNDDicer 的目标是填补「NoneBot 商店中缺少 **DND5e/5r 专业 + 现代维护 + 插件形态** 骰娘」的空位：围绕 DND 跑团全流程持续做深做全，致力于提供功能最全面、体验最好的 DND 骰娘，零配置可加载，供任何已有机器人从商店安装即用。
 
 - **掷骰引擎**：内置 AST 表达式引擎（Lark 文法），支持 `2d20kh1`、优势/劣势、爆炸骰、连掷、暗骰等完整掷骰语法；
-- **跑团全流程**：掷骰 → `.dnd` 属性生成 → 角色卡与检定/豁免点命令 → 自定义武器与攻击（`.X攻击`/`.X伤害`，支持两把武器一条命令结算）/ 能力与法术资源（`.能力`/`.法术`/`.法术位`/`.施法`）/ HP 与休息（伤害掷骰、抗性/易伤、AOE 多目标结算、`.短休`/`.生命骰`/`.长休`）→ 先攻列表与战斗轮 → 规则查询（`.查询`/`.搜索`，可限定书目、可出图）；
+- **跑团全流程**：掷骰 → `.dnd` 属性生成 → 角色卡与检定/豁免点命令（完整卡面可 `.角色卡图` 出图、`.立绘` 上传头像）→ 自定义武器与攻击（`.X攻击`/`.X伤害`，支持两把武器一条命令结算）/ 能力与法术资源（`.能力`/`.法术`/`.法术位`/`.施法`）/ HP 与休息（伤害掷骰、抗性/易伤、AOE 多目标结算、`.短休`/`.生命骰`/`.长休`）→ 先攻列表与战斗轮 → 规则查询（`.查询`/`.搜索`，可限定书目、可出图）；
 - **规则范围**：仅 DND5e/5r：专精 DND 定位，不做 COC/D100 体系与 `.mode` 模式切换；
 - **商店合规**：零配置可加载、本地存储走 `nonebot-plugin-localstore`、元数据完整、全程异步。
 
@@ -25,7 +25,7 @@ DNDDicer 的目标是填补「NoneBot 商店中缺少 **DND5e/5r 专业 + 现代
 
 - 开始：[快速开始](./docs/guide/quickstart.md) · [示例团与人物](./docs/guide/cast.md)
 - 第一章 · 基础操作：[掷骰基础](./docs/guide/roll-basics.md) · [掷骰进阶](./docs/guide/roll-advanced.md) · [生命值管理](./docs/guide/hp.md) · [先攻列表](./docs/guide/initiative.md) · [战斗轮](./docs/guide/battle.md) · [规则查询](./docs/guide/query.md)
-- 第二章 · 玩家进阶：[角色卡与属性](./docs/guide/character-card.md) · [检定与豁免](./docs/guide/checks.md) · [武器与攻击](./docs/guide/weapons.md) · [休息与资源](./docs/guide/resources.md) · [HP 进阶与长休](./docs/guide/hp-advanced.md)
+- 第二章 · 玩家进阶：[角色卡与属性](./docs/guide/character-card.md) · [角色卡图与立绘](./docs/guide/card-image.md) · [检定与豁免](./docs/guide/checks.md) · [武器与攻击](./docs/guide/weapons.md) · [休息与资源](./docs/guide/resources.md) · [HP 进阶与长休](./docs/guide/hp-advanced.md)
 - 第三章 · DM 进阶：[代掷与代操作](./docs/guide/dm-proxy.md) · [血量与伤害结算](./docs/guide/dm-settlement.md) · [查询范围](./docs/guide/query-scope.md)
 - 第四章 · 最佳实践：[最佳实践](./docs/guide/best-practices.md)
 - 参考：[命令总览](./docs/guide/overview.md) · [群管理与 FAQ](./docs/guide/faq.md) · [自建查询服务](./docs/guide/self-host.md)
@@ -64,10 +64,11 @@ plugins = ["nonebot_plugin_dnddicer"]
 | `dnddicer_master_qq` | `str` | 空 | 骰主 QQ 号（**单个**）：`.master` 反馈的收件人，留空则 `.master` 回「骰主未配置」 |
 | `dnddicer_master_contact` | `str` | 空 | 骰主联系方式（自由文本），仅用于 `.help 联系` 展示，留空不显示该行 |
 | `dnddicer_master_group` | `str` | 空 | 骰主交流群群号，仅用于 `.help 联系` 展示，留空不显示该行 |
+| `dnddicer_card_image_enabled` | `bool` | `false` | 角色卡图开关；需安装 `[render]` 可选依赖（`nonebot-plugin-htmlkit`），未开启或缺依赖时 `.角色卡图` 回退文字卡 |
 
 ## 🎲 用法
 
-> 命令以 `.`（或全角 `。`）开头；命令起始符默认仅 `.` / `。`，如需用宿主斜杠 `/` 等起始符触发（如 `/.help`），请设置配置项 `dnddicer_use_host_command_starts=true`。**群聊服务默认关闭（白名单）**：需群主/管理员发送 `.bot on` 开启本群服务；`.bot off` 关闭后本群不再响应命令（`.bot` 本身不受影响）。群聊中使用 `.bot` 需先 @ 本机器人；私聊不受服务开关限制，但可用命令更少：角色卡、检定、HP、先攻等仅限群聊（差异见[快速开始](./docs/guide/quickstart.md)）。
+> 命令以 `.`（或全角 `。`）开头；命令起始符默认仅 `.` / `。`，如需用宿主斜杠 `/` 等起始符触发（如 `/.help`），请设置配置项 `dnddicer_use_host_command_starts=true`。**群聊服务默认关闭（白名单）**：需群主/管理员发送 `.bot on` 开启本群服务；`.bot off` 关闭后本群不再响应命令（`.bot` 本身不受影响）。群聊中使用 `.bot` 需先 @ 本机器人；私聊不受服务开关限制，但可用命令更少：角色卡（含 `.角色卡图` / `.立绘`）、检定、HP、先攻等仅限群聊（差异见[快速开始](./docs/guide/quickstart.md)）。
 >
 > **DM 代操作（@ 提及目标）**：多数带目标的命令支持用 **@群成员** 指定目标：直连该成员在本群的角色卡，不受同名 NPC/改名影响，且可与名称混写（`.hp @玩家 -4d6`、`.hp @玩家;地精 -d4`、`.ri+3 @玩家`、`.init del @玩家`、`.回合 @玩家`、`.角色卡 @玩家`、`.力量豁免 @玩家`、`.先攻检定 @玩家` 等）。完整机制见[代掷与代操作](./docs/guide/dm-proxy.md)，命令清单见[命令总览 - @ 提及目标](./docs/guide/overview.md#提及目标-dm-代操作)。
 
@@ -83,8 +84,9 @@ plugins = ["nonebot_plugin_dnddicer"]
 | 命令 | 说明 |
 | --- | --- |
 | `.角色卡模板` / `.角色卡记录 <模板>` | 查看示例卡 / 记录或覆盖角色卡（`$…$` 分段模板） |
-| `.角色卡` / `.角色卡清除` / `.状态` | 查看 / 删除角色卡 / 查看 HP 与生命骰摘要 |
+| `.角色卡` / `.角色卡清除` / `.状态` | 查看 / 删除角色卡（连同立绘）/ 查看 HP 与生命骰摘要 |
 | `.角色卡 @玩家` / `.角色卡 角色名` | 查看**他人**整卡（任何人可查看；记录/清除仅限本人） |
+| `.角色卡图 [@玩家\|角色名]` / `.立绘` + 图片 | 完整卡面出图（需骰主开启与 `[render]`，否则回退文字）/ 设置当前卡头像（原图直存，≤4 MB） |
 | `.状态 @玩家` | 查看他人的 HP 与生命骰摘要 |
 | `.力量检定` / `.察觉检定+1` 等 | 属性/技能/先攻检定点命令，自动代入调整值/熟练/加值（`2#` 连掷、`+d4` 等可追加；表达式右侧可加 `@玩家` 代掷） |
 | `.体质豁免` / `.感知豁免优势` 等 | 豁免点命令（原名直配，优势/劣势后缀；同样支持尾部 `@玩家`） |

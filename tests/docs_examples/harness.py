@@ -82,6 +82,17 @@ class Scene:
     steps: List[Step]
     #: 本场景期间的骰主 QQ 配置（空 = 不配置，等价默认值）；`.master` 场景用它
     master_qq: str = ""
+    #: 本场景是否开启角色卡图并注入假渲染器（文档只记录 ``[图片]``，
+    #: 真实样张由本地样例脚本单独生成，CI 不依赖 htmlkit）
+    card_image: bool = False
+
+
+#: 假渲染器产物（1×1 PNG；文档只关心消息段类型，不关心图片内容）
+_PNG_1PX = bytes.fromhex(
+    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4"
+    "890000000a49444154789c6300010000050001"
+    "0d0a2db40000000049454e44ae426082"
+)
 
 
 class Recorder:
@@ -209,10 +220,35 @@ class TimelineRunner:
         """跑一个场景，返回本场景产生的消息行。"""
         start = len(self.recorder.lines)
         with self._master_configured(scene.master_qq):
-            for index, step in enumerate(scene.steps, start=1):
-                with self._query_enabled():
-                    await self.run_step(step, label=f"{scene.id}#{index}")
+            with self._card_image_enabled(scene.card_image):
+                for index, step in enumerate(scene.steps, start=1):
+                    with self._query_enabled():
+                        await self.run_step(step, label=f"{scene.id}#{index}")
         return self.recorder.lines[start:]
+
+    @contextmanager
+    def _card_image_enabled(self, enabled: bool) -> Iterator[None]:
+        """本场景临时开启角色卡图并注入假渲染器（只产出 ``[图片]`` 转录）。"""
+        if not enabled:
+            yield
+            return
+        from nonebot_plugin_dnddicer import render
+        from nonebot_plugin_dnddicer.config import get_config
+
+        config = get_config()
+        original = config.dnddicer_card_image_enabled
+        config.dnddicer_card_image_enabled = True
+        render.reset_renderer()
+
+        async def _fake(view):  # noqa: ANN001
+            return _PNG_1PX
+
+        render.set_char_renderer(_fake)
+        try:
+            yield
+        finally:
+            config.dnddicer_card_image_enabled = original
+            render.reset_renderer()
 
     @contextmanager
     def _master_configured(self, master_qq: str) -> Iterator[None]:

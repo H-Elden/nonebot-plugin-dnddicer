@@ -4,7 +4,7 @@ layout: home
 hero:
   name: 屠龙骰
   text: DNDDicer 使用文档
-  tagline: 专精 DND5e/5r 的 QQ 跑团骰娘插件：掷骰表达式、角色卡与属性、检定与豁免、生命值管理、先攻列表与战斗轮、规则查询
+  tagline: 专精 DND5e/5r 的 QQ 跑团骰娘插件：掷骰表达式、角色卡与属性、角色卡图与立绘、检定与豁免、生命值管理、先攻列表与战斗轮、规则查询
   actions:
     - theme: brand
       text: 快速开始
@@ -22,7 +22,7 @@ features:
     link: /guide/roll-basics
     linkText: 掷骰基础
   - title: 角色卡与属性
-    details: 用 $…$ 模板建卡，或 .dnd/.dndx 以 4D6K3 掷点；额外加值只装算得进检定的部分
+    details: 用 $…$ 模板建卡，或 .dnd/.dndx 以 4D6K3 掷点；完整卡面可用 .角色卡图 出图、.立绘 上传头像
     link: /guide/character-card
     linkText: 角色卡与属性
   - title: 检定与豁免

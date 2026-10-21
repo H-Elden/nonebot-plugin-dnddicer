@@ -37,6 +37,7 @@ SYNCED_PAGES = [
     "guide/battle.md",
     "guide/query.md",
     "guide/character-card.md",
+    "guide/card-image.md",
     "guide/checks.md",
     "guide/weapons.md",
     "guide/resources.md",
