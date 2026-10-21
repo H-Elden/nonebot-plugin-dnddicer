@@ -5,8 +5,9 @@
   "description": "屠龙骰（DNDDicer）使用文档站——基于 VitePress 构建，仅用于文档开发与部署",
   "scripts": {
     "docs:sync-changelog": "node docs/.vitepress/scripts/sync-changelog.mjs",
-    "docs:dev": "npm run docs:sync-changelog && vitepress dev docs",
-    "docs:build": "npm run docs:sync-changelog && vitepress build docs",
+    "docs:check-builder": "node docs/.vitepress/scripts/check-card-builder.mjs",
+    "docs:dev": "npm run docs:sync-changelog && npm run docs:check-builder && vitepress dev docs",
+    "docs:build": "npm run docs:sync-changelog && npm run docs:check-builder && vitepress build docs",
     "docs:preview": "vitepress preview docs"
   },
   "devDependencies": {
