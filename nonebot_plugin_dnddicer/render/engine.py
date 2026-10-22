@@ -290,10 +290,17 @@ async def _render_char(view: "CharacterCardView") -> bytes:
     """渲染角色卡图为 PNG 字节（内部实现）。
 
     立绘已由调用方放进 ``view.portrait_data_uri``（data URI），渲染过程不读
-    文件、不发网络请求。
+    文件、不发网络请求；背景故事在渲染前按故事区宽度折行（litehtml 计算
+    折行时不把 ``text-indent`` 计入可用宽，长段落会顶出面板边框）。
     """
+    from dataclasses import replace
+
     from nonebot_plugin_htmlkit import html_to_pic, none_fetcher
 
+    from .layout import wrap_story_lines
+
+    if view.story_lines:
+        view = replace(view, story_lines=wrap_story_lines(view.story_lines))
     template = _get_env().get_template(_CHAR_TEMPLATE_NAME)
     html = await template.render_async(
         view=view,

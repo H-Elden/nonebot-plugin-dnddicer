@@ -14,7 +14,7 @@
 from __future__ import annotations
 
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from .. import card_geometry
 
@@ -134,12 +134,12 @@ def _split_lead(text: str) -> Tuple[str, str]:
     return "", text
 
 
-def _char_width(char: str, font_size: int) -> float:
+def _char_width(char: str, font_size: float) -> float:
     """估算单字符宽度（px）——口径集中在 ``card_geometry``。"""
     return card_geometry.char_width(char, font_size)
 
 
-def _text_width(text: str, font_size: int) -> float:
+def _text_width(text: str, font_size: float) -> float:
     """估算文本渲染宽度（px）。"""
     return sum(_char_width(c, font_size) for c in text)
 
@@ -148,7 +148,8 @@ def wrap_cjk(
     text: str,
     *,
     width_em: Optional[float] = None,
-    font_size: int = card_geometry.FONT_SIZE,
+    font_size: float = card_geometry.FONT_SIZE,
+    max_width: Optional[float] = None,
 ) -> str:
     """按宽度折行，避免行首标点、行尾开括号与西文/数字拆词。
 
@@ -157,25 +158,73 @@ def wrap_cjk(
         width_em: 可用宽度（em）；留空时取 ``card_geometry`` 的
             「卡片内容宽 × 安全比例」（默认预算必须小于容器宽，否则 litehtml
             会二次折行、把末尾一两个字挤成孤行）。
-        font_size: 字号（px），用于 em→px 换算。
+        font_size: 字号（px），用于 em→px 换算与单字宽度估算。
+        max_width: 直接用像素给预算（优先级高于 ``width_em``）；角色卡图的
+            故事区这类版式固定、字号非整数的场景用。
 
     Returns:
         折行后文本（行以 ``\\n`` 分隔，渲染时用 ``white-space: pre-wrap``）。
     """
-    if width_em is None:
-        max_width = card_geometry.flat_budget(font_size=font_size)
+    if max_width is not None:
+        limit = max_width
+    elif width_em is None:
+        limit = card_geometry.flat_budget(font_size=font_size)
     else:
-        max_width = width_em * font_size
+        limit = width_em * font_size
     out: List[str] = []
     for segment in text.split("\n"):
         if not segment:
             out.append("")
             continue
-        out.extend(_wrap_line(segment, max_width, font_size))
+        out.extend(_wrap_line(segment, limit, font_size))
     return "\n".join(out)
 
 
-def _wrap_line(line: str, max_width: float, font_size: int) -> List[str]:
+def wrap_story_lines(lines: Iterable[str]) -> Tuple[str, ...]:
+    """角色卡「背景故事」逐段折行（每段仍是一条，行间用换行分隔）。
+
+    litehtml 计算折行时不把 ``text-indent`` 计入可用宽，长段落会顶出面板边框；
+    故在 Python 侧按故事区宽度预先折行，模板以 ``pre-wrap`` 原样呈现。末行
+    过短时逐次收紧预算重折，避免只剩两三个字的孤行。
+    """
+    return tuple(_wrap_story_line(line) for line in lines)
+
+
+def _wrap_story_line(line: str) -> str:
+    """故事单段折行 + 末行再平衡（只收紧预算，不会越界）。"""
+    budget = card_geometry.story_budget()
+    font_size = card_geometry.STORY_FONT_SIZE
+    best = wrap_cjk(line, font_size=font_size, max_width=budget)
+    for step in range(1, card_geometry.MAX_TAIL_SHIFT + 1):
+        if not _story_has_tiny_tail(best):
+            break
+        candidate = wrap_cjk(
+            line, font_size=font_size, max_width=budget - step * font_size
+        )
+        if _story_line_count(candidate) > _story_line_count(best) + 1:
+            break  # 收紧过头（多出一行以上）就回退到上一次结果
+        best = candidate
+    return best
+
+
+def _story_line_count(wrapped: str) -> int:
+    """折行结果的行数。"""
+    return len(wrapped.split("\n"))
+
+
+def _story_has_tiny_tail(wrapped: str) -> bool:
+    """故事末行不足 ``MIN_TAIL_CHARS`` 字、且上一行够长。"""
+    lines = wrapped.split("\n")
+    if len(lines) < 2:
+        return False
+    tail = lines[-1].strip()
+    return (
+        0 < len(tail) < card_geometry.MIN_TAIL_CHARS
+        and len(lines[-2].strip()) >= card_geometry.TAIL_PREV_MIN_CHARS
+    )
+
+
+def _wrap_line(line: str, max_width: float, font_size: float) -> List[str]:
     """单行按宽度折行（贪心 + 避头尾 + 整词保护）。"""
     if _text_width(line, font_size) <= max_width:
         return [line]

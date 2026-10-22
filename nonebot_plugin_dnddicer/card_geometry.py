@@ -46,6 +46,23 @@ TAIL_PREV_MIN_CHARS = 8
 #: 尾行再平衡最多收紧几次（每次 1 个汉字宽）
 MAX_TAIL_SHIFT = 3
 
+# ── 角色卡图（940px 单页版式）的「背景故事」折行几何 ──────────────────────
+#: 角色卡图宽度（px）——与 `render/engine.py` 的 `CHAR_CARD_WIDTH` 一致
+CHAR_CARD_WIDTH = 940
+
+#: 卡面右栏内容宽（px）——武器表与下方两列面板的外框宽度（实测 679px，
+#: 由 940 − 页边距 32 − 边框 2 − 左栏 220 − 两栏间距 7 得到）
+CHAR_CARD_RIGHT_COL_WIDTH = 679
+
+#: 故事面板的边框与左右内边距（px）——对应 `char_card.css` 的 `.panel`
+#: 边框与 `.story-text` 的左右 padding
+STORY_PANEL_BORDER = 1
+STORY_PADDING_X = 7
+
+#: 故事正文字号（px）与首行缩进（em）——对应 `char_card.css` 的 `.story-text`
+STORY_FONT_SIZE = 10.5
+STORY_INDENT_EM = 2.0
+
 
 def content_width(padding_x: int = CARD_PADDING_X, card_width: int = CARD_WIDTH) -> float:
     """卡片内容区宽度（px）。"""
@@ -67,7 +84,7 @@ def list_budget(
     return max(1.0, content_width(padding_x) - indent) * BUDGET_RATIO
 
 
-def char_width(char: str, font_size: int = FONT_SIZE) -> float:
+def char_width(char: str, font_size: float = FONT_SIZE) -> float:
     """单字符宽度估算（px）：全角 1em、半角按 ``ASCII_EM``。"""
     import unicodedata
 
@@ -76,6 +93,17 @@ def char_width(char: str, font_size: int = FONT_SIZE) -> float:
     return font_size * ASCII_EM
 
 
-def text_width(text: str, font_size: int = FONT_SIZE) -> float:
+def text_width(text: str, font_size: float = FONT_SIZE) -> float:
     """文本宽度估算（px）。"""
     return sum(char_width(char, font_size) for char in text)
+
+
+def story_budget() -> float:
+    """角色卡「背景故事」的折行预算（px）。
+
+    首行有 2em 缩进，litehtml 计算折行时不把 ``text-indent`` 计入可用宽，
+    故预算按**首行可用宽**算（其余行沿用同一预算，右侧略留白）。
+    """
+    text_width_px = CHAR_CARD_RIGHT_COL_WIDTH - (STORY_PANEL_BORDER + STORY_PADDING_X) * 2
+    first_line = text_width_px - STORY_INDENT_EM * STORY_FONT_SIZE
+    return first_line * BUDGET_RATIO

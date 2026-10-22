@@ -186,6 +186,76 @@ def test_char_card_story_keeps_paragraph_lines() -> None:
     assert "此后伊瑟兰离开书斋" in html
 
 
+def test_char_card_layout_panel_order() -> None:
+    """右栏：武器表 → 两列（左限定资源/装备/魔法物品/钱币/背景与个性，
+    右专长/种族特性/职业特性）→ 背景故事；熟练与语言、战斗记录留在左栏。"""
+    pytest.importorskip("jinja2", reason="模板渲染需要可选的 [render] 依赖（含 Jinja2）")
+    from nonebot_plugin_dnddicer.character.card_view import build_card_view
+    from nonebot_plugin_dnddicer.character.services import gen_template_char
+
+    html = _render_char(build_card_view(gen_template_char()))
+    left_at = html.index('<td class="left-col">')
+    right_at = html.index('<td class="right-col">')
+    order = (
+        "武器与伤害",
+        "限定资源",
+        "装备",
+        "魔法物品",
+        "钱币",
+        "背景与个性",
+        "专长",
+        "种族特性",
+        "职业特性",
+        "背景故事",
+    )
+    positions = [
+        html.index(f'<div class="panel-title">{title}</div>') for title in order
+    ]
+    assert positions == sorted(positions), positions
+    # 两条表格留在左栏，装备与背景与个性都进了右栏
+    for title in ("熟练与语言", "战斗记录"):
+        at = html.index(f'<div class="panel-title">{title}</div>')
+        assert left_at < at < right_at, title
+    assert html.index('<div class="panel-title">装备</div>') > right_at
+    assert html.index('<div class="panel-title">背景与个性</div>') > right_at
+    # 两个子列：左列是资源/装备/魔法物品/钱币/背景与个性，右列是专长/特性
+    left_sub = html[html.index('<td class="sub-col sub-col-left">') : positions[6]]
+    for title in ("限定资源", "装备", "魔法物品", "钱币", "背景与个性"):
+        assert f'<div class="panel-title">{title}</div>' in left_sub, title
+    for title in ("专长", "种族特性", "职业特性"):
+        assert f'<div class="panel-title">{title}</div>' not in left_sub, title
+
+
+def test_char_card_items_two_columns() -> None:
+    """装备清单两列排版（每行两个格，奇数条补空格）。"""
+    pytest.importorskip("jinja2", reason="模板渲染需要可选的 [render] 依赖（含 Jinja2）")
+    from nonebot_plugin_dnddicer.character.card_view import build_card_view
+    from nonebot_plugin_dnddicer.character.services import gen_template_char
+
+    html = _render_char(build_card_view(gen_template_char()))
+    assert '<table class="item-grid">' in html
+    assert '<td class="item-line">法术书</td><td class="item-line">长棍</td>' in html
+    # 示例卡 9 件装备 → 5 行 × 2 格
+    assert html.count('class="item-line"') == 10
+
+
+def test_char_card_background_pairs_two_columns() -> None:
+    """背景与个性整行两列：每行两对键值，与背景故事同宽。"""
+    pytest.importorskip("jinja2", reason="模板渲染需要可选的 [render] 依赖（含 Jinja2）")
+    from nonebot_plugin_dnddicer.character.card_view import build_card_view
+    from nonebot_plugin_dnddicer.character.services import gen_template_char
+
+    html = _render_char(build_card_view(gen_template_char()))
+    assert '<table class="bg-grid">' in html
+    assert (
+        '<td><span class="bg-key">背景</span>智者</td>'
+        '<td><span class="bg-key">阵营</span>中立善良</td>'
+    ) in html
+    assert html.count('<span class="bg-key">') == 7
+    # 七项背景 → 四行（末行右侧补空格）
+    assert html.count("<tr><td><span class=\"bg-key\">") == 4
+
+
 def test_char_card_template_hides_empty_panels() -> None:
     """空段不画空面板，但页眉与 HP 五行保留。"""
     pytest.importorskip("jinja2", reason="模板渲染需要可选的 [render] 依赖（含 Jinja2）")
@@ -219,12 +289,14 @@ def test_char_card_panels_follow_content() -> None:
     items_only = DNDCharacter(group_id="g", user_id="u", name="测试", is_init=True)
     items_only.items = ["火把x3"]
     html = _render_char(build_card_view(items_only))
-    assert "装备" in html and "种族特性" not in html
+    assert '<div class="panel-title">装备</div>' in html
+    assert '<div class="panel-title">种族特性</div>' not in html
 
     traits_only = DNDCharacter(group_id="g", user_id="u", name="测试", is_init=True)
     traits_only.race_traits = ["黑暗视觉:60 尺内微光"]
     html = _render_char(build_card_view(traits_only))
-    assert "种族特性" in html and "装备" not in html
+    assert '<div class="panel-title">种族特性</div>' in html
+    assert '<div class="panel-title">装备</div>' not in html
 
 def test_char_card_stylesheet_geometry() -> None:
     """角色卡图样式：940 单页、146 方框、表格布局、字体栈中文优先。"""
@@ -237,7 +309,15 @@ def test_char_card_stylesheet_geometry() -> None:
     assert css.index('"Noto Sans CJK SC"') < css.index('"Microsoft YaHei"')
     assert "Georgia" not in css
     assert ".story-line {" in css and "text-indent: 2em;" in css
-    assert ".magic-panel" in css and ".m-tag" in css
+    assert "white-space: pre-wrap;" in css
+    assert ".m-tag" in css and ".bg-grid" in css and ".item-grid" in css
+    # 故事折行预算与样式表的故事区宽度同源
+    assert card_geometry.CHAR_CARD_RIGHT_COL_WIDTH == 679
+    assert card_geometry.STORY_FONT_SIZE == 10.5
+    assert card_geometry.story_budget() < (
+        card_geometry.CHAR_CARD_RIGHT_COL_WIDTH
+        - (card_geometry.STORY_PANEL_BORDER + card_geometry.STORY_PADDING_X) * 2
+    )
 
 
 def test_budget_leaves_margin_below_content_width() -> None:

@@ -12,6 +12,7 @@ from nonebot_plugin_dnddicer.render.layout import (
     prepare_blocks,
     to_blocks,
     wrap_cjk,
+    wrap_story_lines,
 )
 
 #: 一张仿真实法术词条的正文
@@ -187,3 +188,35 @@ def test_wrap_preserves_newlines_and_chars():
     text = "第一段内容需要折行处理。\n\n第二段也要折行处理，内容更长一些以便触发折行。"
     wrapped = wrap_cjk(text, width_em=12, font_size=16)
     assert wrapped.replace("\n", "") == text.replace("\n", "")
+
+
+# ── 角色卡「背景故事」折行 ──────────────────────────────────────────────
+
+
+def test_wrap_story_lines_short_paragraph_untouched():
+    """故事短段落不折行（原样返回，段数不变）。"""
+    assert wrap_story_lines(("短段落。",)) == ("短段落。",)
+    assert wrap_story_lines(()) == ()
+
+
+def test_wrap_story_lines_folds_within_budget():
+    """故事长段落按卡面故事区宽度折行：每行不超预算、字符不丢、末行不是孤字。"""
+    from nonebot_plugin_dnddicer import card_geometry
+
+    text = (
+        "此后伊瑟兰离开书斋，以旅行者的身份追查那些被刻意抹去的法术痕迹；相信"
+        "知识应当被分享，但也清楚有些门一旦打开就再难关上。"
+    )
+    (folded,) = wrap_story_lines((text,))
+    lines = folded.split("\n")
+    assert len(lines) >= 2
+    assert "".join(lines) == text
+    forbidden = set("。，、；：！？）」』】》…·")
+    for line in lines:
+        assert (
+            _width(line, card_geometry.STORY_FONT_SIZE)
+            <= card_geometry.story_budget()
+        ), line
+        assert line[0] not in forbidden, f"行首出现禁则标点：{line!r}"
+    assert len(lines[-1]) >= card_geometry.MIN_TAIL_CHARS
+

@@ -447,13 +447,33 @@ body {
   font-size: 11px;
 }
 
+/* 特性行首：名称与用法标签同一行的两格，说明另起整行 */
+.f-head {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.f-head td {
+  padding: 0;
+  vertical-align: middle;
+}
+
+.f-title {
+  text-align: left;
+}
+
+.f-uses-cell {
+  text-align: right;
+  white-space: nowrap;
+}
+
 .f-uses {
-  float: right;
   font-size: 9.5px;
   color: #5f4a2a;
   background: #f3ead8;
   border: 1px solid #d8c9a8;
   padding: 0 3px;
+  white-space: nowrap;
 }
 
 .f-text {
@@ -477,11 +497,20 @@ body {
   border-bottom: 1px dotted #d8c9a8;
 }
 
-.item-line {
+/* 装备：两列清单（列宽固定，长名称格内折行） */
+.item-grid {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.item-grid td {
+  width: 50%;
   font-size: 10.5px;
   line-height: 1.45;
   padding: 1px 6px;
   border-bottom: 1px dotted #d8c9a8;
+  vertical-align: top;
 }
 
 /* 钱币表（首末列去侧边线，外框由面板提供） */
@@ -521,13 +550,14 @@ body {
 }
 
 /* 背景与个性 / 背景故事 */
-.bg-two-col {
+/* 背景与个性：整行两列（键 + 值），与背景故事同宽 */
+.bg-grid {
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
 }
 
-.bg-two-col td {
+.bg-grid td {
   width: 50%;
   font-size: 10.5px;
   line-height: 1.45;
@@ -553,13 +583,11 @@ body {
 
 .story-line {
   text-indent: 2em;
+  /* 行由 Python 侧折好（litehtml 折行不计 text-indent），这里原样呈现 */
+  white-space: pre-wrap;
 }
 
 /* ── 魔法物品 ─────────────────────────────────────────────────── */
-.magic-panel {
-  margin-top: 7px;
-}
-
 .weapon-panel {
   margin-bottom: 7px;
 }
