@@ -65,7 +65,8 @@ def test_spec_groups_and_fields() -> None:
     assert {segment["group"] for segment in CARD_SPEC["segments"]} <= group_ids
     for segment in CARD_SPEC["segments"]:
         assert segment["label"]
-        assert segment["summary"]
+        # summary 是可选说明：空字符串表示建卡器不显示问号。
+        assert isinstance(segment["summary"], str)
         assert isinstance(segment["required"], bool)
     assert sum(1 for segment in CARD_SPEC["segments"] if segment["required"]) == 2
 
@@ -113,7 +114,7 @@ def test_spec_rules_metadata() -> None:
 
 def test_spec_has_no_legacy_segments() -> None:
     """旧段与旧兼容样例已全部删除。"""
-    assert CARD_SPEC["version"] == 5
+    assert CARD_SPEC["version"] == 6
     assert "legacy_segments" not in CARD_SPEC
     keys = {segment["key"] for segment in CARD_SPEC["segments"]}
     assert {
@@ -123,6 +124,23 @@ def test_spec_has_no_legacy_segments() -> None:
         "$魔法物品$",
     } <= keys
     assert not ({"$特性$", "$能力$", "$属性值$", "$豁免$", "$技能$"} & keys)
+
+
+def test_spec_form_order_covers_all_segments() -> None:
+    """表单顺序必须覆盖全部段、无重复，且等级在职业之前。"""
+    form_order = CARD_SPEC["form_order"]
+    keys = [segment["key"] for segment in CARD_SPEC["segments"]]
+    assert len(form_order) == len(keys)
+    assert set(form_order) == set(keys)
+    assert form_order.index("$等级$") < form_order.index("$职业$")
+    group_by_key = {
+        segment["key"]: segment["group"] for segment in CARD_SPEC["segments"]
+    }
+    assert group_by_key["$等级$"] == "identity"
+    assert group_by_key["$限定资源$"] == "traits"
+    assert group_by_key["$魔法物品$"] == "gear"
+    assert group_by_key["$法术$"] == "spells"
+    assert group_by_key["$法术位$"] == "spells"
 
 
 def test_fixtures_are_parseable_and_stable() -> None:

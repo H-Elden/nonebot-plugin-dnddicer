@@ -1,10 +1,15 @@
 <template>
   <div
-    class="pc"
+    class="pc pc--embedded"
     @dragover.prevent="dragging = true"
     @dragleave="dragging = false"
     @drop.prevent="onDrop"
   >
+    <div class="pc-title">
+      立绘裁切
+      <HintDot text="图片只在浏览器本地处理，不会上传；裁成 1:1 方框后复制图片，发送立绘设置时把图片和设置放在同一条消息里。" />
+    </div>
+
     <div class="pc-toolbar">
       <label class="cb-btn cb-btn--ghost pc-file">
         选择图片
@@ -17,7 +22,13 @@
       <span v-if="fileName" class="pc-filename">
         {{ fileName }}<template v-if="imageSize"> · {{ imageSize }}</template>
       </span>
-      <span v-else class="cb-muted">PNG / JPG / WebP，图片只在浏览器本地处理</span>
+      <span v-else class="cb-muted">PNG / JPG / WebP</span>
+      <button
+        v-if="hasImage"
+        type="button"
+        class="cb-btn cb-btn--ghost cb-btn--small"
+        @click="clearImage"
+      >清除立绘</button>
     </div>
 
     <p v-if="error" class="cb-errors pc-error">{{ error }}</p>
@@ -53,9 +64,6 @@
             居中
           </button>
         </div>
-        <p class="cb-hint">
-          拖动图片调整取景，滚轮或滑块缩放；导出固定 512×512 PNG，方框即最终卡面比例。
-        </p>
 
         <div class="pc-preview-block">
           <div class="pc-preview">
@@ -84,16 +92,19 @@
     </div>
 
     <div v-else class="pc-empty">
-      选择一张角色图开始裁切。建议用正面或半身构图；当前角色卡立绘框是 1:1 方框，非方图会被拉伸。
+      选择一张角色图开始裁切
+      <HintDot text="建议用正面或半身构图；立绘框是 1:1，非方图会被拉伸。导出为 512×512 PNG，原图由骰娘原样保存。" />
     </div>
   </div>
 </template>
 
 <script setup>
 import { nextTick, onBeforeUnmount, ref } from 'vue'
+import { setPortrait } from '../card-builder/store.mjs'
+import HintDot from './card-builder/HintDot.vue'
 
 // 立绘裁切：浏览器本地 canvas 处理，固定 1:1、导出 512×512 PNG。
-// 当前卡面立绘框是 146×146 方框，非方图会被插件原样拉伸，所以这里只做方图。
+// 作为建卡器的一部分，裁切结果直接写入共享状态，供角色卡预览使用。
 const STAGE = 320
 const OUTPUT = 512
 const MAX_INPUT_BYTES = 20 * 1024 * 1024
@@ -103,6 +114,7 @@ const canvasRef = ref(null)
 const hasImage = ref(false)
 const previewReady = ref(false)
 const previewUrl = ref('')
+const previewDataUrl = ref('')
 const zoom = ref(1)
 const fileName = ref('')
 const imageSize = ref('')
@@ -119,6 +131,10 @@ let dragState = null
 let inputUrl = ''
 let previewBlob = null
 let previewTimer = null
+
+function emitPortrait() {
+  setPortrait(previewDataUrl.value || '')
+}
 
 function baseScale() {
   return Math.max(STAGE / imageW, STAGE / imageH)
@@ -178,12 +194,14 @@ function renderPreview() {
     imageW * scale * factor,
     imageH * scale * factor,
   )
+  previewDataUrl.value = out.toDataURL('image/png')
   out.toBlob((blob) => {
     if (!blob) return
     previewBlob = blob
     if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
     previewUrl.value = URL.createObjectURL(blob)
     previewReady.value = true
+    emitPortrait()
   }, 'image/png')
 }
 
@@ -226,6 +244,7 @@ function loadFile(file) {
     imageSize.value = `${imageW}×${imageH} · ${imageSize.value}`
     hasImage.value = true
     previewReady.value = false
+    previewDataUrl.value = ''
     zoom.value = 1
     offsetX = 0
     offsetY = 0
@@ -293,6 +312,23 @@ function onPointerUp(event) {
   schedulePreview()
 }
 
+function clearImage() {
+  hasImage.value = false
+  previewReady.value = false
+  previewDataUrl.value = ''
+  previewBlob = null
+  if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
+  previewUrl.value = ''
+  if (inputUrl) URL.revokeObjectURL(inputUrl)
+  inputUrl = ''
+  imageEl = null
+  fileName.value = ''
+  imageSize.value = ''
+  status.value = ''
+  error.value = ''
+  emitPortrait()
+}
+
 async function copyBySelection() {
   if (!previewUrl.value) return false
   const holder = document.createElement('div')
@@ -337,21 +373,18 @@ async function copyImage() {
       await navigator.clipboard.write([
         new ClipboardItem({ 'image/png': previewBlob }),
       ])
-      status.value =
-        '已复制图片。到群里粘贴图片，并在同一条消息里附上 .立绘 后发送。'
+      status.value = '已复制图片。到群里粘贴图片，并在同一条消息里附上 .立绘 后发送。'
       return
     }
   } catch {
     // 剪贴板权限不足或浏览器不支持，继续降级
   }
   if (await copyBySelection()) {
-    status.value =
-      '已复制图片（兼容模式）。到群里粘贴图片，并在同一条消息里附上 .立绘 后发送。'
+    status.value = '已复制图片（兼容模式）。到群里粘贴图片，并在同一条消息里附上 .立绘 后发送。'
     return
   }
   download()
-  status.value =
-    '浏览器不允许复制图片，已改为下载 PNG；在 QQ 里选这张图发送并附上 .立绘。'
+  status.value = '浏览器不允许复制图片，已改为下载 PNG；在 QQ 里选这张图发送并附上 .立绘。'
 }
 
 function download() {

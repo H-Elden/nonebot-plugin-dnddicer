@@ -8,7 +8,10 @@
     <template #default="{ item }">
       <div class="cb-grid cb-grid--4">
         <label class="cb-grid__cell">
-          <span class="cb-grid__label">获得等级</span>
+          <span class="cb-grid__label">
+            获得等级
+            <HintDot text="卡面按等级排序；需要记录使用次数的特性，再到「限定资源」里填次数。" />
+          </span>
           <input
             v-model="item.level"
             class="cb-input"
@@ -31,13 +34,11 @@
       </label>
     </template>
   </RepeaterRows>
-  <p class="cb-hint">
-    卡面按获得等级升序显示，每条带「N级」徽标。有使用次数的职业特性同时写进「限定资源」，一处记说明、一处记次数。
-  </p>
 </template>
 
 <script setup>
 import { K } from '../../card-builder/core.mjs'
+import HintDot from './HintDot.vue'
 import RepeaterRows from './RepeaterRows.vue'
 
 // $职业特性$：获得等级 + 名称 + 说明。

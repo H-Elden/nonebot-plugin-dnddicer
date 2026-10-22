@@ -59,6 +59,7 @@ from .constants import (
     COIN_KEY_LIST,
     COIN_VALUE_MAX,
     COMBAT_KEY_LIST,
+    COMBAT_LEGACY_KEY_LIST,
     COMBAT_NOTE_MAX_COUNT,
     COMBAT_NOTE_MAX_LEN,
     COMBAT_SPEED_MAX_LEN,
@@ -807,7 +808,11 @@ def _parse_signed_bonus(value: str, label: str) -> str:
 
 
 def parse_combat(content: str) -> Dict[str, str]:
-    """解析 ``$战斗$`` 段为固定键字典（AC / 先攻 / 速度 / 被动察觉）。"""
+    """解析 ``$战斗$`` 段为固定键字典（AC / 速度）。
+
+    先攻与被动察觉由骰娘按属性、等级、熟练与额外加值现算，不再写入卡文本；
+    旧卡里的这两个键仍会接受但直接忽略，避免旧文本整卡导入失败。
+    """
     _ensure_no_dollar(content, "战斗")
     result: Dict[str, str] = {}
     for item in _split_semicolon_items(content):
@@ -816,6 +821,8 @@ def parse_combat(content: str) -> Dict[str, str]:
         key = key.strip()
         if key.lower() == "ac":
             key = "AC"
+        if key in COMBAT_LEGACY_KEY_LIST:
+            continue
         value = value.strip()
         if not separator or key not in COMBAT_KEY_LIST:
             raise AssertionError(
@@ -829,8 +836,6 @@ def parse_combat(content: str) -> Dict[str, str]:
                 raise AssertionError(
                     f"速度写法无效: {value}（最长 {COMBAT_SPEED_MAX_LEN} 字）"
                 )
-        elif key == "先攻":
-            value = _parse_signed_bonus(value, "先攻")
         else:
             if not value.isdigit() or not 0 <= int(value) <= 99:
                 raise AssertionError(f"{key}必须是 0~99 的整数: {value}")
@@ -1102,9 +1107,10 @@ def parse_story(content: str) -> str:
 
 
 def parse_progress(content: str) -> Dict[str, str]:
-    """解析 ``$进度$`` 段 → ``{经验: "6500/14000", 激励: "有"}``。
+    """解析 ``$进度$`` 段 → ``{经验: "6500", 激励: "有"}``。
 
-    ``经验`` 写 ``当前`` 或 ``当前/下一级``（0~9999999）；``激励`` 写 有/无。
+    ``经验`` 只保留当前值（0~9999999）；旧写法 ``当前/下一级`` 仍接受，
+    但下一级会按等级由骰娘计算，不再存进卡文本。``激励`` 写 有/无。
     """
     _ensure_no_dollar(content, "进度")
     result: Dict[str, str] = {}
@@ -1114,7 +1120,7 @@ def parse_progress(content: str) -> Dict[str, str]:
         key, value = key.strip(), value.strip()
         if not separator or key not in ("经验", "激励"):
             raise AssertionError(
-                f"进度条目不完整: {item}（示例：经验:6500/14000; 激励:有）"
+                f"进度条目不完整: {item}（示例：经验:6500; 激励:有）"
             )
         if key in result:
             raise AssertionError(f"进度条目重复: {key}")
@@ -1122,14 +1128,14 @@ def parse_progress(content: str) -> Dict[str, str]:
             parts = value.split("/")
             if len(parts) > 2 or not all(part.strip().isdigit() for part in parts):
                 raise AssertionError(
-                    f"经验值写法无效: {item}（示例：经验:6500/14000）"
+                    f"经验值写法无效: {item}（示例：经验:6500）"
                 )
             numbers = [int(part.strip()) for part in parts]
             if any(number > XP_VALUE_MAX for number in numbers):
                 raise AssertionError(
                     f"经验值超出范围（0~{XP_VALUE_MAX}）: {item}"
                 )
-            result["经验"] = "/".join(str(number) for number in numbers)
+            result["经验"] = str(numbers[0])
             continue
         if value in ("有", "是", "1"):
             result["激励"] = "有"
@@ -1432,19 +1438,21 @@ class CharacterService:
     """角色卡解析服务。"""
 
     @staticmethod
-    def _merge_single_segment(
+    def _merge_segments(
         existing: DNDCharacter,
-        key: str,
-        content: str,
+        data: Dict[str, str],
         reserved_names: Iterable[str],
     ) -> DNDCharacter:
-        """单段录入：把该段写回现有卡文本后按整卡重解析。
+        """多段/单段合并：把输入里的段逐条写回现有卡文本后按整卡重解析。
 
-        走「卡文本 → 段字典 → 卡文本」的往返路径，保证单段更新与整卡记录
-        使用同一套校验与规范化逻辑；其余段保持原有语义（格式按卡面规范回写）。
+        走「卡文本 → 段字典 → 卡文本」的往返路径，保证合并与整卡记录使用
+        同一套校验与规范化逻辑；其余段保持原有语义（格式按卡面规范回写）。
+        ``$等级$`` / ``$属性$`` 等未提供的段不会被清空，这是网页建卡器
+        4500 字拆块时后续部分能补全卡面的前提。
         """
         existing_data = parse_template_to_dict(existing.get_char_info())
-        existing_data[key] = content
+        for key, content in data.items():
+            existing_data[key] = content
         merged_text = "\n".join(
             f"{name} {existing_data[name]}"
             for name in CHAR_INFO_KEY_LIST
@@ -1488,16 +1496,22 @@ class CharacterService:
         ``reserved_names`` 为保留名集合（插件固定命令名），武器名不得与之
         冲突（由命令层传入；缺省不检查，供纯函数调用与单测）。
 
-        ``existing`` 为当前卡（分段录入用）：只带**一个** ``$段名$`` 时，
-        把该段替换进现有卡文本后按整卡重解析，因此其余段保持原有语义；
-        带两个及以上段时按整卡覆盖。无 ``existing`` 时行为与旧版一致。
+        ``existing`` 为当前卡（分段录入用）：
+        - 只带**一个** ``$段名$`` → 合并该段；
+        - 带多个段且同时含 ``$等级$`` 与 ``$属性$`` → 按整卡覆盖；
+        - 带多个段但缺 ``$等级$`` 或 ``$属性$`` → 按段合并（用于网页建卡器
+          超过 4500 字时拆出的第 2..N 部分）。
+        无 ``existing`` 时行为与旧版一致（必须有等级与属性）。
         """
         data = parse_template_to_dict(input_str)
-        if existing is not None and len(data) == 1:
-            key, content = next(iter(data.items()))
-            return CharacterService._merge_single_segment(
-                existing, key, content, reserved_names
+        if existing is not None and data:
+            has_required = (
+                CHAR_INFO_KEY_LEVEL in data and CHAR_INFO_KEY_ABILITY in data
             )
+            if len(data) == 1 or not has_required:
+                return CharacterService._merge_segments(
+                    existing, data, reserved_names
+                )
 
         hp_info = HPInfo()
         ability_info = AbilityInfo()
@@ -1819,7 +1833,7 @@ def gen_template_char(group_id: str = "", user_id: str = "") -> DNDCharacter:
         slots_max=[4, 3, 2, 0, 0, 0, 0, 0, 0],
     )
     character.combat = {
-        "AC": "16", "先攻": "+2", "速度": "30", "被动察觉": "13",
+        "AC": "16", "速度": "30",
     }
     character.ability_info.prof_armor = []
     character.ability_info.prof_weapons = ["简易武器"]
@@ -1888,7 +1902,7 @@ def gen_template_char(group_id: str = "", user_id: str = "") -> DNDCharacter:
         "年龄": "132", "外貌": "银发绿眼，深蓝法袍",
         "个性": "喜欢追问原理",
     }
-    character.progress = {"经验": "6500/14000", "激励": "有"}
+    character.progress = {"经验": "6500", "激励": "有"}
     character.coins = {"CP": 0, "SP": 0, "EP": 0, "GP": 13, "PP": 0}
     character.story = (
         "伊瑟兰出身于银月城的学者世家，少年时在塔中抄录古籍，一次偶然的星象记录"

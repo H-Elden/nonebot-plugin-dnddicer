@@ -21,23 +21,20 @@
         </label>
       </div>
       <div class="cb-recover">
-        <span class="cb-grid__label">恢复方式</span>
+        <span class="cb-grid__label">
+          恢复方式
+          <HintDot text="可多选；「两者」已含短休与长休；恢复量留空表示回满。" />
+        </span>
         <span v-for="mode in modes" :key="mode" class="cb-recover__mode">
-          <label class="cb-check">
-            <input
-              type="checkbox"
-              :checked="item.modes[mode].on"
-              @change="toggle(item, mode)"
-            />
+          <ToggleChip :active="item.modes[mode].on" @toggle="toggle(item, mode)">
             {{ mode }}
-          </label>
+          </ToggleChip>
           <input
             v-if="item.modes[mode].on && mode !== '手动'"
             v-model="item.modes[mode].amount"
             class="cb-input cb-input--tiny"
             placeholder="满"
             :aria-label="`${mode}恢复量`"
-            title="留空 = 回满；填数字表示恢复 N 次"
           />
         </span>
       </div>
@@ -47,15 +44,14 @@
       </label>
     </template>
   </RepeaterRows>
-  <p class="cb-hint">
-    恢复档可多选；「两者」已含短休与长休，勾选它会自动取消另两项。恢复量留空表示回满。
-  </p>
 </template>
 
 <script setup>
 import { computed } from 'vue'
 import { K } from '../../card-builder/core.mjs'
+import HintDot from './HintDot.vue'
 import RepeaterRows from './RepeaterRows.vue'
+import ToggleChip from './ToggleChip.vue'
 
 // $限定资源$：有使用次数的资源，恢复档四选（短休/长休/两者/手动）与可选恢复量。
 const props = defineProps({

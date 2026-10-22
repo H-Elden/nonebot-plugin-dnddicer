@@ -18,7 +18,6 @@
       </div>
     </template>
   </RepeaterRows>
-  <p v-if="hint" class="cb-hint">{{ hint }}</p>
 </template>
 
 <script setup>
@@ -32,7 +31,6 @@ defineProps({
   namePlaceholder: { type: String, default: '' },
   textPlaceholder: { type: String, default: '' },
   addLabel: { type: String, default: '添加一行' },
-  hint: { type: String, default: '' },
 })
 
 function factory() {

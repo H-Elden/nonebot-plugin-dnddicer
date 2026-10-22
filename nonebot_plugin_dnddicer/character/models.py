@@ -413,6 +413,31 @@ class AbilityInfo(BaseModel):
         total, extra = self.get_check_bonus(check_name)
         return f"{total:+d}{extra}"
 
+    def get_passive_score(self, check_name: str) -> str:
+        """被动检定值：10 + 该检定加值；优势 +5、劣势 -5。
+
+        被动察觉按规则书固定为「10 + 感知（察觉）检定加值」，不再手填；
+        加值中的骰子项无法静态求值，只取常数部分。技能自身或其父属性的
+        优势/劣势都计入，二者相反时抵消。未初始化时返回空串。
+        """
+        if not self.is_init or check_name not in CHECK_ITEM_INDEX_DICT:
+            return ""
+        total, _extra = self.get_check_bonus(check_name)
+        value = 10 + total
+        adv = self.check_adv[CHECK_ITEM_INDEX_DICT[check_name]]
+        if check_name in SKILL_LIST:
+            parent = SKILL_PARENT_DICT[check_name]
+            parent_adv = self.check_adv[EXT_ITEM_INDEX_DICT[parent]]
+            if adv == 0:
+                adv = parent_adv
+            elif parent_adv and parent_adv != adv:
+                adv = 0
+        if adv > 0:
+            value += 5
+        elif adv < 0:
+            value -= 5
+        return str(value)
+
     def get_level_ability_info(self) -> str:
         """``$等级$`` 与 ``$属性$`` 两行（完整卡面插入新段时先输出这两行）。"""
         return (

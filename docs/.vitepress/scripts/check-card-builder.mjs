@@ -2,10 +2,12 @@
  * 网页建卡器的 Node 往返校验（`docs:build` 前自动运行）。
  *
  * 只做纯函数校验，不启动浏览器、不依赖 Vue：
- * 1. `card-spec.json` 与 `core.mjs` 的段清单/回写顺序互相对齐；
+ * 1. `card-spec.json` 与 `core.mjs` 的段清单/表单顺序/回写顺序互相对齐；
  * 2. 样例卡「解析 → 回写 → 再解析」稳定，规范样例逐字不变；
- * 3. 整卡命令、分段命令、精简整卡都能被导入逻辑读回；
- * 4. 编辑表单后回写的内容仍可被解析，关键值与派生值不丢。
+ * 3. 整卡命令、分段命令都能被导入逻辑读回；
+ * 4. 编辑表单后回写的内容仍可被解析，关键值与派生值不丢；
+ * 5. 整卡超过 4500 字时按段拆块，第 1 块含等级与属性、每块不超限；
+ * 6. 角色卡预览视图的关键字段与 HTML 转义。
  *
  * 失败时逐条打印（带样例名与段名），并以退出码 1 结束构建。
  */
@@ -20,6 +22,10 @@ import {
   SEGMENT_KINDS,
   createCardBuilder,
 } from '../theme/card-builder/core.mjs'
+import {
+  buildPreviewView,
+  renderPreviewHtml,
+} from '../theme/card-builder/preview.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const builderDir = path.join(here, '..', 'theme', 'card-builder')
@@ -57,6 +63,7 @@ function checkThrows(name, fn) {
 function main() {
   const spec = readJson(path.join(builderDir, 'card-spec.json'))
   const fixtureData = readJson(path.join(builderDir, 'fixtures.json'))
+  const cardCss = fs.readFileSync(path.join(builderDir, 'char-card.css'), 'utf8')
   const builder = createCardBuilder(spec)
 
   // ── 1. 清单对齐 ──────────────────────────────────────────────────────
@@ -72,7 +79,16 @@ function main() {
   }
   checkEqual('回写顺序覆盖段清单', [...new Set(spec.output_order)].sort().join('|'), [...specKeys].sort().join('|'))
   check('回写顺序无重复', new Set(spec.output_order).size === spec.output_order.length)
+  checkEqual('表单顺序覆盖段清单', [...new Set(spec.form_order)].sort().join('|'), [...specKeys].sort().join('|'))
+  check('表单顺序无重复', new Set(spec.form_order).size === spec.form_order.length)
+  check(
+    '等级在职业之前',
+    spec.form_order.indexOf('$等级$') < spec.form_order.indexOf('$职业$'),
+    JSON.stringify(spec.form_order.slice(0, 6)),
+  )
+  checkEqual('builder.formOrder 与 spec 一致', builder.formOrder.join('|'), spec.form_order.join('|'))
   check('分组 id 非空', spec.groups.every((group) => group.id && group.label))
+  checkEqual('分组数量', spec.groups.length, 7)
   check(
     '段的 group 都在分组表内',
     spec.segments.every((segment) => spec.groups.some((group) => group.id === segment.group)),
@@ -132,17 +148,14 @@ function main() {
         item.length === item.command.length,
       )
     }
-    // 整卡命令与精简整卡都可导入
+    // 整卡命令可导入
     const whole = `${CARD_COMMAND}\n${serialized}`
     const wholeParsed = builder.parseCardText(whole)
     check(`${name}: 整卡命令可导入`, wholeParsed.errors.length === 0)
     checkEqual(`${name}: 整卡命令内容不变`, builder.serializeCard(wholeParsed.state, options), serialized)
-    const minimal = builder.buildMinimalCard(parsed.state, options)
-    check(`${name}: 精简整卡非空`, minimal.length > 0)
-    check(`${name}: 精简整卡含等级`, minimal.includes('$等级$'))
-    check(`${name}: 精简整卡含属性`, minimal.includes('$属性$'))
-    const minimalParsed = builder.parseCardText(minimal)
-    check(`${name}: 精简整卡可导入`, minimalParsed.errors.length === 0)
+    const wholeCommand = builder.buildWholeCommand(parsed.state, options)
+    checkEqual(`${name}: 整卡命令文本`, wholeCommand.text, whole)
+    checkEqual(`${name}: 整卡命令长度按整条消息`, wholeCommand.length, whole.length)
   }
 
   // 粘贴 .角色卡模板 的完整回复（卡 + 提示）也能导入
@@ -200,7 +213,7 @@ function main() {
   state[K.BACKGROUND]['理想'] = '5e 专属背景项'
   state[K.HP] = { cur: '44', max: '44', temp: '' }
   state[K.HP_DICE] = { num: '5', max: '5', type: '10' }
-  state[K.COMBAT] = { AC: '18', 先攻: '+9', 速度: '30', 被动察觉: '12' }
+  state[K.COMBAT] = { AC: '18', 速度: '30' }
   state[K.PROGRESS] = { xp: '6500', xpNext: '99999', inspiration: '有' }
   state[K.FEATS] = [{ name: '巨武器大师', text: '可以用附赠动作再攻击一次' }]
   state[K.RACE_TRAITS] = [{ name: '黑暗视觉', text: '60 尺内微光视为明亮' }]
@@ -279,14 +292,23 @@ function main() {
   check('5e 输出理想', fiveEText.includes('理想:5e 专属背景项'))
   checkThrows('未知背景键被拒绝', () => builder.parseSegment(K.BACKGROUND, '故乡:无冬城'))
 
-  // 先攻只读派生：敏捷 +1 + 先攻熟练 +3 + 额外 +2 = +6，忽略表单里的 +9
+  // 先攻/被动察觉只读派生：先攻 = 敏捷 +1 + 熟练 +3 + 额外 +2 = +6；
+  // 被动察觉 = 10 + 察觉加值（本例未熟练、感知 11，调整值 0）= 10。
   checkEqual('先攻派生值', builder.deriveInitiative(state), '+6')
-  check('卡文本用派生先攻', editedText.includes('先攻:+6'), editedText)
-  check('卡文本不用表单先攻', !editedText.includes('先攻:+9'))
+  checkEqual('被动察觉派生值', builder.derivePassivePerception(state), '10')
+  state[K.EXT].push({ key: '察觉', adv: '优势', bonus: '' })
+  checkEqual('被动察觉优势 +5', builder.derivePassivePerception(state), '15')
+  state[K.EXT].pop()
+  check(
+    '卡文本的战斗段不含先攻/被动察觉',
+    !builder.contentFor(state, K.COMBAT).includes('先攻') &&
+      !builder.contentFor(state, K.COMBAT).includes('被动察觉'),
+    builder.contentFor(state, K.COMBAT),
+  )
   checkEqual('熟练加值', builder.deriveProficiencyBonus(state), 3)
   checkEqual('下一级经验自动', builder.deriveXpNext(state), '14000')
-  check('卡文本用自动下一级经验', editedText.includes('经验:6500/14000'))
-  check('卡文本不用手填下一级经验', !editedText.includes('99999'))
+  check('卡文本只写当前经验', editedText.includes('经验:6500') && !editedText.includes('经验:6500/'))
+  check('卡文本不写下一级经验', !editedText.includes('99999') && !editedText.includes('14000'))
 
   // 职业特性按等级升序
   checkEqual(
@@ -404,6 +426,11 @@ function main() {
   check('单段命令解析成功', single.errors.length === 0)
   checkEqual('单段命令只识别一段', single.found, 1)
   checkEqual('单段命令战斗段 AC', single.state[K.COMBAT].AC, '15')
+  check(
+    '旧先攻/被动察觉写法可解析但不再导出',
+    !builder.contentFor(single.state, K.COMBAT).includes('先攻') &&
+      !builder.contentFor(single.state, K.COMBAT).includes('被动察觉'),
+  )
 
   // 多条分段命令粘在一起也能导入（每条各占一行）
   const multi = builder.parseCardText(
@@ -417,6 +444,75 @@ function main() {
   checkEqual('多条分段命令段数', multi.found, 3)
   checkEqual('多条分段命令姓名', multi.state[K.NAME], '多段导入')
   checkEqual('多条分段命令等级', multi.state[K.LEVEL], '3')
+
+  // ── 4500 字整卡拆分 ──────────────────────────────────────────────────
+  const templateState = builder.parseCardText(templateFixture.text).state
+  const whole = builder.buildWholeCommand(templateState)
+  checkEqual('整卡命令长度按整条消息', whole.length, whole.text.length)
+  check(
+    '恰好等于上限仍是一块',
+    builder.buildCardParts(templateState, {}, whole.length).parts.length === 1,
+  )
+  const split = builder.buildCardParts(templateState, {}, 900)
+  check('小上限会拆成多块', split.parts.length > 1, String(split.parts.length))
+  check(
+    '每块都不超过上限',
+    split.parts.every((part) => part.length <= 900),
+    JSON.stringify(split.parts.map((part) => part.length)),
+  )
+  check('第 1 块含等级', split.parts[0].text.includes('$等级$ 5'))
+  check('第 1 块含属性', split.parts[0].text.includes('$属性$'))
+  check(
+    '后续块不含等级/属性',
+    split.parts.slice(1).every((part) => !part.text.includes('$等级$') && !part.text.includes('$属性$')),
+  )
+  const allBlocks = builder.buildCardBlocks(templateState).map((item) => item.key)
+  const partKeys = split.parts.flatMap((part) =>
+    [...part.text.matchAll(/\$([^$\n]+)\$/g)].map((match) => `$${match[1]}$`),
+  )
+  checkEqual('拆分不丢段', [...partKeys].sort().join('|'), [...allBlocks].sort().join('|'))
+  checkEqual('拆分不重复段', new Set(partKeys).size, partKeys.length)
+  const oversized = builder.buildCardParts(templateState, {}, 800)
+  check('单段超过上限时会报 tooLarge', oversized.parts.length === 0 && oversized.tooLarge.length > 0)
+  check(
+    'tooLarge 标出段名',
+    oversized.tooLarge.every((item) => item.key && item.length > 800),
+  )
+
+  // ── 角色卡预览 ──────────────────────────────────────────────────────
+  const previewState = builder.parseCardText(templateFixture.text).state
+  const previewView = buildPreviewView(builder, previewState, { rulesVersion: '5r' }, '')
+  checkEqual('预览姓名', previewView.name, '伊瑟兰·晨星')
+  checkEqual('预览副标题', previewView.subtitle, '高等精灵 · 法师（塑能师） · 5 级')
+  checkEqual('预览经验', [previewView.xp, previewView.xpNext].join('/'), '6,500/14,000')
+  checkEqual('预览武器数', previewView.weapons.length, 4)
+  checkEqual('预览法术分组数', previewView.spellGroups.length, 4)
+  checkEqual('预览法术位网格', previewView.slotRows.length, 3)
+  const previewHtml = renderPreviewHtml(previewView, cardCss)
+  check('预览 HTML 有卡面容器', previewHtml.includes('class="sheet card"'))
+  check('预览 HTML 有立绘占位', previewHtml.includes('photo placeholder'))
+  check('预览 HTML 含法术表', previewHtml.includes('spell-table') && previewHtml.includes('火球术'))
+  check('预览 HTML 含武器表', previewHtml.includes('weapon-panel') && previewHtml.includes('火焰箭'))
+  previewState[K.NAME] = '<测试&>'
+  const escapedHtml = renderPreviewHtml(
+    buildPreviewView(builder, previewState, { rulesVersion: '5r' }, ''),
+    cardCss,
+  )
+  check('预览文本做 HTML 转义', escapedHtml.includes('&lt;测试&amp;&gt;') && !escapedHtml.includes('<测试&>'))
+  const edgeState = builder.parseCardText(fixtures[1].text).state
+  const edgeView = buildPreviewView(builder, edgeState, { rulesVersion: '5e' }, '')
+  const edgeInitiative = edgeView.coreStats.find((item) => item.label === '先攻')
+  check(
+    '预览先攻保留骰子加值',
+    edgeInitiative && edgeInitiative.value.includes('+1d4'),
+    JSON.stringify(edgeInitiative),
+  )
+  const edgePassive = edgeView.coreStats.find((item) => item.label === '被动察觉')
+  check(
+    '预览被动察觉按察觉加值现算',
+    edgePassive && edgePassive.value === '10',
+    JSON.stringify(edgePassive),
+  )
 
   // ── 汇总 ────────────────────────────────────────────────────────────
   if (failed > 0) {

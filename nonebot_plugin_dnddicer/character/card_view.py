@@ -3,8 +3,8 @@
 把 ``DNDCharacter`` 转成单页高密度卡面所需的页眉、六属性卡、面板与法术区：
 
 - 六属性卡、豁免与技能由 ``AbilityInfo`` 按「属性调整值 + 熟练加值 + 额外加值」
-  现算（2026-10-22 起），不再读手填的展示值；AC / 先攻 / 速度 / 被动察觉
-  仍以 ``$战斗$`` 手填值为准；
+  现算（2026-10-22 起），不再读手填的展示值；AC / 速度以 ``$战斗$`` 为准，
+  先攻 / 被动察觉由骰娘现算；
 - 空段不输出（低等级角色没有物品/法术时不画空面板）；
 - 立绘字节在这里转 data URI，渲染过程不读文件、不发网络请求；
 - 标记位用布尔值交给模板渲染（方块 / 星星 / 准备圆点），视图不拼 HTML。
@@ -25,10 +25,11 @@ from .constants import (
     ABILITY_LIST,
     BACKGROUND_KEY_LIST,
     COIN_KEY_LIST,
-    COMBAT_KEY_LIST,
+    COMBAT_DISPLAY_KEY_LIST,
     SKILL_LIST,
     SKILL_PARENT_DICT,
     SPELL_LEVEL_MAX,
+    XP_THRESHOLDS,
 )
 from .models import DNDCharacter
 
@@ -227,12 +228,21 @@ def _split_name_text(item: str) -> Tuple[str, str]:
 
 
 def _progress(character: DNDCharacter) -> Tuple[str, str, Optional[bool]]:
-    """``$进度$`` → (经验, 下一级, 英雄激励)；未记录时返回空串 / None。"""
+    """``$进度$`` → (经验, 下一级, 英雄激励)。
+
+    下一级优先按等级表计算（2026-10-22 起不再要求卡面手写）；
+    只有旧卡没有等级信息时，才回退解析卡文本里可能残留的 ``/下一级``。
+    """
     raw = character.progress.get("经验", "")
     xp = xp_next = ""
+    following = ""
     if raw:
         current, _, following = raw.partition("/")
         xp = _thousands(current)
+    info = character.ability_info
+    if info.is_init and 1 <= info.level < len(XP_THRESHOLDS):
+        xp_next = _thousands(str(XP_THRESHOLDS[info.level]))
+    elif following:
         xp_next = _thousands(following)
     flag = character.progress.get("激励", "")
     inspiration = None
@@ -252,16 +262,30 @@ def _coin_views(character: DNDCharacter) -> Tuple[CoinView, ...]:
 
 
 def _core_stats(character: DNDCharacter) -> Tuple[CoreStat, ...]:
-    """页眉核心数值：``$战斗$`` 四项 + 按等级算出的熟练加值。
+    """页眉核心数值：AC / 先攻 / 速度 / 被动察觉 + 按等级算出的熟练加值。
 
-    宽度不写死：让每个格子按「标签 + 数值」的字符长度自适应（用户 2026-10-21
-    明确要求不要五个等宽格子）。
+    先攻与被动察觉不再读 ``$战斗$`` 的手填值：按 ``AbilityInfo`` 现算
+    （先攻 = 敏捷 + 先攻熟练 + 额外加值；被动察觉 = 10 + 察觉检定加值，
+    优势/劣势再 ±5）。旧卡没有属性信息时才回退卡面旧值。
     """
-    stats = [
-        CoreStat(label, character.combat.get(label) or "—")
-        for label in COMBAT_KEY_LIST
-    ]
+    stats = []
     info = character.ability_info
+    for label in COMBAT_DISPLAY_KEY_LIST:
+        if label == "先攻":
+            value = (
+                info.get_check_display("先攻")
+                if info.is_init
+                else character.combat.get(label) or "—"
+            )
+        elif label == "被动察觉":
+            value = (
+                info.get_passive_score("察觉")
+                if info.is_init
+                else character.combat.get(label) or "—"
+            )
+        else:
+            value = character.combat.get(label) or "—"
+        stats.append(CoreStat(label, value))
     if info.is_init and info.level > 0:
         stats.append(CoreStat("熟练", f"+{info.get_prof_bonus()}"))
     return tuple(stats)

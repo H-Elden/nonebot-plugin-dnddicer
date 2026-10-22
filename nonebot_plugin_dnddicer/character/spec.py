@@ -110,13 +110,13 @@ from .constants import (
 
 #: 表单分组（顺序即页面分组顺序）
 CARD_SPEC_GROUPS: List[Dict[str, str]] = [
-    {"id": "identity", "label": "身份", "summary": "姓名、种族、职业、背景与故事"},
-    {"id": "core", "label": "属性与检定", "summary": "等级、六属性、熟练、额外加值（豁免与技能加值自动计算）"},
+    {"id": "identity", "label": "身份", "summary": "姓名、种族、等级、职业、子职、背景与故事"},
+    {"id": "core", "label": "属性与检定", "summary": "六属性、熟练、额外加值（豁免与技能加值自动计算）"},
     {"id": "combat", "label": "战斗", "summary": "生命值、战斗数值、经验与武器"},
-    {"id": "traits", "label": "特性与专长", "summary": "专长、种族特性与带等级的职业特性"},
-    {"id": "resources", "label": "资源", "summary": "限定资源、魔法物品、法术清单与法术位"},
-    {"id": "gear", "label": "装备", "summary": "物品与钱币"},
-    {"id": "other", "label": "其他", "summary": "战斗记录"},
+    {"id": "traits", "label": "特性与专长", "summary": "专长、种族/职业特性与限定资源"},
+    {"id": "spells", "label": "法术", "summary": "施法属性、法术清单、法术位与契约法术"},
+    {"id": "gear", "label": "装备", "summary": "物品、钱币与魔法物品"},
+    {"id": "other", "label": "其他", "summary": "战斗记录（建卡时无需填写）"},
 ]
 
 #: 段清单（顺序必须是 ``CHAR_INFO_KEY_LIST`` 的顺序）
@@ -126,7 +126,7 @@ CARD_SPEC_SEGMENTS: List[Dict[str, object]] = [
         "label": "姓名",
         "group": "identity",
         "required": False,
-        "summary": "角色名，检定落款与先攻列表用",
+        "summary": "角色名，检定与先攻列表中使用",
         "example": "伊瑟兰·晨星",
     },
     {
@@ -134,7 +134,7 @@ CARD_SPEC_SEGMENTS: List[Dict[str, object]] = [
         "label": "种族",
         "group": "identity",
         "required": False,
-        "summary": "种族名，仅记录与展示",
+        "summary": "",
         "example": "高等精灵",
     },
     {
@@ -142,7 +142,7 @@ CARD_SPEC_SEGMENTS: List[Dict[str, object]] = [
         "label": "职业",
         "group": "identity",
         "required": False,
-        "summary": "标准 12 职业或扩展职业名，可手填；偷袭骰只认游荡者",
+        "summary": "",
         "example": "法师",
     },
     {
@@ -158,7 +158,7 @@ CARD_SPEC_SEGMENTS: List[Dict[str, object]] = [
         "label": "背景",
         "group": "identity",
         "required": False,
-        "summary": "固定键；5r 七项，5e 另有理想/羁绊/缺点；空值不输出",
+        "summary": "",
         "example": (
             "背景:智者; 阵营:中立善良; 信仰:密斯特拉; 体型:中型; 年龄:132; "
             "外貌:银发绿眼，深蓝法袍; 个性:喜欢追问原理"
@@ -169,7 +169,7 @@ CARD_SPEC_SEGMENTS: List[Dict[str, object]] = [
         "label": "故事",
         "group": "identity",
         "required": False,
-        "summary": "背景故事，可多行/多段，最多 1000 字（换行不计）",
+        "summary": "背景故事，可多段，无需手动打空格缩进，最多 1000 字",
         "example": (
             "伊瑟兰出身于银月城的学者世家，少年时在塔中抄录古籍，一次偶然的星象记录"
             "让伊瑟兰看见奥术网络背后的裂隙。\n"
@@ -184,7 +184,7 @@ CARD_SPEC_SEGMENTS: List[Dict[str, object]] = [
         "label": "生命值",
         "group": "combat",
         "required": False,
-        "summary": "当前/最大(临时)，如 29/37 (5)；可只写当前值",
+        "summary": "",
         "example": "37/37",
     },
     {
@@ -192,7 +192,7 @@ CARD_SPEC_SEGMENTS: List[Dict[str, object]] = [
         "label": "生命骰",
         "group": "combat",
         "required": False,
-        "summary": "当前/总数 D骰面，如 5/5 D6",
+        "summary": "",
         "example": "5/5 D6",
     },
     {
@@ -200,23 +200,23 @@ CARD_SPEC_SEGMENTS: List[Dict[str, object]] = [
         "label": "战斗",
         "group": "combat",
         "required": False,
-        "summary": "AC / 先攻 / 速度 / 被动察觉，只写有值的",
-        "example": "AC:16; 先攻:+2; 速度:30; 被动察觉:13",
+        "summary": "",
+        "example": "AC:16; 速度:30",
     },
     {
         "key": CHAR_INFO_KEY_PROGRESS,
         "label": "进度",
         "group": "combat",
         "required": False,
-        "summary": "经验:当前/下一级; 激励:有 或 无",
-        "example": "经验:6500/14000; 激励:有",
+        "summary": "",
+        "example": "经验:6500; 激励:有",
     },
     {
         "key": CHAR_INFO_KEY_LEVEL,
         "label": "等级",
-        "group": "core",
+        "group": "identity",
         "required": True,
-        "summary": "角色等级；熟练加值 = 2 + (等级 - 1) // 4",
+        "summary": "自动计算：熟练加值 = 2 + (等级 - 1) / 4",
         "example": "5",
     },
     {
@@ -224,7 +224,7 @@ CARD_SPEC_SEGMENTS: List[Dict[str, object]] = [
         "label": "属性",
         "group": "core",
         "required": True,
-        "summary": "六个最终值（已含种族/背景/专长加值），用 / 分隔",
+        "summary": "最终的六个属性值",
         "example": "8/14/16/18/11/8",
     },
     {
@@ -232,7 +232,7 @@ CARD_SPEC_SEGMENTS: List[Dict[str, object]] = [
         "label": "熟练",
         "group": "core",
         "required": False,
-        "summary": "技能/豁免条目，2*为专精；可加 护甲:… / 武器:… / 工具:… / 语言:…",
+        "summary": "",
         "example": (
             "奥秘/历史/2*调查/洞悉/察觉/智力豁免/感知豁免/"
             "武器:简易武器/工具:书法工具/语言:通用语·精灵语·龙语"
@@ -243,7 +243,7 @@ CARD_SPEC_SEGMENTS: List[Dict[str, object]] = [
         "label": "额外加值",
         "group": "core",
         "required": False,
-        "summary": "属性检定/技能检定/豁免/先攻的额外加值，条目:优势/劣势±加值",
+        "summary": "各种检定与豁免的额外加值",
         "example": "豁免:+1",
     },
     {
@@ -251,7 +251,7 @@ CARD_SPEC_SEGMENTS: List[Dict[str, object]] = [
         "label": "专长",
         "group": "traits",
         "required": False,
-        "summary": "专长名或 名称:说明，多项用 / 分隔",
+        "summary": "",
         "example": (
             "魔法学徒（法师）:习得光亮术、心灵之楔与护盾术；护盾术可免法术位施展一次，长休恢复/"
             "属性值提升:智力 +1、感知 +1"
@@ -262,7 +262,7 @@ CARD_SPEC_SEGMENTS: List[Dict[str, object]] = [
         "label": "种族特性",
         "group": "traits",
         "required": False,
-        "summary": "名称:说明，多项用 / 分隔；无等级",
+        "summary": "",
         "example": (
             "黑暗视觉:60 尺内微光视为明亮，黑暗视为微光/"
             "妖精血统:进行避免或结束魅惑状态的豁免时具有优势/"
@@ -277,7 +277,7 @@ CARD_SPEC_SEGMENTS: List[Dict[str, object]] = [
         "label": "职业特性",
         "group": "traits",
         "required": False,
-        "summary": "等级|名称:说明，多项用 / 分隔；卡面按等级升序并显示徽标",
+        "summary": "",
         "example": (
             "1|仪式学家:法术书中的仪式法术可直接以仪式施展，无需准备/"
             "1|奥术回想:短休时恢复总环阶不超过 3 的法术位（6 环以下），每长休一次/"
@@ -292,7 +292,7 @@ CARD_SPEC_SEGMENTS: List[Dict[str, object]] = [
         "label": "武器",
         "group": "combat",
         "required": False,
-        "summary": "名称+命中,伤害+类型[,备注]，多项用 / 分隔；名称尾 x 表示不做攻击检定",
+        "summary": "武器和法术攻击都填在这里",
         "example": (
             "火焰箭+8,2d10火焰,法术攻击 · 120尺/"
             "冷冻射线+8,2d8寒冷,法术攻击 · 60尺 · 速度-10/"
@@ -305,7 +305,7 @@ CARD_SPEC_SEGMENTS: List[Dict[str, object]] = [
         "label": "物品",
         "group": "gear",
         "required": False,
-        "summary": "名称x数量，多项用 ; 分隔；魔法物品写 $魔法物品$",
+        "summary": "普通物品只填名称与数量，不写详细说明",
         "example": (
             "法术书x1; 长棍x1; 匕首x2; 长袍x1; "
             "学者套组x1; 书法工具x1; 书籍（历史）x1; 羊皮纸x8; 治疗药水x1"
@@ -316,15 +316,15 @@ CARD_SPEC_SEGMENTS: List[Dict[str, object]] = [
         "label": "钱币",
         "group": "gear",
         "required": False,
-        "summary": "CP/SP/EP/GP/PP 五种币值，只写有值的",
+        "summary": "",
         "example": "CP:0; SP:0; EP:0; GP:13; PP:0",
     },
     {
         "key": CHAR_INFO_KEY_RESOURCE,
         "label": "限定资源",
-        "group": "resources",
+        "group": "traits",
         "required": False,
-        "summary": "有次数的资源：名称:当前/上限恢复档[|说明]，多项用 ; 分隔",
+        "summary": "只记录有使用次数的资源，奥术回想、狂暴等",
         "example": (
             "奥术回想:1/1短休|短休时恢复总环阶不超过 3 的法术位（6 环以下），每长休一次; "
             "魔法学徒:1/1长休|无需法术位施展一次护盾术，长休恢复"
@@ -333,9 +333,9 @@ CARD_SPEC_SEGMENTS: List[Dict[str, object]] = [
     {
         "key": CHAR_INFO_KEY_MAGIC_ITEMS,
         "label": "魔法物品",
-        "group": "resources",
+        "group": "gear",
         "required": False,
-        "summary": "名称|标签|说明，多项用 ; 分隔；说明用 // 分段",
+        "summary": "特殊物品填在这里，可以写标签和详细说明",
         "example": (
             "战法师魔杖 +1|魔杖，非普通（需施法者同调）|"
             "持握这根魔杖期间，你的法术攻击检定获得 +1 加值。"
@@ -345,13 +345,10 @@ CARD_SPEC_SEGMENTS: List[Dict[str, object]] = [
     },
     {
         "key": CHAR_INFO_KEY_SPELL,
-        "label": "法术",
-        "group": "resources",
+        "label": "法术与法术清单",
+        "group": "spells",
         "required": False,
-        "summary": (
-            "施法属性、豁免DC、法术攻击三个头键，其余为 名称:环阶[*][|详情]；"
-            "详情键：时间/距离/专注/仪式/材料/备注"
-        ),
+        "summary": "",
         "example": (
             "施法属性:智力; 豁免DC:15; 法术攻击:+8; "
             "火焰箭:0|时间=1动作,距离=120尺,备注=2d10 火焰 / 法术攻击; "
@@ -379,10 +376,10 @@ CARD_SPEC_SEGMENTS: List[Dict[str, object]] = [
     },
     {
         "key": CHAR_INFO_KEY_SPELL_SLOTS,
-        "label": "法术位",
-        "group": "resources",
+        "label": "法术位与契约法术",
+        "group": "spells",
         "required": False,
-        "summary": "环阶:当前/上限；契约写 契约3:2/2",
+        "summary": "",
         "example": "1:4/4; 2:3/3; 3:2/2",
     },
     {
@@ -390,7 +387,7 @@ CARD_SPEC_SEGMENTS: List[Dict[str, object]] = [
         "label": "战斗记录",
         "group": "other",
         "required": False,
-        "summary": "战斗中的临时记录，自由文本多项用 ; 分隔",
+        "summary": "建卡时无需填写；开团后由骰娘记录战斗中的临时事项",
         "example": "法师护甲(8小时)",
     },
 ]
@@ -423,6 +420,39 @@ CARD_SPEC_OUTPUT_ORDER: List[str] = [
     CHAR_INFO_KEY_MAGIC_ITEMS,
     CHAR_INFO_KEY_SPELL,
     CHAR_INFO_KEY_SPELL_SLOTS,
+    CHAR_INFO_KEY_COMBAT_NOTES,
+]
+
+#: 网页建卡器的表单展示顺序（与卡文本回写顺序解耦）。
+#:
+#: 用户动线要求「先填等级、再填职业与子职」：等级必须排在职业前，
+#: 否则子职门槛要来回滚动才能判断。``CARD_SPEC_SEGMENTS`` 的顺序仍必须等于
+#: ``CHAR_INFO_KEY_LIST``（卡文本解析顺序），所以单独维护这一份表单顺序。
+CARD_SPEC_FORM_ORDER: List[str] = [
+    CHAR_INFO_KEY_NAME,
+    CHAR_INFO_KEY_RACE,
+    CHAR_INFO_KEY_LEVEL,
+    CHAR_INFO_KEY_CLASS,
+    CHAR_INFO_KEY_SUBCLASS,
+    CHAR_INFO_KEY_BACKGROUND,
+    CHAR_INFO_KEY_STORY,
+    CHAR_INFO_KEY_ABILITY,
+    CHAR_INFO_KEY_PROF,
+    CHAR_INFO_KEY_EXT,
+    CHAR_INFO_KEY_HP,
+    CHAR_INFO_KEY_HP_DICE,
+    CHAR_INFO_KEY_COMBAT,
+    CHAR_INFO_KEY_PROGRESS,
+    CHAR_INFO_KEY_WEAPON,
+    CHAR_INFO_KEY_FEATS,
+    CHAR_INFO_KEY_RACE_TRAITS,
+    CHAR_INFO_KEY_CLASS_TRAITS,
+    CHAR_INFO_KEY_RESOURCE,
+    CHAR_INFO_KEY_SPELL,
+    CHAR_INFO_KEY_SPELL_SLOTS,
+    CHAR_INFO_KEY_ITEMS,
+    CHAR_INFO_KEY_COINS,
+    CHAR_INFO_KEY_MAGIC_ITEMS,
     CHAR_INFO_KEY_COMBAT_NOTES,
 ]
 
@@ -518,10 +548,11 @@ CARD_SPEC_ENUMS: Dict[str, object] = {
 
 #: 导出给网页建卡器的完整清单
 CARD_SPEC: Dict[str, object] = {
-    "version": 5,
+    "version": 6,
     "groups": CARD_SPEC_GROUPS,
     "segments": CARD_SPEC_SEGMENTS,
     "output_order": CARD_SPEC_OUTPUT_ORDER,
+    "form_order": CARD_SPEC_FORM_ORDER,
     "limits": CARD_SPEC_LIMITS,
     "enums": CARD_SPEC_ENUMS,
 }

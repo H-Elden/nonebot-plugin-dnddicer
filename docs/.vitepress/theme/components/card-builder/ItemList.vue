@@ -28,9 +28,6 @@
       </div>
     </template>
   </RepeaterRows>
-  <p class="cb-hint">
-    没写数量按 1 件记录。物品只记名称与数量；魔法物品请写到「魔法物品」，那里有标签与说明。
-  </p>
 </template>
 
 <script setup>

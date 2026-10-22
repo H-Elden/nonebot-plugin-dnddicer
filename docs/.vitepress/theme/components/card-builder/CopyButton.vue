@@ -4,6 +4,7 @@
     class="cb-btn"
     :class="primary ? 'cb-btn--primary' : 'cb-btn--ghost'"
     :disabled="disabled || !text"
+    :title="title"
     @click="copy"
   >{{ status === 'ok' ? '已复制' : status === 'fail' ? '复制失败' : label }}</button>
 </template>
@@ -18,6 +19,7 @@ const props = defineProps({
   label: { type: String, default: '复制' },
   disabled: { type: Boolean, default: false },
   primary: { type: Boolean, default: false },
+  title: { type: String, default: '' },
 })
 
 const status = ref('')

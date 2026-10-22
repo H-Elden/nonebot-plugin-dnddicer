@@ -322,6 +322,38 @@ def test_coins_fill_missing_denominations() -> None:
     assert [coin.value for coin in view.coins] == ["0", "0", "0", "18", "0"]
 
 
+def test_initiative_and_next_xp_are_computed_not_read_from_card() -> None:
+    """先攻、被动察觉与下一级经验按等级/属性/熟练现算，不读卡面旧值（2026-10-22）。"""
+    from nonebot_plugin_dnddicer.character.constants import (
+        CHECK_ITEM_INDEX_DICT,
+        EXT_ITEM_INDEX_DICT,
+    )
+
+    char = gen_template_char()
+    char.combat["先攻"] = "+99"
+    char.combat["被动察觉"] = "99"
+    char.progress = {"经验": "6500/99999", "激励": "有"}
+    char.ability_info.check_prof[CHECK_ITEM_INDEX_DICT["先攻"]] = 1
+    char.ability_info.check_ext[EXT_ITEM_INDEX_DICT["先攻"]] = "+1"
+    view = build_card_view(char)
+    stats = {stat.label: stat.value for stat in view.core_stats}
+    # 敏捷 +2 + 熟练 +3 + 额外 +1 = +6（不读 $战斗$ 的 +99）
+    assert stats["先攻"] == "+6"
+    # 感知 11（+0）+ 察觉熟练 +3 = 13（不读 $战斗$ 的 +99）
+    assert stats["被动察觉"] == "13"
+    # 察觉有优势时，被动察觉 +5
+    char.ability_info.check_adv[CHECK_ITEM_INDEX_DICT["察觉"]] = 1
+    stats = {stat.label: stat.value for stat in build_card_view(char).core_stats}
+    assert stats["被动察觉"] == "18"
+    # 父属性（感知）优势同样作用于察觉
+    char.ability_info.check_adv[CHECK_ITEM_INDEX_DICT["察觉"]] = 0
+    char.ability_info.check_adv[EXT_ITEM_INDEX_DICT["感知"]] = 1
+    stats = {stat.label: stat.value for stat in build_card_view(char).core_stats}
+    assert stats["被动察觉"] == "18"
+    # 5 级下一级经验 = 14000（不读卡面残留的 99999）
+    assert (view.xp, view.xp_next) == ("6,500", "14,000")
+
+
 def test_progress_without_next_level() -> None:
     char = _empty()
     char.progress = {"经验": "500", "激励": "无"}

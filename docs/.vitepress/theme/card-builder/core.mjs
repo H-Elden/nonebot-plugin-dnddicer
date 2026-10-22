@@ -73,8 +73,8 @@ export const SEGMENT_KINDS = Object.freeze({
 /** 骰娘的记录命令（整卡与分段都以它开头）。 */
 export const CARD_COMMAND = '.角色卡记录'
 
-export const WHOLE_CARD_SOFT_LIMIT = 1800
-export const SEGMENT_COMMAND_SOFT_LIMIT = 1200
+//: QQ 单条消息上限（用户 2026-10-22 实测群聊与私聊均为 4500 字）。
+export const MESSAGE_LIMIT = 4500
 
 const SIGNED_RE = /^[+-]?\d+$/
 const WEAPON_BONUS_RE = /^[+-](\d*[dD]\d+|\d+)([+-](\d*[dD]\d+|\d+))*$/
@@ -99,6 +99,16 @@ function isBlank(value) {
 /** 字符数（按码点计，中文一字计一）。 */
 export function charLength(value) {
   return Array.from(textOf(value)).length
+}
+
+/**
+ * 消息长度（按 UTF-16 码元计，比码点更保守）。
+ *
+ * QQ 的单条上限按字符计，emoji 等补充平面字符在 UTF-16 下占两个码元；
+ * 4500 字的判定用这个函数，避免「看起来 4490 字实际发不出去」。
+ */
+export function messageLength(value) {
+  return textOf(value).length
 }
 
 function normalizeNewlines(value) {
@@ -185,6 +195,10 @@ export function createCardBuilder(spec) {
     Array.isArray(spec.output_order) && spec.output_order.length > 0
       ? spec.output_order.slice()
       : segments.map((segment) => segment.key)
+  const formOrder =
+    Array.isArray(spec.form_order) && spec.form_order.length > 0
+      ? spec.form_order.slice()
+      : order.slice()
 
   // 防漂移：清单里的每个段都必须有表单形态，反之亦然（Node 校验脚本也会查）
   for (const segment of segments) {
@@ -203,6 +217,12 @@ export function createCardBuilder(spec) {
     if (!segmentMap.has(key)) fail(`回写顺序中的 ${key} 不在段清单中`)
   }
   if (order.length !== segments.length) fail('卡文本回写顺序没有覆盖全部段')
+  if (new Set(formOrder).size !== formOrder.length) fail('表单顺序有重复段')
+  for (const key of formOrder) {
+    if (!segmentMap.has(key)) fail(`表单顺序中的 ${key} 不在段清单中`)
+  }
+  if (formOrder.length !== segments.length) fail('表单顺序没有覆盖全部段')
+  const formSegments = formOrder.map((key) => segmentMap.get(key))
 
   function labelOf(key) {
     const segment = segmentMap.get(key)
@@ -294,21 +314,22 @@ export function createCardBuilder(spec) {
   }
 
   function parseCombat(content) {
-    const result = { AC: '', 先攻: '', 速度: '', 被动察觉: '' }
+    const result = { AC: '', 速度: '' }
+    const derivedKeys = new Set(['先攻', '被动察觉'])
     for (const item of splitSemicolon(content)) {
       const normalized = withHalfColon(item)
       const [rawKey, rawValue] = partition(normalized, ':')
       let key = rawKey.trim()
       const value = rawValue.trim()
       if (key.toLowerCase() === 'ac') key = 'AC'
+      // 旧卡的派生值仍可导入，但不再保留：先攻 / 被动察觉由网页与骰娘现算。
+      if (derivedKeys.has(key)) continue
       if (!Object.hasOwn(result, key)) {
-        fail(`战斗条目不完整: ${item}（可用：AC/先攻/速度/被动察觉）`)
+        fail(`战斗条目不完整: ${item}（可用：AC/速度）`)
       }
       if (result[key] !== '') fail(`战斗条目重复: ${key}`)
       if (!value) fail(`战斗条目缺少取值: ${item}`)
-      if (key === '先攻') {
-        result[key] = normalizeSigned(value, '先攻')
-      } else if (key === '速度') {
+      if (key === '速度') {
         if (charLength(value) > (limits.combat_speed_max_len || 20)) {
           fail(`速度写法无效: ${value}（最长 20 字）`)
         }
@@ -1087,7 +1108,7 @@ export function createCardBuilder(spec) {
       [K.LEVEL]: '',
       [K.HP]: { cur: '', max: '', temp: '' },
       [K.HP_DICE]: { num: '', max: '', type: '' },
-      [K.COMBAT]: { AC: '', 先攻: '', 速度: '', 被动察觉: '' },
+      [K.COMBAT]: { AC: '', 速度: '' },
       [K.PROGRESS]: { xp: '', xpNext: '', inspiration: '无' },
       [K.ABILITY]: abilities.map(() => ''),
       [K.PROF]: {
@@ -1194,6 +1215,41 @@ export function createCardBuilder(spec) {
   }
 
   /**
+   * 被动察觉 = 10 + 察觉检定加值；该检定有优势 +5、劣势 -5。
+   *
+   * 与插件侧一致：只取检定加值的常数部分（骰子项不能静态求值），
+   * 技能自身与其父属性（感知）的优劣势都计入，相反时抵消。
+   */
+  function derivePassivePerception(state) {
+    const raw = deriveCheckValues(state)['察觉'] || ''
+    const matched = /^[+-]?\d+/.exec(raw)
+    if (!matched) return ''
+    let value = 10 + Number(matched[0])
+    const adv = combinedAdvantage(state, '察觉', '感知')
+    if (adv > 0) value += 5
+    else if (adv < 0) value -= 5
+    return String(value)
+  }
+
+  function advantageOf(state, name) {
+    let value = 0
+    for (const row of state[K.EXT] || []) {
+      if (normalizeSkillName(trimOf(row.key)) !== name) continue
+      const adv = trimOf(row.adv)
+      if (adv === '优势') value += 1
+      else if (adv === '劣势') value -= 1
+    }
+    return value
+  }
+
+  function combinedAdvantage(state, skill, parent) {
+    const skillAdv = advantageOf(state, skill)
+    const parentAdv = advantageOf(state, parent)
+    if (skillAdv && parentAdv && skillAdv !== parentAdv) return 0
+    return skillAdv || parentAdv
+  }
+
+  /**
    * 法术豁免 DC / 法术攻击的公式值：8 + 熟练 + 施法属性调整值 /
    * 熟练 + 施法属性调整值。只用于网页端预填，插件只记录卡文本里的数。
    */
@@ -1220,13 +1276,12 @@ export function createCardBuilder(spec) {
 
   function buildCombat(state) {
     const combat = state[K.COMBAT]
-    const derived = deriveInitiative(state)
     const items = []
-    for (const key of ['AC', '先攻', '速度', '被动察觉']) {
-      const value = key === '先攻' ? derived || trimOf(combat[key]) : trimOf(combat[key])
+    // 先攻与被动察觉由骰娘按属性、熟练与额外加值现算，不写入卡文本。
+    for (const key of ['AC', '速度']) {
+      const value = trimOf(combat[key])
       if (!value) continue
-      if (key === '先攻') items.push(`${key}:${normalizeSigned(value, '先攻')}`)
-      else if (key === '速度') items.push(`${key}:${value}`)
+      if (key === '速度') items.push(`${key}:${value}`)
       else items.push(`${key}:${normalizeIntText(value)}`)
     }
     return items.join('; ')
@@ -1235,11 +1290,9 @@ export function createCardBuilder(spec) {
   function buildProgress(state) {
     const progress = state[K.PROGRESS]
     const xp = trimOf(progress.xp)
-    // 等级已知时用规则表；只有单段导入（还没有等级）才保留原卡上的下一级值
-    const next =
-      deriveXpNext(state) || (trimOf(state[K.LEVEL]) ? '' : trimOf(progress.xpNext))
     const items = []
-    if (xp) items.push(`经验:${normalizeIntText(xp)}${next ? `/${normalizeIntText(next)}` : ''}`)
+    // 只写当前经验；下一级经验由骰娘按等级表计算，不再写进命令。
+    if (xp) items.push(`经验:${normalizeIntText(xp)}`)
     if (progress.inspiration === '有' || (xp && progress.inspiration === '无')) {
       items.push(`激励:${progress.inspiration}`)
     }
@@ -1790,8 +1843,14 @@ export function createCardBuilder(spec) {
 
   // ── 导出 ──────────────────────────────────────────────────────────────
 
-  function serializeCard(state, options = {}) {
-    const lines = []
+  /**
+   * 按回写顺序产出非空段块。
+   *
+   * 每个块可能含换行（只有 `$故事$`），因此后续拆整卡时**按块拆**，
+   * 不能按文本行拆，否则故事会被腰斩。
+   */
+  function buildCardBlocks(state, options = {}) {
+    const blocks = []
     for (const key of order) {
       let content = ''
       try {
@@ -1799,23 +1858,118 @@ export function createCardBuilder(spec) {
       } catch {
         content = ''
       }
-      if (content) lines.push(`${key} ${content}`)
+      if (!content) continue
+      blocks.push({
+        key,
+        label: labelOf(key),
+        content,
+        block: `${key} ${content}`,
+      })
     }
-    return lines.join('\n')
+    return blocks
   }
 
-  function buildMinimalCard(state, options = {}) {
-    const lines = []
-    for (const key of [K.NAME, K.LEVEL, K.ABILITY]) {
-      let content = ''
-      try {
-        content = contentFor(state, key, options)
-      } catch {
-        content = ''
-      }
-      if (content) lines.push(`${key} ${content}`)
+  function serializeCard(state, options = {}) {
+    return buildCardBlocks(state, options)
+      .map((item) => item.block)
+      .join('\n')
+  }
+
+  /** 整条 `.角色卡记录` 命令（含命令前缀与换行）及其消息长度。 */
+  function buildWholeCommand(state, options = {}) {
+    const text = `${CARD_COMMAND}\n${serializeCard(state, options)}`
+    return { text, length: messageLength(text) }
+  }
+
+  /**
+   * 按 QQ 单条上限拆整卡。
+   *
+   * - 整卡 ≤ limit：parts 只有一块（label「整卡」）；
+   * - 超过 limit：第 1 部分固定含 `$等级$` 与 `$属性$`，其余段按回写顺序
+   *   贪心装块；后续部分缺等级/属性，由插件按多段合并追加；
+   * - 单个段本身就超过 limit：不拆，返回 tooLarge，让 UI 提示精简该段。
+   */
+  function buildCardParts(state, options = {}, limit = MESSAGE_LIMIT) {
+    const blocks = buildCardBlocks(state, options)
+    const prefix = `${CARD_COMMAND}\n`
+    const prefixLength = messageLength(prefix)
+    if (blocks.length === 0) {
+      return { parts: [], tooLarge: [], limit }
     }
-    return lines.join('\n')
+    const wholeText = prefix + blocks.map((item) => item.block).join('\n')
+    const wholeLength = messageLength(wholeText)
+    if (wholeLength <= limit) {
+      return {
+        parts: [
+          { index: 1, label: '整卡', text: wholeText, length: wholeLength },
+        ],
+        tooLarge: [],
+        limit,
+      }
+    }
+
+    const tooLarge = blocks
+      .filter((item) => messageLength(prefix + item.block) > limit)
+      .map((item) => ({
+        key: item.key,
+        label: item.label,
+        length: messageLength(prefix + item.block),
+      }))
+    if (tooLarge.length > 0) {
+      return { parts: [], tooLarge, limit }
+    }
+
+    const requiredKeys = [K.LEVEL, K.ABILITY]
+    const required = requiredKeys
+      .map((key) => blocks.find((item) => item.key === key))
+      .filter(Boolean)
+    if (required.length !== requiredKeys.length) {
+      return { parts: [], tooLarge: [], limit }
+    }
+    const requiredText =
+      prefix + required.map((item) => item.block).join('\n')
+    if (messageLength(requiredText) > limit) {
+      return {
+        parts: [],
+        tooLarge: [
+          {
+            key: K.LEVEL,
+            label: '等级与属性',
+            length: messageLength(requiredText),
+          },
+        ],
+        limit,
+      }
+    }
+
+    const rest = blocks.filter((item) => !requiredKeys.includes(item.key))
+    const parts = []
+    let current = required.slice()
+    let currentLength = messageLength(requiredText)
+    const flush = () => {
+      if (current.length === 0) return
+      const text = prefix + current.map((item) => item.block).join('\n')
+      parts.push({
+        index: parts.length + 1,
+        label: `第 ${parts.length + 1} 部分`,
+        text,
+        length: messageLength(text),
+      })
+      current = []
+      currentLength = prefixLength
+    }
+    const add = (block) => {
+      const separator = current.length > 0 ? 1 : 0
+      const blockLength = messageLength(block.block)
+      if (current.length > 0 && currentLength + separator + blockLength > limit) {
+        flush()
+      }
+      currentLength += (current.length > 0 ? 1 : 0) + blockLength
+      current.push(block)
+    }
+    for (const block of rest) add(block)
+    flush()
+    return { parts, tooLarge: [], limit }
   }
 
   function buildSegmentCommands(state, options = {}) {
@@ -1834,7 +1988,7 @@ export function createCardBuilder(spec) {
         label: labelOf(key),
         content,
         command,
-        length: charLength(command),
+        length: messageLength(command),
       })
     }
     return commands
@@ -1885,11 +2039,11 @@ export function createCardBuilder(spec) {
       } catch (error) {
         pushError(key, error instanceof Error ? error.message : String(error))
       }
-      const commandLength = charLength(`${CARD_COMMAND} ${key} ${content}`)
-      if (commandLength > SEGMENT_COMMAND_SOFT_LIMIT) {
-        pushWarning(
+      const commandLength = messageLength(`${CARD_COMMAND} ${key} ${content}`)
+      if (commandLength > MESSAGE_LIMIT) {
+        pushError(
           key,
-          `该段命令约 ${commandLength} 字，发送前请确认不超过群消息上限`,
+          `该段命令约 ${commandLength} 字，超过 QQ 单条 ${MESSAGE_LIMIT} 字上限，且无法自动拆分；请精简这一段`,
         )
       }
     }
@@ -1924,21 +2078,31 @@ export function createCardBuilder(spec) {
     }
 
     const cardText = serializeCard(state, options)
-    const length = charLength(cardText)
-    if (length === 0) {
+    const cardLength = charLength(cardText)
+    const commandLength = messageLength(`${CARD_COMMAND}\n${cardText}`)
+    if (cardLength === 0) {
       pushWarning('', '还没有填写任何内容')
-    } else if (length > WHOLE_CARD_SOFT_LIMIT) {
+    } else if (commandLength > MESSAGE_LIMIT) {
       pushWarning(
         '',
-        `整卡约 ${length} 字，较长；若一条消息发不出去，可先用「精简整卡」建卡，再逐条发送分段命令`,
+        `整卡命令约 ${commandLength} 字，超过 QQ 单条 ${MESSAGE_LIMIT} 字上限；导出时会按段自动拆成多个部分，请按顺序复制发送`,
       )
     }
-    return { errors, warnings, text: cardText, length }
+    return {
+      errors,
+      warnings,
+      text: cardText,
+      length: commandLength,
+      cardLength,
+      limit: MESSAGE_LIMIT,
+    }
   }
 
   return {
     spec,
     segments,
+    formOrder,
+    formSegments,
     groups: spec.groups || [],
     order,
     labels: Object.fromEntries(segments.map((segment) => [segment.key, segment.label])),
@@ -1947,17 +2111,21 @@ export function createCardBuilder(spec) {
     parseCardText,
     parseSegment,
     contentFor,
+    buildCardBlocks,
     serializeCard,
-    buildMinimalCard,
+    buildWholeCommand,
+    buildCardParts,
     buildSegmentCommands,
     buildExampleCard,
     validateState,
     charLength,
+    messageLength,
     deriveAbilityModifiers,
     deriveCheckValues,
     deriveProficiencyBonus,
     deriveXpNext,
     deriveInitiative,
+    derivePassivePerception,
     deriveSpellStats,
     backgroundKeysFor,
     subclassLevelFor,

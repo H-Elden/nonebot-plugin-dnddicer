@@ -119,7 +119,10 @@ def test_template_roundtrip() -> None:
     assert parsed.combat_notes == ["法师护甲(8小时)"]
     assert parsed.ability_info.prof_weapons == ["简易武器"]
     assert parsed.coins == {"CP": 0, "SP": 0, "EP": 0, "GP": 13, "PP": 0}
-    assert parsed.progress == {"经验": "6500/14000", "激励": "有"}
+    assert parsed.progress == {"经验": "6500", "激励": "有"}
+    template_text = gen_template_char().get_char_info()
+    assert "先攻:" not in template_text
+    assert "$进度$ 经验:6500;" in template_text
     assert parsed.story.startswith("伊瑟兰出身于银月城的学者世家")
     assert parsed.story.count("\n") == 2
     assert (parsed.spell_dc, parsed.spell_attack) == ("15", "+8")
@@ -128,15 +131,14 @@ def test_template_roundtrip() -> None:
 
 
 def test_combat_validation() -> None:
+    # 先攻与被动察觉由骰娘现算；旧写法可解析但会被忽略，不再写回卡文本。
     combat = parse_combat("AC:18; 先攻:+1; 速度:30尺; 被动察觉:13")
-    assert combat == {"AC": "18", "先攻": "+1", "速度": "30尺", "被动察觉": "13"}
+    assert combat == {"AC": "18", "速度": "30尺"}
     assert parse_combat("ac:18") == {"AC": "18"}
     with pytest.raises(AssertionError, match="战斗条目不完整"):
         parse_combat("力量:18")
     with pytest.raises(AssertionError, match="AC必须是"):
         parse_combat("AC:很高")
-    with pytest.raises(AssertionError, match="先攻加值无效"):
-        parse_combat("先攻:优势")
 
 
 def test_prof_groups_and_check_entries() -> None:
@@ -281,6 +283,31 @@ def test_multi_segment_full_replace_clears_omitted() -> None:
     assert replaced.magic_items == []
 
 
+def test_multi_segment_without_required_merges_for_split_record() -> None:
+    """网页建卡器拆块：后续部分缺等级/属性时按段合并，不清空其他段。"""
+    base = gen_template_char("g", "u")
+    base.portrait = "portraits/g_u.png"
+    merged = _parse(
+        "$姓名$ 李四\n$武器$ 短剑+6,1d6+3穿刺,灵巧\n$战斗记录$ 新记录",
+        existing=base,
+    )
+    assert merged.name == "李四"
+    assert [weapon.name for weapon in merged.weapons] == ["短剑"]
+    assert merged.combat_notes == ["新记录"]
+    # 未提供的段保持原样
+    assert merged.race == base.race
+    assert merged.char_class == base.char_class
+    assert merged.spells == base.spells
+    assert merged.magic_items == base.magic_items
+    assert merged.portrait == "portraits/g_u.png"
+
+
+def test_multi_segment_without_existing_still_requires_level_and_ability() -> None:
+    """没有旧卡时，多段命令仍必须同时带等级与属性。"""
+    with pytest.raises(AssertionError, match="必须设定等级与属性"):
+        _parse("$姓名$ 李四\n$武器$ 短剑+6,1d6+3穿刺")
+
+
 def test_single_segment_without_existing_fails() -> None:
     with pytest.raises(AssertionError, match="必须设定等级与属性"):
         _parse("$姓名$ 李四")
@@ -307,7 +334,7 @@ def test_custom_class_is_accepted() -> None:
 def test_coins_progress_story_parsing() -> None:
     assert parse_coins("cp:0; sp:8; GP:18") == {"CP": 0, "SP": 8, "GP": 18}
     assert parse_progress("经验:6500/14000; 激励:有") == {
-        "经验": "6500/14000",
+        "经验": "6500",
         "激励": "有",
     }
     assert parse_progress("经验:500; 激励:无") == {"经验": "500", "激励": "无"}
@@ -400,7 +427,7 @@ def test_single_segment_merge_new_segments() -> None:
         "$故事$ 第一段\n第二段", existing=base
     ).story == "第一段\n第二段"
     assert _parse("$进度$ 经验:1/2; 激励:无", existing=base).progress == {
-        "经验": "1/2",
+        "经验": "1",
         "激励": "无",
     }
 

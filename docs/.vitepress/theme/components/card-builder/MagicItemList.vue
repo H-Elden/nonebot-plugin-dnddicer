@@ -21,7 +21,10 @@
         </label>
       </div>
       <label class="cb-grid__cell">
-        <span class="cb-grid__label">说明（空行分段，最多 {{ limits.magic_item_paragraph_max || 5 }} 段）</span>
+        <span class="cb-grid__label">
+          说明
+          <HintDot text="空行分段，最多 5 段；卡面会单独显示名称、标签与说明段落。" />
+        </span>
         <textarea
           v-model="item.text"
           class="cb-textarea"
@@ -31,13 +34,11 @@
       </label>
     </template>
   </RepeaterRows>
-  <p class="cb-hint">
-    魔法物品不放进「物品」；卡面会单独显示名称、标签与说明段落。说明里的空行等于分段，不用手写 //。
-  </p>
 </template>
 
 <script setup>
 import { K } from '../../card-builder/core.mjs'
+import HintDot from './HintDot.vue'
 import RepeaterRows from './RepeaterRows.vue'
 
 // $魔法物品$：名称 + 标签 + 多段说明（空行分段，导出时转成 //）。
