@@ -29,7 +29,7 @@
         v-model="importText"
         class="cb-textarea"
         rows="8"
-        placeholder=".角色卡记录&#10;$姓名$ 张三&#10;$等级$ 5&#10;$属性$ 8/15/16/18/10/8"
+        placeholder=".角色卡记录&#10;$姓名$ 伊瑟兰·晨星&#10;$等级$ 5&#10;$属性$ 8/14/16/18/11/8"
       ></textarea>
       <div class="cb-inline cb-inline--top">
         <button type="button" class="cb-btn cb-btn--primary" @click="doImport">解析并填入</button>
@@ -98,7 +98,7 @@
               :placeholder="placeholder(segment)"
             ></textarea>
             <p class="cb-hint">
-              {{ storyLength }} / {{ limits.story_max_len || 300 }} 字；换行会在导出时自动合并（卡面是单行文本）。
+              {{ storyLength }} / {{ limits.story_max_len || 1000 }} 字（换行不计）；可多行、多段，换行会保留。
             </p>
           </template>
 
@@ -174,27 +174,7 @@
             v-else-if="kindOf(segment.key) === 'ability'"
             :state="state"
             :abilities="abilities"
-            mode="ability"
-          />
-
-          <AbilityGroupEditor
-            v-else-if="kindOf(segment.key) === 'display'"
-            :state="state"
-            :abilities="abilities"
-            mode="display"
-          />
-
-          <AbilityGroupEditor
-            v-else-if="kindOf(segment.key) === 'saves'"
-            :state="state"
-            :abilities="abilities"
-            mode="saves"
-          />
-
-          <SkillEditor
-            v-else-if="kindOf(segment.key) === 'skills'"
-            :state="state"
-            :skills="skills"
+            :modifiers="abilityModifiers"
           />
 
           <ProficiencyEditor
@@ -203,6 +183,7 @@
             :enums="enums"
             :abilities="abilities"
             :skills="skills"
+            :values="checkValues"
           />
 
           <RepeaterRows
@@ -427,7 +408,6 @@ import ItemList from './card-builder/ItemList.vue'
 import NamedList from './card-builder/NamedList.vue'
 import ProficiencyEditor from './card-builder/ProficiencyEditor.vue'
 import RepeaterRows from './card-builder/RepeaterRows.vue'
-import SkillEditor from './card-builder/SkillEditor.vue'
 import SlotList from './card-builder/SlotList.vue'
 import SpellList from './card-builder/SpellList.vue'
 import WeaponList from './card-builder/WeaponList.vue'
@@ -452,7 +432,11 @@ const minimalCommand = computed(() => `${CARD_COMMAND}\n${builder.buildMinimalCa
 const canCopy = computed(
   () => validation.value.errors.length === 0 && validation.value.text.length > 0,
 )
-const storyLength = computed(() => Array.from(state[K.STORY] || '').length)
+const storyLength = computed(() =>
+  Array.from((state[K.STORY] || '').replace(/\n/g, '')).length,
+)
+const abilityModifiers = computed(() => builder.deriveAbilityModifiers(state))
+const checkValues = computed(() => builder.deriveCheckValues(state))
 
 const errorsByKey = computed(() => {
   const map = {}
@@ -552,7 +536,7 @@ function loadExample() {
     return
   }
   applyState(parsed.state)
-  showNotice('已载入示例卡（5 级法师），可以直接改；也可以从「导入卡文本」粘自己的卡。')
+  showNotice('已载入示例卡（5 级高等精灵法师），可以直接改；也可以从「导入卡文本」粘自己的卡。')
 }
 
 function doImport() {

@@ -24,7 +24,6 @@ from .constants import (
     BACKGROUND_MAX_COUNT,
     BACKGROUND_VALUE_MAX_LEN,
     CHAR_INFO_KEY_ABILITY,
-    CHAR_INFO_KEY_ABILITY_DISPLAY,
     CHAR_INFO_KEY_BACKGROUND,
     CHAR_INFO_KEY_CLASS,
     CHAR_INFO_KEY_COINS,
@@ -42,8 +41,6 @@ from .constants import (
     CHAR_INFO_KEY_PROF,
     CHAR_INFO_KEY_PROGRESS,
     CHAR_INFO_KEY_RACE,
-    CHAR_INFO_KEY_SAVES,
-    CHAR_INFO_KEY_SKILLS,
     CHAR_INFO_KEY_SPELL,
     CHAR_INFO_KEY_SPELL_SLOTS,
     CHAR_INFO_KEY_STORY,
@@ -76,6 +73,7 @@ from .constants import (
     ITEM_MAX_COUNT,
     ITEM_NAME_MAX_LEN,
     ITEM_QUANTITY_MAX,
+    LEGACY_CHAR_INFO_KEY_LIST,
     PREPARED_CASTERS_2014,
     PROFICIENCY_GROUP_ITEM_MAX,
     PROFICIENCY_GROUP_ITEM_MAX_LEN,
@@ -134,15 +132,18 @@ def parse_template_to_dict(input_str: str) -> Dict[str, str]:
     """把角色卡模板文本（``$关键字$ 内容``）拆成 {关键字: 内容} 字典。
 
     ``$`` 为段落分隔符，内容中不应再出现 ``$``；未知关键字静默跳过。
+    旧卡里的 ``$属性值$`` / ``$豁免$`` / ``$技能$`` 仍会被识别（便于整卡
+    重录时静默忽略），但它们已不再输出、也不接受单独录入。
     """
+    known_keys = set(CHAR_INFO_KEY_LIST) | set(LEGACY_CHAR_INFO_KEY_LIST)
     result: Dict[str, str] = {}
     parts = input_str.split("$")
     for index in range(len(parts) - 1):
         key = f"${parts[index]}$"
-        if key not in CHAR_INFO_KEY_LIST:
+        if key not in known_keys:
             continue
         content = parts[index + 1].strip()
-        if content and content not in CHAR_INFO_KEY_LIST:
+        if content and content not in known_keys:
             result[key] = content
     return result
 
@@ -706,11 +707,15 @@ def parse_spell_slots(content: str) -> SpellSlots:
 # ── 完整卡面扩展段（2026-10-21）────────────────────────────────────────
 
 
-def _ensure_no_dollar(content: str, label: str) -> None:
-    """卡面段内容不得含 ``$``（模板解析按它分段）或换行（一条段占一行）。"""
+def _ensure_no_dollar(content: str, label: str, *, allow_newline: bool = False) -> None:
+    """卡面段内容不得含 ``$``（模板解析按它分段）；默认也不得换行。
+
+    ``allow_newline=True`` 只给 ``$故事$`` 使用：故事可以多行多段，其余段
+    仍保持「一段一行」，避免与模板关键字切分混淆。
+    """
     if "$" in content:
         raise AssertionError(f"{label}内容不能包含符号「$」")
-    if "\n" in content or "\r" in content:
+    if not allow_newline and ("\n" in content or "\r" in content):
         raise AssertionError(f"{label}内容不能换行，多条请用分号分隔")
 
 
@@ -778,48 +783,6 @@ def _parse_signed_bonus(value: str, label: str) -> str:
     return f"{number:+d}"
 
 
-def parse_ability_display(content: str) -> Dict[str, str]:
-    """解析 ``$属性值$`` 段为 ``{属性名: "值/调整值"}``。
-
-    六属性必须写全、各出现一次；值 1~30、调整值 -10~+10。本段只用于展示，
-    骰娘不会拿它参与检定计算。
-    """
-    _ensure_no_dollar(content, "属性值")
-    result: Dict[str, str] = {}
-    for item in _split_semicolon_items(content):
-        normalized = _normalize_colon(item)
-        name, separator, value = normalized.partition(":")
-        ability = name.strip()
-        if not separator or ability not in ABILITY_LIST:
-            raise AssertionError(
-                f"属性值条目不完整: {item}"
-                "（示例：力量:18/+4，六属性各一条）"
-            )
-        if ability in result:
-            raise AssertionError(f"属性值重复: {ability}")
-        parts = [part.strip() for part in value.split("/")]
-        if len(parts) != 2:
-            raise AssertionError(
-                f"属性值格式错误: {item}（示例：力量:18/+4）"
-            )
-        try:
-            score = int(parts[0])
-            modifier = int(parts[1].replace("＋", "+").replace("－", "-"))
-        except ValueError:
-            raise AssertionError(f"属性值格式错误: {item}（示例：力量:18/+4）")
-        if not 1 <= score <= 30:
-            raise AssertionError(f"属性值超出范围: {item}（1~30）")
-        if not -10 <= modifier <= 10:
-            raise AssertionError(f"属性调整值超出范围: {item}（-10~+10）")
-        result[ability] = f"{score}/{modifier:+d}"
-    missing = [name for name in ABILITY_LIST if name not in result]
-    if missing:
-        raise AssertionError(
-            "属性值段必须写全六项属性，缺少: " + "/".join(missing)
-        )
-    return result
-
-
 def parse_combat(content: str) -> Dict[str, str]:
     """解析 ``$战斗$`` 段为固定键字典（AC / 先攻 / 速度 / 被动察觉）。"""
     _ensure_no_dollar(content, "战斗")
@@ -849,50 +812,6 @@ def parse_combat(content: str) -> Dict[str, str]:
             if not value.isdigit() or not 0 <= int(value) <= 99:
                 raise AssertionError(f"{key}必须是 0~99 的整数: {value}")
         result[key] = value
-    return result
-
-
-def parse_saves(content: str) -> Dict[str, str]:
-    """解析 ``$豁免$`` 段为 ``{属性名: "+N"}``（只写有值的项）。"""
-    _ensure_no_dollar(content, "豁免")
-    result: Dict[str, str] = {}
-    for item in _split_semicolon_items(content):
-        normalized = _normalize_colon(item)
-        name, separator, value = normalized.partition(":")
-        raw_name = name.strip()
-        if raw_name.endswith("豁免"):
-            raw_name = raw_name[:-2]
-        if not separator or raw_name not in ABILITY_LIST:
-            raise AssertionError(
-                f"豁免条目不完整: {item}（示例：力量:+7，只写有值的属性）"
-            )
-        if raw_name in result:
-            raise AssertionError(f"豁免重复: {raw_name}")
-        result[raw_name] = _parse_signed_bonus(value, f"{raw_name}豁免")
-    return result
-
-
-def parse_skills(content: str) -> Dict[str, str]:
-    """解析 ``$技能$`` 段为 ``{技能名: "+N"}``，尾部 ``*`` 表示专精。"""
-    _ensure_no_dollar(content, "技能")
-    result: Dict[str, str] = {}
-    for item in _split_semicolon_items(content):
-        normalized = _normalize_colon(item)
-        name, separator, value = normalized.partition(":")
-        skill = _normalize_name(name.strip())
-        if not separator or skill not in SKILL_LIST:
-            raise AssertionError(
-                f"技能条目不完整: {item}（示例：运动:+7；只写有值的技能）"
-            )
-        if skill in result:
-            raise AssertionError(f"技能重复: {skill}")
-        raw_value = value.strip()
-        expertise = raw_value.endswith(("*", "＊"))
-        if expertise:
-            raw_value = raw_value[:-1].strip()
-        result[skill] = _parse_signed_bonus(raw_value, f"{skill}技能") + (
-            "*" if expertise else ""
-        )
     return result
 
 
@@ -1045,14 +964,25 @@ def parse_combat_notes(content: str) -> List[str]:
     return result
 
 
+def _story_char_count(text: str) -> int:
+    """故事字数：按码点计，换行不计（与网页建卡器的计数口径一致）。"""
+    return sum(1 for char in text if char not in "\r\n")
+
+
 def parse_story(content: str) -> str:
-    """解析 ``$故事$`` 段（单行长文本，1~300 字）。"""
-    _ensure_no_dollar(content, "故事")
-    text = content.strip()
+    """解析 ``$故事$`` 段（可多行多段，1~1000 字；换行不计入字数）。
+
+    换行会原样保留，便于写多个段落；``$`` 仍不可出现（模板按它切段）。
+    """
+    _ensure_no_dollar(content, "故事", allow_newline=True)
+    text = content.replace("\r\n", "\n").replace("\r", "\n")
+    lines = [line.rstrip() for line in text.split("\n")]
+    text = "\n".join(lines).strip()
     if not text:
         raise AssertionError("故事内容不能为空")
-    if len(text) > STORY_MAX_LEN:
-        raise AssertionError(f"故事内容过长（≤{STORY_MAX_LEN} 字）")
+    count = _story_char_count(text)
+    if count > STORY_MAX_LEN:
+        raise AssertionError(f"故事内容过长（≤{STORY_MAX_LEN} 字，换行不计）")
     return text
 
 
@@ -1448,8 +1378,18 @@ class CharacterService:
         带两个及以上段时按整卡覆盖。无 ``existing`` 时行为与旧版一致。
         """
         data = parse_template_to_dict(input_str)
+        # 属性值 / 豁免 / 技能自 2026-10-22 起由骰娘自动计算：旧卡整卡重录时
+        # 静默忽略这三段；若只发了这三段，给出明确提示而不是「角色卡已设置」。
+        if data and all(key in LEGACY_CHAR_INFO_KEY_LIST for key in data):
+            raise AssertionError(
+                "属性值、豁免与技能由骰娘按属性、等级与熟练自动计算，无需记录"
+            )
         if existing is not None and len(data) == 1:
             key, content = next(iter(data.items()))
+            if key in LEGACY_CHAR_INFO_KEY_LIST:
+                raise AssertionError(
+                    "属性值、豁免与技能由骰娘按属性、等级与熟练自动计算，无需记录"
+                )
             return CharacterService._merge_single_segment(
                 existing, key, content, reserved_names
             )
@@ -1556,9 +1496,6 @@ class CharacterService:
         # ── 完整卡面扩展段（2026-10-21，全部可选）──
         background_str = data.get(CHAR_INFO_KEY_BACKGROUND, "").strip()
         combat_str = data.get(CHAR_INFO_KEY_COMBAT, "").strip()
-        display_str = data.get(CHAR_INFO_KEY_ABILITY_DISPLAY, "").strip()
-        saves_str = data.get(CHAR_INFO_KEY_SAVES, "").strip()
-        skills_str = data.get(CHAR_INFO_KEY_SKILLS, "").strip()
         feats_str = data.get(CHAR_INFO_KEY_FEATS, "").strip()
         traits_str = data.get(CHAR_INFO_KEY_TRAITS, "").strip()
         items_str = data.get(CHAR_INFO_KEY_ITEMS, "").strip()
@@ -1568,9 +1505,6 @@ class CharacterService:
         coins_str = data.get(CHAR_INFO_KEY_COINS, "").strip()
         background = parse_background(background_str) if background_str else {}
         combat = parse_combat(combat_str) if combat_str else {}
-        ability_display = parse_ability_display(display_str) if display_str else {}
-        saves = parse_saves(saves_str) if saves_str else {}
-        skills = parse_skills(skills_str) if skills_str else {}
         feats = parse_feats(feats_str) if feats_str else []
         traits = parse_traits(traits_str) if traits_str else []
         items = parse_items(items_str) if items_str else []
@@ -1596,10 +1530,7 @@ class CharacterService:
             spell_dc=spell_dc,
             spell_attack=spell_attack,
             portrait=existing.portrait if existing is not None else "",
-            ability_display=ability_display,
             combat=combat,
-            saves=saves,
-            skills=skills,
             feats=feats,
             traits=traits,
             items=items,
@@ -1615,45 +1546,48 @@ class CharacterService:
 def gen_template_char(group_id: str = "", user_id: str = "") -> DNDCharacter:
     """生成一张示例角色卡（供 .角色卡模板 输出展示）。
 
-    示例为 5 级法师：数值与 [2024 玩家手册] 示例一致（智力 18、熟练 +3），
-    覆盖新增的 ``$能力$`` / ``$法术$`` / ``$法术位$`` 三段。
+    示例为按 2024 规则完整建立的 5 级高等精灵法师（塑能师）：
+    27 点购点、智者背景（+2 智力 / +1 体质）、4 级属性提升（+1 智力 / +1 感知），
+    覆盖 ``$能力$`` / ``$法术$`` / ``$法术位$`` 与完整卡面各段。
     """
-    character = DNDCharacter(group_id=group_id, user_id=user_id, name="张三", is_init=True)
+    character = DNDCharacter(
+        group_id=group_id, user_id=user_id, name="伊瑟兰·晨星", is_init=True
+    )
     character.race = "高等精灵"
     character.char_class = "法师"
     character.subclass = "塑能师"
     character.hp_info.initialize(
-        hp_cur=29,
+        hp_cur=37,
         hp_max=37,
-        hp_temp=5,
+        hp_temp=0,
         hp_dice_type=6,
         hp_dice_num=5,
         hp_dice_max=5,
     )
     character.ability_info.is_init = True
     character.ability_info.level = 5
-    character.ability_info.ability = [8, 15, 16, 18, 10, 8]
-    for name in ("智力豁免", "感知豁免", "历史", "调查", "宗教", "察觉"):
+    character.ability_info.ability = [8, 14, 16, 18, 11, 8]
+    for name in ("奥秘", "历史", "洞悉", "察觉", "智力豁免", "感知豁免"):
         character.ability_info.check_prof[CHECK_ITEM_INDEX_DICT[name]] = 1
-    character.ability_info.check_prof[CHECK_ITEM_INDEX_DICT["奥秘"]] = 2
-    character.ability_info.check_ext[EXT_ITEM_INDEX_DICT[SAVING_ALL_KEY]] = "+2"
-    # 示例武器与卡自洽：匕首命中 +5 = 敏捷调整 +2 + 熟练 +3（5 级）；伤害 1d4+2
+    character.ability_info.check_prof[CHECK_ITEM_INDEX_DICT["调查"]] = 2
+    # 命中与伤害与卡自洽：法术攻击 +7 = 智力 +4 + 熟练 +3；匕首 +5 = 敏捷 +2 + 熟练 +3；
+    # 长棍 +2 = 力量 -1 + 熟练 +3。
     character.weapons = [
         WeaponInfo(
             name="火焰箭", attack_bonus="+7", damage_expr="2d10",
             damage_type="火焰", note="法术攻击 · 120尺",
         ),
         WeaponInfo(
+            name="冷冻射线", attack_bonus="+7", damage_expr="2d8",
+            damage_type="寒冷", note="法术攻击 · 60尺 · 速度-10",
+        ),
+        WeaponInfo(
             name="匕首", attack_bonus="+5", damage_expr="1d4+2",
             damage_type="穿刺", note="灵巧 · 轻型",
         ),
         WeaponInfo(
-            name="法杖", attack_bonus="+5", damage_expr="1d6+2",
-            damage_type="钝击", note="奥术法器",
-        ),
-        WeaponInfo(
-            name="轻弩", attack_bonus="+5", damage_expr="1d8+2",
-            damage_type="穿刺", note="双手 · 80-320尺",
+            name="长棍", attack_bonus="+2", damage_expr="1d6-1",
+            damage_type="钝击", note="奥术法器 · 两用(1d8)",
         ),
     ]
     character.features = [
@@ -1662,7 +1596,14 @@ def gen_template_char(group_id: str = "", user_id: str = "") -> DNDCharacter:
             uses_cur=1,
             uses_max=1,
             recover="短休",
-            text="短休时回复一个已消耗的法术位，环阶不超过 3 环",
+            text="短休时恢复总环阶不超过 3 的法术位（6 环以下），长休前一次",
+        ),
+        CharacterFeature(
+            name="魔法学徒",
+            uses_cur=1,
+            uses_max=1,
+            recover="长休",
+            text="无需法术位施展一次护盾术，长休恢复",
         ),
     ]
     character.spellcasting_ability = "智力"
@@ -1670,93 +1611,141 @@ def gen_template_char(group_id: str = "", user_id: str = "") -> DNDCharacter:
     character.spell_attack = "+7"
     character.spells = [
         SpellEntry(
-            name="火焰箭", level=0, prepared=True,
-            cast_time="1动作", range="120尺", note="2d10 火焰 / 敏捷",
+            name="火焰箭", level=0,
+            cast_time="1动作", range="120尺", note="2d10 火焰 / 法术攻击",
         ),
         SpellEntry(
-            name="魔法飞弹", level=1, prepared=True,
-            cast_time="1动作", range="120尺", note="3d4+3 力场",
+            name="冷冻射线", level=0,
+            cast_time="1动作", range="60尺", note="2d8 寒冷 / 速度-10",
+        ),
+        SpellEntry(
+            name="法师之手", level=0,
+            cast_time="1动作", range="30尺", note="操控物件 / 1分钟",
+        ),
+        SpellEntry(
+            name="次级幻象", level=0,
+            cast_time="1动作", range="30尺", material=True,
+            note="声音或影像 / 1分钟",
+        ),
+        SpellEntry(
+            name="魔法伎俩", level=0,
+            cast_time="1动作", range="10尺", note="无害小魔法 / 至多1小时",
+        ),
+        SpellEntry(
+            name="光亮术", level=0,
+            cast_time="1动作", range="触碰", material=True,
+            note="20尺明亮光照 / 1小时",
+        ),
+        SpellEntry(
+            name="心灵之楔", level=0,
+            cast_time="1动作", range="60尺", note="2d6 心灵 / 智力豁免",
         ),
         SpellEntry(
             name="护盾术", level=1, prepared=True,
-            cast_time="1反应", range="自身", note="+5 AC / 1轮",
+            cast_time="1反应", range="自身", note="+5 AC / 1轮 / 学徒免位1次",
         ),
         SpellEntry(
-            name="云雾术", level=1,
-            cast_time="1动作", range="120尺",
-            concentration=True, material=True, note="20尺半径 / 专注",
+            name="魔法飞弹", level=1, prepared=True,
+            cast_time="1动作", range="120尺", note="3d4+3 力场 / 升环+1飞镖",
         ),
         SpellEntry(
-            name="侦测魔法", level=1,
-            cast_time="1动作", range="30尺",
-            concentration=True, ritual=True, note="专注 / 仪式",
+            name="法师护甲", level=1, prepared=True,
+            cast_time="1动作", range="触碰", material=True,
+            note="AC 13+敏捷 / 8小时",
+        ),
+        SpellEntry(
+            name="侦测魔法", level=1, prepared=True,
+            cast_time="1动作或仪式", range="自身",
+            concentration=True, ritual=True, note="30尺灵光 / 血系免位1次",
+        ),
+        SpellEntry(
+            name="羽落术", level=1, prepared=True,
+            cast_time="1反应", range="60尺", material=True,
+            note="至多5个生物 / 1分钟",
+        ),
+        SpellEntry(
+            name="迷踪步", level=2, prepared=True,
+            cast_time="1附赠动作", range="自身", note="传送30尺 / 血系免位1次",
+        ),
+        SpellEntry(
+            name="蛛网术", level=2, prepared=True,
+            cast_time="1动作", range="60尺", concentration=True, material=True,
+            note="20尺立方 / 束缚",
         ),
         SpellEntry(
             name="镜影术", level=2, prepared=True,
-            cast_time="1动作", range="自身", note="3个镜像 / 1分钟",
+            cast_time="1动作", range="自身", note="3个分身 / 1分钟",
         ),
         SpellEntry(
             name="火球术", level=3, prepared=True,
-            cast_time="1动作", range="150尺", material=True, note="8d6 火焰 / 敏捷",
+            cast_time="1动作", range="150尺", material=True,
+            note="20尺半径 / 8d6 火焰 / 敏捷",
         ),
         SpellEntry(
-            name="闪电束", level=3,
-            cast_time="1动作", range="100尺", material=True, note="8d6 闪电 / 敏捷",
+            name="闪电束", level=3, prepared=True,
+            cast_time="1动作", range="自身", material=True,
+            note="100尺线 / 8d6 闪电 / 敏捷",
+        ),
+        SpellEntry(
+            name="法术反制", level=3, prepared=True,
+            cast_time="1反应", range="60尺", note="体质豁免 / 打断施法",
+        ),
+        SpellEntry(
+            name="加速术", level=3, prepared=True,
+            cast_time="1动作", range="30尺", concentration=True, material=True,
+            note="速度翻倍 / +2 AC / 额外动作",
         ),
     ]
     character.spell_slots = SpellSlots(
-        slots_cur=[3, 2, 1, 0, 0, 0, 0, 0, 0],
+        slots_cur=[4, 3, 2, 0, 0, 0, 0, 0, 0],
         slots_max=[4, 3, 2, 0, 0, 0, 0, 0, 0],
     )
-    # 完整卡面示例（2026-10-21）：全部手填，数值与上面的属性/熟练自洽
-    character.ability_display = {
-        "力量": "8/-1", "敏捷": "15/+2", "体质": "16/+3",
-        "智力": "18/+4", "感知": "10/+0", "魅力": "8/-1",
-    }
     character.combat = {
         "AC": "15", "先攻": "+2", "速度": "30", "被动察觉": "13",
     }
-    character.saves = {
-        "力量": "+1", "敏捷": "+4", "体质": "+5",
-        "智力": "+9", "感知": "+5", "魅力": "+1",
-    }
-    character.skills = {
-        "运动": "-1", "体操": "+2", "巧手": "+2", "隐匿": "+2", "先攻": "+2",
-        "奥秘": "+10*", "历史": "+7", "调查": "+7", "自然": "+4", "宗教": "+7",
-        "驯兽": "+0", "洞悉": "+0", "医药": "+0", "察觉": "+3", "求生": "+0",
-        "欺瞒": "-1", "威吓": "-1", "表演": "-1", "游说": "-1",
-    }
     character.ability_info.prof_armor = []
-    character.ability_info.prof_weapons = ["匕首", "法杖", "轻弩"]
+    character.ability_info.prof_weapons = ["匕首", "长棍"]
     character.ability_info.prof_tools = ["书法工具"]
-    character.ability_info.prof_languages = ["通用语", "精灵语"]
-    character.feats = ["战法师:专注豁免具有优势；可借机施法"]
+    character.ability_info.prof_languages = ["通用语", "精灵语", "龙语"]
+    character.feats = [
+        "魔法学徒（法师）:习得光亮术、心灵之楔与护盾术；护盾术可免法术位施展一次，长休恢复",
+        "属性值提升:智力 +1、感知 +1",
+    ]
     character.traits = [
         "黑暗视觉（种族）:60 尺内微光视为明亮，黑暗视为微光",
-        "妖精血统（种族）:对抗魅惑的豁免具有优势，魔法无法使你入睡",
-        "出神（种族）:长休只需 4 小时，期间保持清醒",
+        "妖精血统（种族）:进行避免或结束魅惑状态的豁免时具有优势",
+        "敏锐感官（种族）:获得察觉熟练",
+        "出神（种族）:无需睡眠，魔法无法使你入睡；4 小时即可完成长休并保持清醒",
+        "高等精灵血系（种族）:习得魔法伎俩；3 级习得侦测魔法、5 级习得迷踪步，"
+        "始终准备，各可免法术位施展一次，长休恢复",
+        "仪式学家（法师）:法术书中的仪式法术可直接以仪式施展，无需准备",
+        "学者（法师）:获得调查专精",
+        "塑能学者（法师）:法术书免费加入燃烧之手、粉碎音波与火球术",
+        "强力戏法（塑能师）:伤害戏法攻击失手或目标豁免成功时，仍受一半伤害",
+        "记忆法术（法师）:短休时可研究法术书，替换一道已准备的一环及以上法术",
     ]
     character.items = [
-        "法术书x1[装备]", "治疗药水x2", "背包x1[装备]", "绳索50尺x1",
-        "火把x5", "羊皮纸x10", "墨水笔x1", "施法材料包x1[装备]",
-        "旅行者服装x1[装备]",
+        "法术书x1[装备]", "长棍x1[装备]", "匕首x2[装备]", "长袍x1[装备]",
+        "学者套组x1", "书法工具x1", "书籍（历史）x1", "羊皮纸x8",
+        "治疗药水x1",
     ]
     character.background = {
-        "背景": "贤者", "阵营": "中立善良", "信仰": "密斯特拉", "体型": "中型",
+        "背景": "智者", "阵营": "中立善良", "信仰": "密斯特拉", "体型": "中型",
         "年龄": "132", "外貌": "银发绿眼，深蓝法袍",
         "个性": "喜欢追问原理", "理想": "知识应当被分享",
         "羁绊": "导师的笔记", "缺点": "说话太直",
     }
     character.progress = {"经验": "6500/14000", "激励": "有"}
-    character.coins = {"CP": 0, "SP": 8, "EP": 0, "GP": 18, "PP": 0}
+    character.coins = {"CP": 0, "SP": 0, "EP": 0, "GP": 13, "PP": 0}
     character.story = (
-        "张三出身于银月城的学者世家，少年时在塔中抄录古籍，一次偶然的星象记录"
-        "让他看见奥术网络背后的裂隙。此后他离开书斋，以旅行者的身份追查那些被"
-        "刻意抹去的法术痕迹；他相信知识应当被分享，但也清楚有些门一旦打开就"
-        "再难关上。如今他随商队来到边境，既是为了寻找失落的抄本，也是为了证明"
-        "自己不只是导师笔记里的一个名字。"
+        "伊瑟兰出身于银月城的学者世家，少年时在塔中抄录古籍，一次偶然的星象记录"
+        "让伊瑟兰看见奥术网络背后的裂隙。\n"
+        "此后伊瑟兰离开书斋，以旅行者的身份追查那些被刻意抹去的法术痕迹；相信"
+        "知识应当被分享，但也清楚有些门一旦打开就再难关上。\n"
+        "如今伊瑟兰随商队来到边境，既是为了寻找失落的抄本，也是为了证明自己不只是"
+        "导师笔记里的一个名字。"
     )
-    character.combat_notes = ["法师护甲(8小时)", "专注:飞行术"]
+    character.combat_notes = ["法师护甲(8小时)"]
     return character
 
 

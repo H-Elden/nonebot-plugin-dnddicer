@@ -229,8 +229,8 @@ def test_template_contains_new_segments_and_roundtrips():
     """模板覆盖能力/法术/法术位三段，且可再次解析回同一份记录。"""
     text = gen_template_char().get_char_info()
     assert "$能力$ 奥术回想:1/1短休|" in text
-    assert "$法术$ 施法属性:智力; 豁免DC:15; 法术攻击:+7; 火焰箭:0*|" in text
-    assert "$法术位$ 1:3/4; 2:2/3; 3:1/2" in text
+    assert "$法术$ 施法属性:智力; 豁免DC:15; 法术攻击:+7; 火焰箭:0|" in text
+    assert "$法术位$ 1:4/4; 2:3/3; 3:2/2" in text
 
     char = CharacterService.parse(text, "g", "u")
     assert char.char_class == "法师"
@@ -242,7 +242,7 @@ def test_template_contains_new_segments_and_roundtrips():
     assert by_name["火球术"].prepared is True
     assert by_name["火球术"].cast_time == "1动作"
     assert by_name["火球术"].material is True
-    assert char.spell_slots.get_char_info() == "$法术位$ 1:3/4; 2:2/3; 3:1/2"
+    assert char.spell_slots.get_char_info() == "$法术位$ 1:4/4; 2:3/3; 3:2/2"
 
 
 def test_full_card_parse_with_new_segments():

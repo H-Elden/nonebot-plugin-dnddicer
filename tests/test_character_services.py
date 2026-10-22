@@ -160,4 +160,4 @@ def test_template_char_is_recordable():
     text = template_char.get_char_info()
     char = CharacterService.parse(text, "g2", "u2")
     assert char.is_init
-    assert char.name == "张三"
+    assert char.name == "伊瑟兰·晨星"

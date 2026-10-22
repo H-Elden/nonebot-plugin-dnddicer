@@ -2,8 +2,9 @@
 
 把 ``DNDCharacter`` 转成单页高密度卡面所需的页眉、六属性卡、面板与法术区：
 
-- 只做展示整理，不按规则重算：AC / 先攻 / 豁免 / 技能等仍以卡面手填值为准
-  （2026-10-21 卡图批次口径），唯一例外是熟练加值按等级公式计算（拍板④）；
+- 六属性卡、豁免与技能由 ``AbilityInfo`` 按「属性调整值 + 熟练加值 + 额外加值」
+  现算（2026-10-22 起），不再读手填的展示值；AC / 先攻 / 速度 / 被动察觉
+  仍以 ``$战斗$`` 手填值为准；
 - 空段不输出（低等级角色没有物品/法术时不画空面板）；
 - 立绘字节在这里转 data URI，渲染过程不读文件、不发网络请求；
 - 标记位用布尔值交给模板渲染（方块 / 星星 / 准备圆点），视图不拼 HTML。
@@ -23,7 +24,6 @@ from typing import Optional, Tuple
 from .constants import (
     ABILITY_LIST,
     BACKGROUND_KEY_LIST,
-    CHECK_ITEM_INDEX_DICT,
     COIN_KEY_LIST,
     COMBAT_KEY_LIST,
     SKILL_LIST,
@@ -103,6 +103,7 @@ class SpellView:
 
     name: str
     prepared: bool
+    is_cantrip: bool = False
     time: str = ""
     range: str = ""
     concentration: bool = False
@@ -176,6 +177,7 @@ class CharacterCardView:
     coins: Tuple[CoinView, ...] = ()
     background_rows: Tuple[BackgroundRow, ...] = ()
     story: str = ""
+    story_lines: Tuple[str, ...] = ()
     spellcasting: str = "—"
     spell_dc: str = ""
     spell_attack: str = ""
@@ -293,60 +295,58 @@ def _death_state(character: DNDCharacter) -> str:
 
 
 def _skill_views(character: DNDCharacter, ability: str) -> Tuple[SkillView, ...]:
-    """某属性下的技能（只画已填条目；先攻归页眉，不重复）。"""
-    prof = character.ability_info.check_prof
+    """某属性下的全部技能（含未熟练；先攻归页眉，不重复）。
+
+    数值由 ``AbilityInfo.get_check_display`` 按属性调整值、熟练与额外加值
+    现算；熟练框看 ``check_prof``，专精星看系数是否 ≥2。
+    """
+    info = character.ability_info
+    if not info.is_init:
+        return ()
     rows = []
     for skill in SKILL_LIST:
         if skill == "先攻" or SKILL_PARENT_DICT.get(skill) != ability:
             continue
-        raw = character.skills.get(skill, "").strip()
-        if not raw:
-            continue
-        expertise = raw.endswith(("*", "＊"))
-        value = raw.rstrip("*＊").strip() if expertise else raw
-        scale = prof[CHECK_ITEM_INDEX_DICT[skill]]
-        expertise = expertise or scale >= 2
-        proficient = expertise or scale >= 1
+        scale = info.get_check_scale(skill)
         rows.append(
             SkillView(
                 name=skill,
-                value=value,
-                proficient=proficient,
-                expertise=expertise,
+                value=info.get_check_display(skill),
+                proficient=scale >= 1,
+                expertise=scale >= 2,
             )
         )
     return tuple(rows)
 
 
 def _save_view(character: DNDCharacter, ability: str) -> Optional[SaveView]:
-    """某属性的豁免行：有值或有熟练才画。"""
-    value = character.saves.get(ability, "").strip()
-    scale = character.ability_info.check_prof[
-        CHECK_ITEM_INDEX_DICT[f"{ability}豁免"]
-    ]
-    if not value and scale <= 0:
+    """某属性的豁免行：值由属性调整值、熟练与额外加值现算。"""
+    info = character.ability_info
+    if not info.is_init:
         return None
-    return SaveView(label="豁免", value=value or "—", proficient=scale > 0)
+    save_name = f"{ability}豁免"
+    return SaveView(
+        label="豁免",
+        value=info.get_check_display(save_name),
+        proficient=info.get_check_scale(save_name) > 0,
+    )
 
 
 def _ability_views(character: DNDCharacter) -> Tuple[AbilityView, ...]:
-    """六张属性卡：``$属性值$`` 优先，缺失退回 ``$属性$`` 原始值。"""
+    """六张属性卡：属性值与调整值由 ``$属性$`` 现算，豁免与技能同步现算。"""
     info = character.ability_info
     rows = []
     for index, name in enumerate(ABILITY_LIST):
-        display = character.ability_display.get(name, "").strip()
-        if display:
-            score, _, mod = display.partition("/")
-            score, mod = score.strip(), mod.strip()
+        if info.is_init:
+            score = str(info.ability[index])
+            mod = info.get_ability_modifier_display(index)
         else:
-            raw = info.ability[index] if info.is_init else 0
-            score = str(raw) if raw else "—"
-            mod = "—"
+            score, mod = "—", "—"
         rows.append(
             AbilityView(
                 name=name,
-                score=score or "—",
-                mod=mod or "—",
+                score=score,
+                mod=mod,
                 save=_save_view(character, name),
                 skills=_skill_views(character, name),
             )
@@ -475,6 +475,7 @@ def _spell_groups(character: DNDCharacter) -> Tuple[SpellGroupView, ...]:
                     SpellView(
                         name=spell.name,
                         prepared=spell.prepared,
+                        is_cantrip=level == 0,
                         time=spell.cast_time,
                         range=spell.range,
                         concentration=spell.concentration,
@@ -545,6 +546,9 @@ def build_card_view(
         coins=_coin_views(character),
         background_rows=_background_rows(character),
         story=character.story,
+        story_lines=(
+            tuple(character.story.split("\n")) if character.story else ()
+        ),
         spellcasting=character.spellcasting_ability or "—",
         spell_dc=character.spell_dc,
         spell_attack=character.spell_attack,

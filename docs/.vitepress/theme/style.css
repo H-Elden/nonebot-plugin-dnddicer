@@ -654,6 +654,21 @@
   font-size: 10px;
 }
 
+.cb-chip__value {
+  margin-left: 4px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.78;
+}
+
+.cb-derived {
+  display: block;
+  margin-top: 2px;
+  color: var(--vp-c-text-3);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .cb-prof-section + .cb-prof-section {
   margin-top: 4px;
 }

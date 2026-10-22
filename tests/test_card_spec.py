@@ -47,13 +47,15 @@ def test_spec_examples_match_template_card() -> None:
     """每个段的示例必须与示例卡对应段逐字相同（防止示例与语法漂移）。"""
     template = parse_template_to_dict(gen_template_char().get_char_info())
     for segment in CARD_SPEC["segments"]:
-        assert segment["example"] == template[segment["key"]], segment["key"]
+        assert segment["example"] == template.get(segment["key"], ""), segment["key"]
 
 
 def test_spec_examples_are_parseable() -> None:
     """每个示例拼成单段卡文本后都必须能被插件解析。"""
     base = "$姓名$ 测试\n$等级$ 5\n$属性$ 10/10/10/10/10/10\n"
     for segment in CARD_SPEC["segments"]:
+        if not segment["example"]:
+            continue
         text = base + f"{segment['key']} {segment['example']}\n"
         CharacterService.parse(text, "g", "u")
 
@@ -70,17 +72,28 @@ def test_spec_groups_and_fields() -> None:
 
 def test_spec_output_order_matches_template_card() -> None:
     """回写顺序必须与示例卡的段顺序一致（网页端据此逐字往返）。"""
-    keys = [line.split(" ", 1)[0] for line in gen_template_char().get_char_info().splitlines()]
-    assert keys == CARD_SPEC["output_order"]
+    template = parse_template_to_dict(gen_template_char().get_char_info())
+    assert list(template) == [
+        key for key in CARD_SPEC["output_order"] if key in template
+    ]
 
 
 def test_spec_examples_build_template_card() -> None:
     """把各段示例按回写顺序拼起来，必须等于示例卡整卡文本。"""
     examples = {segment["key"]: segment["example"] for segment in CARD_SPEC["segments"]}
     text = "\n".join(
-        f"{key} {examples[key]}" for key in CARD_SPEC["output_order"]
+        f"{key} {examples[key]}"
+        for key in CARD_SPEC["output_order"]
+        if examples[key]
     )
     assert text == gen_template_char().get_char_info()
+
+
+def test_spec_legacy_segments() -> None:
+    """退役的派生段必须登记为旧段，网页端据此提示忽略而不是报未知段。"""
+    legacy = {item["key"] for item in CARD_SPEC["legacy_segments"]}
+    assert legacy == {"$属性值$", "$豁免$", "$技能$"}
+    assert all(item["message"] for item in CARD_SPEC["legacy_segments"])
 
 
 def test_fixtures_are_parseable_and_stable() -> None:

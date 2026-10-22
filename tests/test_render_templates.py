@@ -157,7 +157,7 @@ def test_char_card_template_renders_with_production_env() -> None:
     assert 'class="sheet card"' in html
     for title in (
         "武器与伤害",
-        "种族特性",
+        "种族与职业特性",
         "专长",
         "职业特性与能力",
         "装备",
@@ -166,10 +166,21 @@ def test_char_card_template_renders_with_production_env() -> None:
     ):
         assert f'<div class="panel-title">{title}</div>' in html, title
     assert "sub-col-left" in html and "sub-col-right" in html
-    assert "张三" in html
+    assert "伊瑟兰·晨星" in html
     assert "生命值" in html and "死亡豁免" in html and "英雄激励" in html
     assert "http://" not in html and "https://" not in html
     assert "&#34;" not in html
+
+
+def test_char_card_story_keeps_paragraph_lines() -> None:
+    """多段故事按行渲染，换行不丢（卡面「背景故事」面板）。"""
+    pytest.importorskip("jinja2", reason="模板渲染需要可选的 [render] 依赖（含 Jinja2）")
+    from nonebot_plugin_dnddicer.character.card_view import build_card_view
+    from nonebot_plugin_dnddicer.character.services import gen_template_char
+
+    html = _render_char(build_card_view(gen_template_char()))
+    assert html.count('class="story-line"') == 3
+    assert "此后伊瑟兰离开书斋" in html
 
 
 def test_char_card_template_hides_empty_panels() -> None:
@@ -182,7 +193,7 @@ def test_char_card_template_hides_empty_panels() -> None:
     html = _render_char(build_card_view(empty))
     for title in (
         "武器与伤害",
-        "种族特性",
+        "种族与职业特性",
         "专长",
         "职业特性与能力",
         "装备",
@@ -203,13 +214,13 @@ def test_char_card_sub_block_spans_when_one_side_empty() -> None:
     items_only = DNDCharacter(group_id="g", user_id="u", name="测试", is_init=True)
     items_only.items = ["火把x3"]
     html = _render_char(build_card_view(items_only))
-    assert "装备" in html and "种族特性" not in html
+    assert "装备" in html and "种族与职业特性" not in html
     assert 'colspan="2"' in html
 
     traits_only = DNDCharacter(group_id="g", user_id="u", name="测试", is_init=True)
     traits_only.traits = ["黑暗视觉（种族）"]
     html = _render_char(build_card_view(traits_only))
-    assert "种族特性" in html and "装备" not in html
+    assert "种族与职业特性" in html and "装备" not in html
     assert 'colspan="2"' in html
 
 def test_char_card_stylesheet_geometry() -> None:

@@ -61,8 +61,8 @@ function main() {
   // ── 1. 清单对齐 ──────────────────────────────────────────────────────
   const specKeys = spec.segments.map((segment) => segment.key)
   const kindKeys = Object.keys(SEGMENT_KINDS)
-  checkEqual('段清单数量', specKeys.length, 26)
-  checkEqual('表单形态数量', kindKeys.length, 26)
+  checkEqual('段清单数量', specKeys.length, 23)
+  checkEqual('表单形态数量', kindKeys.length, 23)
   for (const key of specKeys) {
     check(`段 ${key} 有表单形态`, Boolean(SEGMENT_KINDS[key]))
   }
@@ -154,6 +154,21 @@ function main() {
     templateFixture.text,
   )
 
+  // 旧卡的属性值/豁免/技能段：识别为旧段并提示忽略，不报错
+  const legacyDerived = builder.parseCardText(
+    '$姓名$ 旧卡\n$等级$ 1\n$属性$ 10/10/10/10/10/10\n' +
+      '$技能$ 运动:+5\n$豁免$ 力量:+2\n' +
+      '$属性值$ 力量:10/+0; 敏捷:10/+0; 体质:10/+0; 智力:10/+0; 感知:10/+0; 魅力:10/+0',
+  )
+  check('旧派生段导入不报错', legacyDerived.errors.length === 0, JSON.stringify(legacyDerived.errors))
+  check(
+    '旧派生段给出忽略提示',
+    legacyDerived.warnings.filter(
+      (item) => item.label === '技能' || item.label === '豁免' || item.label === '属性值',
+    ).length === 3,
+    JSON.stringify(legacyDerived.warnings),
+  )
+
   // ── 4. 表单编辑后回写 ───────────────────────────────────────────────
   const state = builder.createState()
   checkEqual('空状态回写为空', builder.serializeCard(state), '')
@@ -186,9 +201,6 @@ function main() {
   ]
   state['$物品$'] = [{ name: '治疗药水', qty: '2', equipped: false }]
   state['$钱币$'] = { CP: '0', SP: '8', EP: '0', GP: '18', PP: '0' }
-  state['$技能$']['运动'] = { bonus: '+5', expertise: false }
-  state['$技能$']['威吓'] = { bonus: '+7', expertise: true }
-  state['$豁免$'][0] = '+5'
   state['$熟练$'].checks['力量豁免'] = 1
   state['$熟练$'].checks['运动'] = 2
   state['$熟练$'].groups['武器'] = '军用武器·简易武器'
@@ -229,12 +241,32 @@ function main() {
   checkEqual('编辑后的卡熟练组', editedParsed.state['$熟练$'].groups['武器'], '军用武器·简易武器')
   checkEqual('编辑后的卡能力恢复档', builder.contentFor(editedParsed.state, '$能力$'), '动作如潮:1/1短休+1,长休|短休回复一次')
   checkEqual('编辑后的卡战斗记录', editedParsed.state['$战斗记录$'][0], '祝福术(专注,3轮)')
-  checkEqual('编辑后的卡技能专精', editedParsed.state['$技能$']['威吓'].expertise, true)
+  checkEqual('编辑后的卡技能专精', editedParsed.state['$熟练$'].checks['运动'], 2)
 
-  // 故事换行自动合并（不产生非法换行）
+  // 派生值预览：等级 5（熟练 +3）、力量 16（+3），运动专精 → +3 + 3×2 + 2 = +11
+  const derived = builder.deriveCheckValues(state)
+  checkEqual('派生值：运动专精计入额外加值', derived['运动'], '+11')
+  checkEqual('派生值：力量豁免', derived['力量豁免'], '+6')
+  const modifiers = builder.deriveAbilityModifiers(state)
+  checkEqual('派生值：力量调整', modifiers[0], '+3')
+  checkEqual('派生值：智力调整', modifiers[3], '+0')
+
+  // 故事多行保留，上限按换行不计
   const storyState = builder.createState()
   storyState['$故事$'] = '第一行\n第二行'
-  checkEqual('故事换行合并', builder.contentFor(storyState, '$故事$'), '第一行第二行')
+  checkEqual('故事换行保留', builder.contentFor(storyState, '$故事$'), '第一行\n第二行')
+  const storyRoundtrip = builder.parseCardText('$故事$ 第一行\n第二行')
+  checkEqual('故事多行可导入', storyRoundtrip.state['$故事$'], '第一行\n第二行')
+  const longStory = builder.createState()
+  longStory['$故事$'] = '长'.repeat(1001)
+  checkThrows('故事超过 1000 字报错', () => builder.parseSegment('$故事$', longStory['$故事$']))
+  const storyWithNewlines = builder.createState()
+  storyWithNewlines['$故事$'] = `${'长'.repeat(500)}\n${'长'.repeat(500)}`
+  checkEqual(
+    '故事字数不计换行',
+    builder.contentFor(storyWithNewlines, '$故事$').replace(/\n/g, '').length,
+    1000,
+  )
 
   // 武器命中加值允许骰子表达式（与插件同口径）
   const diceState = builder.createState()

@@ -38,7 +38,8 @@
             </option>
           </select>
         </label>
-        <label class="cb-check cb-check--cell">
+        <span v-if="item.level === '0'" class="cb-grid__cell cb-muted">戏法无需准备</span>
+        <label v-else class="cb-check cb-check--cell">
           <input v-model="item.prepared" type="checkbox" />
           今日已准备（*）
         </label>

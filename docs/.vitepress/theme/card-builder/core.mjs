@@ -26,9 +26,6 @@ export const K = Object.freeze({
   COMBAT: '$战斗$',
   PROGRESS: '$进度$',
   ABILITY: '$属性$',
-  ABILITY_DISPLAY: '$属性值$',
-  SAVES: '$豁免$',
-  SKILLS: '$技能$',
   PROF: '$熟练$',
   EXT: '$额外加值$',
   FEATS: '$专长$',
@@ -56,9 +53,6 @@ export const SEGMENT_KINDS = Object.freeze({
   [K.COMBAT]: 'combat',
   [K.PROGRESS]: 'progress',
   [K.ABILITY]: 'ability',
-  [K.ABILITY_DISPLAY]: 'display',
-  [K.SAVES]: 'saves',
-  [K.SKILLS]: 'skills',
   [K.PROF]: 'prof',
   [K.EXT]: 'ext',
   [K.FEATS]: 'feats',
@@ -157,9 +151,12 @@ export function createCardBuilder(spec) {
   const limits = spec.limits || {}
   const abilities = enums.abilities || []
   const skills = enums.skills || []
+  const savingItems = enums.saving_items || []
   const checkItems = enums.check_items || []
   const extItems = enums.ext_items || []
   const savingAllKey = enums.saving_all_key || '豁免'
+  const skillParent = enums.skill_parent || {}
+  const savingParent = enums.saving_parent || {}
   const skillSynonyms = enums.skill_synonyms || {}
   const classSynonyms = enums.class_synonyms || {}
   const damageTypeSynonyms = enums.damage_type_synonyms || {}
@@ -173,6 +170,8 @@ export function createCardBuilder(spec) {
 
   const segments = spec.segments.slice()
   const segmentMap = new Map(segments.map((segment) => [segment.key, segment]))
+  const legacySegments = Array.isArray(spec.legacy_segments) ? spec.legacy_segments : []
+  const legacyMap = new Map(legacySegments.map((segment) => [segment.key, segment]))
   const order =
     Array.isArray(spec.output_order) && spec.output_order.length > 0
       ? spec.output_order.slice()
@@ -330,82 +329,6 @@ export function createCardBuilder(spec) {
       return String(Number(value))
     })
     return values
-  }
-
-  function parseAbilityDisplay(content) {
-    const result = abilities.map(() => ({ score: '', mod: '' }))
-    const seen = new Set()
-    for (const item of splitSemicolon(content)) {
-      const [rawName, rawValue] = partition(withHalfColon(item), ':')
-      const name = rawName.trim()
-      const index = abilities.indexOf(name)
-      if (index < 0) {
-        fail(`属性值条目不完整: ${item}（示例：力量:18/+4，六属性各一条）`)
-      }
-      if (seen.has(name)) fail(`属性值重复: ${name}`)
-      const parts = rawValue.split('/').map((part) => part.trim())
-      if (parts.length !== 2) fail(`属性值格式错误: ${item}（示例：力量:18/+4）`)
-      const score = unsignedOf(parts[0], `${name}属性值`)
-      const scoreMin = limits.ability_score_min || 1
-      const scoreMax = limits.ability_score_max || 30
-      if (score < scoreMin || score > scoreMax) {
-        fail(`属性值超出范围: ${item}（${scoreMin}~${scoreMax}）`)
-      }
-      const mod = normalizeSigned(parts[1], `${name}属性调整值`)
-      const modNumber = Number(mod)
-      const modMin = limits.ability_mod_min ?? -10
-      const modMax = limits.ability_mod_max ?? 10
-      if (modNumber < modMin || modNumber > modMax) {
-        fail(`属性调整值超出范围: ${item}（${modMin}~+${modMax}）`)
-      }
-      result[index] = { score: String(score), mod }
-      seen.add(name)
-    }
-    const missing = abilities.filter((name) => !seen.has(name))
-    if (missing.length > 0) {
-      fail(`属性值段必须写全六项属性，缺少: ${missing.join('/')}`)
-    }
-    return result
-  }
-
-  function parseSaves(content) {
-    const result = abilities.map(() => '')
-    for (const item of splitSemicolon(content)) {
-      const [rawName, rawValue] = partition(withHalfColon(item), ':')
-      let name = rawName.trim()
-      if (name.endsWith('豁免')) name = name.slice(0, -2)
-      const index = abilities.indexOf(name)
-      if (index < 0) {
-        fail(`豁免条目不完整: ${item}（示例：力量:+7，只写有值的属性）`)
-      }
-      if (result[index] !== '') fail(`豁免重复: ${name}`)
-      result[index] = normalizeSigned(rawValue, `${name}豁免`)
-    }
-    return result
-  }
-
-  function parseSkills(content) {
-    const result = Object.fromEntries(
-      skills.map((name) => [name, { bonus: '', expertise: false }]),
-    )
-    const seen = new Set()
-    for (const item of splitSemicolon(content)) {
-      const [rawName, rawValue] = partition(withHalfColon(item), ':')
-      const name = normalizeSkillName(rawName.trim())
-      if (!skills.includes(name)) {
-        fail(`技能条目不完整: ${item}（示例：运动:+7；只写有值的技能）`)
-      }
-      if (seen.has(name)) fail(`技能重复: ${name}`)
-      let value = rawValue.trim()
-      const expertise = value.endsWith('*') || value.endsWith('＊')
-      if (expertise) value = value.slice(0, -1).trim()
-      result[name] = {
-        bonus: normalizeSigned(value, `${name}技能`),
-        expertise,
-      }
-      seen.add(name)
-    }
-    return result
   }
 
   function parseProf(content) {
@@ -946,10 +869,12 @@ export function createCardBuilder(spec) {
 
   function parseStory(content) {
     const text = normalizeNewlines(content).trim()
-    if (text.includes('\n')) fail('故事内容不能换行')
     if (!text) fail('故事内容不能为空')
-    if (charLength(text) > (limits.story_max_len || 300)) {
-      fail(`故事内容过长（≤${limits.story_max_len || 300} 字）`)
+    if (text.includes('$')) fail('故事内容不能包含符号「$」')
+    const max = limits.story_max_len || 1000
+    const count = charLength(text.replace(/\n/g, ''))
+    if (count > max) {
+      fail(`故事内容过长（≤${max} 字，换行不计）`)
     }
     return text
   }
@@ -988,12 +913,6 @@ export function createCardBuilder(spec) {
         return parseProgress(content)
       case 'ability':
         return parseAbility(content)
-      case 'display':
-        return parseAbilityDisplay(content)
-      case 'saves':
-        return parseSaves(content)
-      case 'skills':
-        return parseSkills(content)
       case 'prof':
         return parseProf(content)
       case 'ext':
@@ -1051,11 +970,6 @@ export function createCardBuilder(spec) {
       [K.COMBAT]: { AC: '', 先攻: '', 速度: '', 被动察觉: '' },
       [K.PROGRESS]: { xp: '', xpNext: '', inspiration: '' },
       [K.ABILITY]: abilities.map(() => ''),
-      [K.ABILITY_DISPLAY]: abilities.map(() => ({ score: '', mod: '' })),
-      [K.SAVES]: abilities.map(() => ''),
-      [K.SKILLS]: Object.fromEntries(
-        skills.map((name) => [name, { bonus: '', expertise: false }]),
-      ),
       [K.PROF]: {
         checks: Object.fromEntries(checkItems.map((name) => [name, 0])),
         groups: Object.fromEntries(proficiencyGroups.map((name) => [name, ''])),
@@ -1187,45 +1101,6 @@ export function createCardBuilder(spec) {
     return values.map((value) => normalizeIntText(value)).join('/')
   }
 
-  function buildDisplay(state) {
-    const rows = state[K.ABILITY_DISPLAY]
-    const filled = rows.some((row) => trimOf(row.score) || trimOf(row.mod))
-    if (!filled) return ''
-    const items = []
-    for (let index = 0; index < abilities.length; index += 1) {
-      const row = rows[index]
-      const score = trimOf(row.score)
-      const mod = trimOf(row.mod)
-      if (!score || !mod) fail('属性值段要六项全写（值和调整值都要填）')
-      items.push(`${abilities[index]}:${normalizeIntText(score)}/${normalizeSigned(mod, '属性调整值')}`)
-    }
-    return items.join('; ')
-  }
-
-  function buildSaves(state) {
-    const values = state[K.SAVES]
-    const items = []
-    for (let index = 0; index < abilities.length; index += 1) {
-      const value = trimOf(values[index])
-      if (!value) continue
-      items.push(`${abilities[index]}:${normalizeSigned(value, `${abilities[index]}豁免`)}`)
-    }
-    return items.join('; ')
-  }
-
-  function buildSkills(state) {
-    const map = state[K.SKILLS]
-    const items = []
-    for (const name of skills) {
-      const row = map[name]
-      if (!row) continue
-      const bonus = trimOf(row.bonus)
-      if (!bonus) continue
-      items.push(`${name}:${normalizeSigned(bonus, `${name}技能`)}${row.expertise ? '*' : ''}`)
-    }
-    return items.join('; ')
-  }
-
   function buildProf(state) {
     const prof = state[K.PROF]
     const items = []
@@ -1245,6 +1120,89 @@ export function createCardBuilder(spec) {
       items.push(`${label}:${values.join('·')}`)
     }
     return items.join('/')
+  }
+
+  // ── 派生值预览（与插件 AbilityInfo.get_check_display 同一套口径）─────────
+  // 只用于表单展示：让玩家在点选熟练时直接看到骰娘会算出的加值；导出的卡
+  // 文本不写这些派生值，插件仍按 $属性$ / $熟练$ / $额外加值$ 现算。
+
+  function formatSigned(value) {
+    return value >= 0 ? `+${value}` : String(value)
+  }
+
+  /** 把额外加值表达式拆成常数和与剩余骰子表达式（与 Python 侧一致）。 */
+  function splitConstantBonus(expr) {
+    let total = 0
+    let extra = ''
+    const pattern = /([+-])\s*([^+-]+)/g
+    let match
+    while ((match = pattern.exec(expr || '')) !== null) {
+      const term = match[2].trim()
+      if (/^\d+$/.test(term)) total += Number(`${match[1]}${term}`)
+      else if (term) extra += `${match[1]}${term}`
+    }
+    return [total, extra]
+  }
+
+  function abilityModifierOf(score) {
+    if (!/^\d+$/.test(score)) return ''
+    return formatSigned(Math.floor((Number(score) - 10) / 2))
+  }
+
+  /** 六属性的调整值展示（未填/非法时为空串）。 */
+  function deriveAbilityModifiers(state) {
+    return abilities.map((name, index) =>
+      abilityModifierOf(trimOf((state[K.ABILITY] || [])[index] || '')),
+    )
+  }
+
+  /**
+   * 按当前表单算出每个检定条目的展示加值。
+   *
+   * 公式：属性调整值 + 熟练加值 × 系数 + 额外加值；技能/豁免叠父属性
+   * 额外加值，豁免再叠全局「豁免」。骰子项（+1d4）无法静态求和，原样
+   * 以 `+1d4` 形式附在数值后面。等级或六属性没填全时返回空对象。
+   */
+  function deriveCheckValues(state) {
+    const rawLevel = trimOf(state[K.LEVEL])
+    const scores = (state[K.ABILITY] || []).map((value) => trimOf(value))
+    if (!/^\d+$/.test(rawLevel) || Number(rawLevel) <= 0) return {}
+    if (
+      scores.length !== abilities.length ||
+      scores.some((value) => !/^\d+$/.test(value))
+    ) {
+      return {}
+    }
+    const profBonus = 2 + Math.floor((Number(rawLevel) - 1) / 4)
+    const extMap = {}
+    for (const row of state[K.EXT] || []) {
+      const key = normalizeSkillName(trimOf(row.key))
+      const bonus = trimOf(row.bonus)
+      if (!key || !bonus || !WEAPON_BONUS_RE.test(bonus)) continue
+      extMap[key] = `${extMap[key] || ''}${bonus}`
+    }
+    const extOf = (name) => extMap[name] || ''
+    const result = {}
+    for (const name of checkItems) {
+      const isSkill = skills.includes(name)
+      const isSaving = savingItems.includes(name)
+      const parent = isSkill
+        ? skillParent[name]
+        : isSaving
+          ? savingParent[name]
+          : name
+      const index = abilities.indexOf(parent)
+      if (index < 0) continue
+      let total = Math.floor((Number(scores[index]) - 10) / 2)
+      const scale = Number(state[K.PROF]?.checks?.[name] || 0)
+      total += (Number.isFinite(scale) ? scale : 0) * profBonus
+      let expr = extOf(name)
+      if (isSkill || isSaving) expr += extOf(parent)
+      if (isSaving) expr += extOf(savingAllKey)
+      const [constant, extra] = splitConstantBonus(expr)
+      result[name] = `${formatSigned(total + constant)}${extra}`
+    }
+    return result
   }
 
   function buildExt(state) {
@@ -1459,7 +1417,11 @@ export function createCardBuilder(spec) {
   }
 
   function buildStory(state) {
-    return normalizeNewlines(state[K.STORY]).replace(/[ \t]*\n+[ \t]*/g, '').trim()
+    return normalizeNewlines(state[K.STORY])
+      .split('\n')
+      .map((line) => line.replace(/[ \t]+$/, ''))
+      .join('\n')
+      .trim()
   }
 
   function buildContent(state, key) {
@@ -1483,12 +1445,6 @@ export function createCardBuilder(spec) {
         return buildProgress(state)
       case 'ability':
         return buildAbility(state)
-      case 'display':
-        return buildDisplay(state)
-      case 'saves':
-        return buildSaves(state)
-      case 'skills':
-        return buildSkills(state)
       case 'prof':
         return buildProf(state)
       case 'ext':
@@ -1522,7 +1478,7 @@ export function createCardBuilder(spec) {
     if (content.includes('$')) {
       fail(`${labelOf(key)}内容不能包含符号「$」`)
     }
-    if (content.includes('\n') || content.includes('\r')) {
+    if (key !== K.STORY && (content.includes('\n') || content.includes('\r'))) {
       fail(`${labelOf(key)}内容不能换行`)
     }
     return content
@@ -1558,7 +1514,14 @@ export function createCardBuilder(spec) {
     for (let index = 0; index + 1 < parts.length; index += 1) {
       const key = `$${parts[index]}$`
       if (!segmentMap.has(key)) {
-        if (/^\$[\u4e00-\u9fa5A-Za-z]{1,8}\$$/.test(key)) {
+        const legacy = legacyMap.get(key)
+        if (legacy) {
+          warnings.push({
+            key,
+            label: legacy.label || '旧段',
+            message: legacy.message || `旧段 ${key} 已由骰娘自动计算，导入时忽略`,
+          })
+        } else if (/^\$[\u4e00-\u9fa5A-Za-z]{1,8}\$$/.test(key)) {
           warnings.push({
             key,
             label: '未知段',
@@ -1568,7 +1531,7 @@ export function createCardBuilder(spec) {
         continue
       }
       const content = parts[index + 1].trim()
-      if (!content || segmentMap.has(content)) continue
+      if (!content || segmentMap.has(content) || legacyMap.has(content)) continue
       if (seen.has(key)) {
         warnings.push({
           key,
@@ -1652,7 +1615,9 @@ export function createCardBuilder(spec) {
 
   function buildExampleCard() {
     return order
-      .map((key) => `${key} ${segmentMap.get(key).example}`)
+      .map((key) => ({ key, example: segmentMap.get(key).example }))
+      .filter(({ example }) => trimOf(example) !== '')
+      .map(({ key, example }) => `${key} ${example}`)
       .join('\n')
   }
 
@@ -1752,5 +1717,7 @@ export function createCardBuilder(spec) {
     buildExampleCard,
     validateState,
     charLength,
+    deriveAbilityModifiers,
+    deriveCheckValues,
   }
 }

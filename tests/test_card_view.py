@@ -31,7 +31,7 @@ def _empty(name: str = "空卡") -> DNDCharacter:
 def test_header_and_core_stats() -> None:
     """页眉：姓名、副标题、核心数值、熟练按等级计算、HP 五格。"""
     view = build_card_view(gen_template_char())
-    assert view.name == "张三"
+    assert view.name == "伊瑟兰·晨星"
     assert view.subtitle == "高等精灵 · 法师（塑能师） · 5 级"
     assert {stat.label: stat.value for stat in view.core_stats} == {
         "AC": "15",
@@ -40,72 +40,107 @@ def test_header_and_core_stats() -> None:
         "被动察觉": "13",
         "熟练": "+3",
     }
-    assert view.hp == "29/37"
+    assert view.hp == "37/37"
     assert view.hp_state == ""
-    assert view.temp_hp == "5"
+    assert view.temp_hp == "—"
     assert view.hit_dice == "5/5 D6"
     assert (view.death_success, view.death_failure, view.death_state) == (0, 0, "")
     assert (view.xp, view.xp_next, view.inspiration) == ("6,500", "14,000", True)
 
 
 def test_ability_blocks_merge_saves_and_skills() -> None:
-    """六属性卡：值/调整、豁免、技能与专精标记来自三处数据。"""
+    """六属性卡：值/调整、豁免、技能与专精标记全部按属性与熟练现算。"""
     view = build_card_view(gen_template_char())
     assert [ability.name for ability in view.abilities] == ABILITY_LIST
 
     strength = view.abilities[0]
     assert (strength.score, strength.mod) == ("8", "-1")
     assert strength.save is not None
-    assert (strength.save.value, strength.save.proficient) == ("+1", False)
+    assert (strength.save.value, strength.save.proficient) == ("-1", False)
 
     intelligence = view.abilities[3]
     assert (intelligence.score, intelligence.mod) == ("18", "+4")
-    assert (intelligence.save.value, intelligence.save.proficient) == ("+9", True)
+    assert (intelligence.save.value, intelligence.save.proficient) == ("+7", True)
 
     skills = {skill.name: skill for ability in view.abilities for skill in ability.skills}
     assert "先攻" not in skills  # 先攻在页眉核心数值里，不重复进技能行
-    assert skills["奥秘"].expertise is True
-    assert skills["奥秘"].value == "+10"
+    assert skills["调查"].expertise is True
+    assert skills["调查"].value == "+10"
+    assert skills["奥秘"].proficient is True
+    assert skills["奥秘"].value == "+7"
     assert skills["历史"].proficient is True
+    assert skills["历史"].value == "+7"
     assert skills["运动"].proficient is False
+    assert skills["运动"].value == "-1"
     # 技能顺序沿用技能表顺序（敏捷组：体操、巧手、隐匿）
     assert [skill.name for skill in view.abilities[1].skills] == ["体操", "巧手", "隐匿"]
+    # 18 项技能全部画出（先攻除外）
+    assert len(skills) == 18
 
 
-def test_ability_fallback_to_raw_scores() -> None:
-    """没有 ``$属性值$`` 时退回 ``$属性$`` 原始值，调整值显示 ``—``。"""
+def test_ability_values_are_computed_without_manual_fields() -> None:
+    """没有手填展示值时，属性调整、豁免与技能仍按属性/等级/熟练算出来。"""
     char = CharacterService.parse(
         "$姓名$ 小鹿\n$等级$ 1\n$属性$ 9/15/15/15/12/9", "g", "u"
     )
     view = build_card_view(char)
     assert [ability.score for ability in view.abilities] == ["9", "15", "15", "15", "12", "9"]
-    assert all(ability.mod == "—" for ability in view.abilities)
-    assert all(ability.save is None for ability in view.abilities)
-    assert all(ability.skills == () for ability in view.abilities)
+    assert [ability.mod for ability in view.abilities] == ["-1", "+2", "+2", "+2", "+1", "-1"]
+    # 1 级熟练加值 +2；未熟练时豁免只是属性调整值
+    assert view.abilities[0].save.value == "-1"
+    assert view.abilities[1].save.value == "+2"
+    skills = {skill.name: skill for ability in view.abilities for skill in ability.skills}
+    assert skills["运动"].value == "-1"
+    assert skills["体操"].value == "+2"
+    assert all(not skill.proficient for skill in skills.values())
 
 
-def test_expertise_comes_from_star_or_prof_scale() -> None:
-    """专精既可由 ``$技能$`` 尾部 ``*`` 表示，也可由 ``$熟练$`` 的 ``2*`` 表示。"""
-    char = _empty()
-    char.skills = {"隐匿": "+8*", "巧手": "+5"}
-    char.ability_info.check_prof[CHECK_ITEM_INDEX_DICT["巧手"]] = 2
-    view = build_card_view(char)
-    skills = {skill.name: skill for skill in view.abilities[1].skills}
-    assert skills["隐匿"].value == "+8"
-    assert skills["隐匿"].expertise is True
-    assert skills["巧手"].expertise is True
-    assert skills["巧手"].proficient is True
-
-
-def test_save_line_shown_when_only_proficient() -> None:
-    """没有豁免值但有熟练时仍画一行，值显示 ``—``。"""
+def test_expertise_comes_from_prof_scale() -> None:
+    """专精只看 ``$熟练$`` 的 ``2*``；熟练框与专精星随之变化。"""
     char = _empty()
     char.ability_info.is_init = True
+    char.ability_info.level = 5
+    char.ability_info.ability = [10, 10, 10, 10, 10, 10]
+    char.ability_info.check_prof[CHECK_ITEM_INDEX_DICT["隐匿"]] = 2
+    char.ability_info.check_prof[CHECK_ITEM_INDEX_DICT["巧手"]] = 1
+    view = build_card_view(char)
+    skills = {skill.name: skill for skill in view.abilities[1].skills}
+    assert skills["隐匿"].value == "+6"
+    assert skills["隐匿"].expertise is True
+    assert skills["巧手"].value == "+3"
+    assert skills["巧手"].proficient is True
+    assert skills["巧手"].expertise is False
+
+
+def test_all_saves_show_with_computed_values() -> None:
+    """初始化后六项豁免全部画出，值按属性调整值现算。"""
+    char = _empty()
+    char.ability_info.is_init = True
+    char.ability_info.level = 5
+    char.ability_info.ability = [10, 12, 14, 16, 18, 20]
     char.ability_info.check_prof[CHECK_ITEM_INDEX_DICT["力量豁免"]] = 1
     view = build_card_view(char)
-    save = view.abilities[0].save
-    assert save is not None
-    assert (save.value, save.proficient) == ("—", True)
+    saves = [ability.save for ability in view.abilities]
+    assert all(save is not None for save in saves)
+    assert [save.value for save in saves] == ["+3", "+1", "+2", "+3", "+4", "+5"]
+    assert [save.proficient for save in saves] == [True, False, False, False, False, False]
+
+
+def test_extra_bonus_participates_in_display() -> None:
+    """额外加值进展示值：常数求和、骰子项原样附后、优劣势不改数值。"""
+    char = CharacterService.parse(
+        "$等级$ 5\n$属性$ 16/10/10/10/10/10\n"
+        "$熟练$ 运动\n"
+        "$额外加值$ 豁免:+2/运动:+1d4/隐匿:优势",
+        "g",
+        "u",
+    )
+    view = build_card_view(char)
+    strength = view.abilities[0]
+    assert strength.save.value == "+5"  # 力量 +3 + 全局豁免 +2
+    skills = {skill.name: skill for ability in view.abilities for skill in ability.skills}
+    assert skills["运动"].value == "+6+1d4"  # 力量 +3 + 熟练 +3 + 骰子
+    assert skills["隐匿"].value == "+0"  # 优势不改变加值
 
 
 def test_hp_states_and_death_saves() -> None:
@@ -139,17 +174,23 @@ def test_temp_hp_and_hit_dice() -> None:
 
 def test_weapons_five_columns() -> None:
     view = build_card_view(gen_template_char())
-    assert [weapon.name for weapon in view.weapons] == ["火焰箭", "匕首", "法杖", "轻弩"]
+    assert [weapon.name for weapon in view.weapons] == [
+        "火焰箭", "冷冻射线", "匕首", "长棍",
+    ]
     assert (view.weapons[0].hit, view.weapons[0].damage, view.weapons[0].damage_type) == (
         "+7",
         "2d10",
         "火焰",
     )
     assert view.weapons[0].note == "法术攻击 · 120尺"
-    assert view.weapons[1].hit == "+5"
-    assert view.weapons[1].damage == "1d4+2"
-    assert view.weapons[1].damage_type == "穿刺"
-    assert view.weapons[1].note == "灵巧 · 轻型"
+    assert (view.weapons[1].hit, view.weapons[1].damage) == ("+7", "2d8")
+    assert view.weapons[1].damage_type == "寒冷"
+    assert view.weapons[1].note == "法术攻击 · 60尺 · 速度-10"
+    assert view.weapons[2].hit == "+5"
+    assert view.weapons[2].damage == "1d4+2"
+    assert view.weapons[2].damage_type == "穿刺"
+    assert view.weapons[2].note == "灵巧 · 轻型"
+    assert (view.weapons[3].hit, view.weapons[3].damage) == ("+2", "1d6-1")
 
 
 def test_slots_grid_and_pact() -> None:
@@ -187,26 +228,29 @@ def test_slot_pips_cap() -> None:
 def test_spells_grouped_by_level() -> None:
     view = build_card_view(gen_template_char())
     assert [group.label for group in view.spell_groups] == ["戏法", "1 环", "2 环", "3 环"]
-    assert [spell.name for spell in view.spell_groups[0].spells] == ["火焰箭"]
+    assert [spell.name for spell in view.spell_groups[0].spells] == [
+        "火焰箭", "冷冻射线", "法师之手", "次级幻象", "魔法伎俩", "光亮术", "心灵之楔",
+    ]
+    assert all(spell.is_cantrip for spell in view.spell_groups[0].spells)
     assert view.spell_groups[1].spells[0].prepared is True
-    assert view.spell_groups[3].spells[1].prepared is False
+    assert view.spell_groups[3].spells[1].prepared is True
     fireball = view.spell_groups[3].spells[0]
     assert (fireball.time, fireball.range, fireball.material) == ("1动作", "150尺", True)
-    assert fireball.note == "8d6 火焰 / 敏捷"
+    assert fireball.note == "20尺半径 / 8d6 火焰 / 敏捷"
     spells = {spell.name: spell for group in view.spell_groups for spell in group.spells}
     assert spells["侦测魔法"].concentration is True
     assert spells["侦测魔法"].ritual is True
-    assert spells["云雾术"].material is True
+    assert spells["蛛网术"].material is True
 
 
 def test_items_proficiencies_background() -> None:
     view = build_card_view(gen_template_char())
     assert "法术书 [装备]" in view.items
-    assert "治疗药水 ×2" in view.items
-    assert "绳索50尺" in view.items
-    assert view.proficiencies[0] == "武器：匕首、法杖、轻弩"
-    assert view.background_rows[0].cells[0] == ("背景", "贤者")
-    assert len(view.background_rows) == 5  # 9 项 → 5 行，末行只有一格
+    assert "治疗药水" in view.items
+    assert "长棍 [装备]" in view.items
+    assert view.proficiencies[0] == "武器：匕首、长棍"
+    assert view.background_rows[0].cells[0] == ("背景", "智者")
+    assert len(view.background_rows) == 5  # 10 项 → 5 行
 
 
 def test_background_rows_pairing() -> None:
@@ -238,12 +282,14 @@ def test_card_face_extensions_are_wired() -> None:
     view = build_card_view(gen_template_char())
     assert (view.xp, view.xp_next, view.inspiration) == ("6,500", "14,000", True)
     assert [coin.label for coin in view.coins] == ["CP", "SP", "EP", "GP", "PP"]
-    assert [coin.value for coin in view.coins] == ["0", "8", "0", "18", "0"]
-    assert view.story.startswith("张三出身")
+    assert [coin.value for coin in view.coins] == ["0", "0", "0", "13", "0"]
+    assert view.story.startswith("伊瑟兰出身")
+    assert len(view.story_lines) == 3
+    assert view.story_lines[1].startswith("此后伊瑟兰离开书斋")
     assert any(spell.note for group in view.spell_groups for spell in group.spells)
-    assert view.feats[0].text == "专注豁免具有优势；可借机施法"
+    assert view.feats[0].text == "习得光亮术、心灵之楔与护盾术；护盾术可免法术位施展一次，长休恢复"
     assert view.traits[0].text.startswith("60 尺内微光")
-    assert view.class_features[0].text.startswith("短休时回复")
+    assert view.class_features[0].text.startswith("短休时恢复")
     assert (view.spell_dc, view.spell_attack) == ("15", "+7")
 
 

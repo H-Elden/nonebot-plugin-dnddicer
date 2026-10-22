@@ -5,7 +5,8 @@
 
 from __future__ import annotations
 
-from typing import Dict, List
+import re
+from typing import Dict, List, Tuple
 
 from pydantic import BaseModel, Field
 
@@ -16,7 +17,6 @@ from .constants import (
     CHECK_ITEM_INDEX_DICT,
     CHECK_ITEM_LIST,
     CHAR_INFO_KEY_ABILITY,
-    CHAR_INFO_KEY_ABILITY_DISPLAY,
     CHAR_INFO_KEY_BACKGROUND,
     CHAR_INFO_KEY_CLASS,
     CHAR_INFO_KEY_COINS,
@@ -33,8 +33,6 @@ from .constants import (
     CHAR_INFO_KEY_PROF,
     CHAR_INFO_KEY_PROGRESS,
     CHAR_INFO_KEY_RACE,
-    CHAR_INFO_KEY_SAVES,
-    CHAR_INFO_KEY_SKILLS,
     CHAR_INFO_KEY_SPELL,
     CHAR_INFO_KEY_SPELL_SLOTS,
     CHAR_INFO_KEY_STORY,
@@ -46,7 +44,11 @@ from .constants import (
     EXT_ITEM_INDEX_DICT,
     EXT_ITEM_LIST,
     PROFICIENCY_GROUP_LIST,
+    SAVING_ALL_KEY,
+    SAVING_LIST,
+    SAVING_PARENT_DICT,
     SKILL_LIST,
+    SKILL_PARENT_DICT,
     SPELL_LEVEL_MAX,
 )
 
@@ -294,6 +296,24 @@ def npc_hp_info() -> HPInfo:
     return HPInfo(death_saves=False)
 
 
+def _split_constant_bonus(expr: str) -> Tuple[int, str]:
+    """把额外加值表达式拆成（常数和, 剩余骰子表达式）。
+
+    例：``+2`` → ``(2, "")``；``+1d4`` → ``(0, "+1d4")``；
+    ``+2+1d4-1`` → ``(1, "+1d4")``。只用于卡面展示，不改变检定时的
+    真实掷骰（检定仍由 ``perform_check`` 把整段表达式交给引擎）。
+    """
+    total = 0
+    extra_parts: List[str] = []
+    for match in re.finditer(r"([+-])\s*([^+-]+)", expr or ""):
+        sign, term = match.group(1), match.group(2).strip()
+        if term.isdigit():
+            total += int(f"{sign}{term}")
+        elif term:
+            extra_parts.append(f"{sign}{term}")
+    return total, "".join(extra_parts)
+
+
 class AbilityInfo(BaseModel):
     """属性与检定信息。
 
@@ -337,6 +357,59 @@ class AbilityInfo(BaseModel):
     def get_modifier(self, ability_index: int) -> int:
         """属性调整值：(值-10)//2（5e 向下取整）。"""
         return (self.ability[ability_index] - 10) // 2
+
+    def get_ability_modifier_display(self, ability_index: int) -> str:
+        """属性调整值的展示文本，如 ``+2`` / ``-1``。"""
+        return f"{self.get_modifier(ability_index):+d}"
+
+    def get_check_scale(self, check_name: str) -> int:
+        """某检定条目的熟练系数（0=未熟练，1=熟练，2=专精……）。"""
+        return self.check_prof[CHECK_ITEM_INDEX_DICT[check_name]]
+
+    def get_check_bonus(self, check_name: str) -> Tuple[int, str]:
+        """按卡面数据算出某检定条目的固定加值与剩余掷骰表达式。
+
+        规则与 ``AbilityService.perform_check`` 完全一致：属性调整值 +
+        熟练加值 × 系数 + 额外加值。额外加值沿用同一套来源叠加规则：
+
+        - 技能 / 豁免：条目自身 + 父属性 +（豁免再加全局 ``豁免``）；
+        - 属性检定：条目自身。
+
+        返回 ``(常数和, 剩余表达式)``：常数（如 ``+2``、``-1``）直接累加；
+        骰子项（如 ``+1d4``）无法静态求值，原样拼在展示值后面。未初始化
+        或条目无效时返回 ``(0, "")``。
+        """
+        if not self.is_init or check_name not in CHECK_ITEM_INDEX_DICT:
+            return 0, ""
+
+        index = CHECK_ITEM_INDEX_DICT[check_name]
+        is_skill = check_name in SKILL_LIST
+        is_saving = check_name in SAVING_LIST
+
+        parent_name = ""
+        if is_skill:
+            parent_name = SKILL_PARENT_DICT[check_name]
+        elif is_saving:
+            parent_name = SAVING_PARENT_DICT[check_name]
+
+        parent_index = index
+        if parent_name:
+            parent_index = ABILITY_LIST.index(parent_name)
+        modifier = self.get_modifier(parent_index)
+        total = modifier + self.get_check_scale(check_name) * self.get_prof_bonus()
+
+        ext_str = self.check_ext[index]
+        if parent_name:
+            ext_str += self.check_ext[EXT_ITEM_INDEX_DICT[parent_name]]
+        if is_saving:
+            ext_str += self.check_ext[EXT_ITEM_INDEX_DICT[SAVING_ALL_KEY]]
+        constant, extra = _split_constant_bonus(ext_str)
+        return total + constant, extra
+
+    def get_check_display(self, check_name: str) -> str:
+        """检定加值的展示文本，如 ``+5``、``+3+1d4``。"""
+        total, extra = self.get_check_bonus(check_name)
+        return f"{total:+d}{extra}"
 
     def get_level_ability_info(self) -> str:
         """``$等级$`` 与 ``$属性$`` 两行（完整卡面插入新段时先输出这两行）。"""
@@ -571,16 +644,15 @@ class DNDCharacter(BaseModel):
     #: 立绘相对文件名（如 ``portraits/<群>_<QQ>.png``；空 = 未设置）
     portrait: str = ""
     # 完整卡面扩展（2026-10-21；全部有默认值，旧卡零迁移）
-    ability_display: Dict[str, str] = Field(default_factory=dict)  # $属性值$
+    # 注：六属性展示值、豁免、技能三类派生数据自 2026-10-22 起不再手填/存储，
+    # 由 ``AbilityInfo.get_check_display`` 在出图时按属性、等级、熟练与额外加值计算。
     combat: Dict[str, str] = Field(default_factory=dict)  # $战斗$
-    saves: Dict[str, str] = Field(default_factory=dict)  # $豁免$
-    skills: Dict[str, str] = Field(default_factory=dict)  # $技能$
     feats: List[str] = Field(default_factory=list)  # $专长$
     traits: List[str] = Field(default_factory=list)  # $特性$
     items: List[str] = Field(default_factory=list)  # $物品$
     background: Dict[str, str] = Field(default_factory=dict)  # $背景$
     combat_notes: List[str] = Field(default_factory=list)  # $战斗记录$
-    story: str = ""  # $故事$（长文本，卡面「背景故事」面板）
+    story: str = ""  # $故事$（长文本，可多行多段）
     progress: Dict[str, str] = Field(default_factory=dict)  # $进度$（经验/激励）
     coins: Dict[str, int] = Field(default_factory=dict)  # $钱币$（CP/SP/EP/GP/PP）
     spell_dc: str = ""  # 法术豁免 DC（$法术$ 头键）
@@ -607,30 +679,6 @@ class DNDCharacter(BaseModel):
             f"{key}:{self.combat[key]}"
             for key in COMBAT_KEY_LIST
             if self.combat.get(key)
-        ]
-
-    def _ability_display_items(self) -> List[str]:
-        """``$属性值$`` 条目：六属性固定顺序。"""
-        return [
-            f"{name}:{self.ability_display[name]}"
-            for name in ABILITY_LIST
-            if self.ability_display.get(name)
-        ]
-
-    def _save_items(self) -> List[str]:
-        """``$豁免$`` 条目：六属性固定顺序。"""
-        return [
-            f"{name}:{self.saves[name]}"
-            for name in ABILITY_LIST
-            if self.saves.get(name)
-        ]
-
-    def _skill_items(self) -> List[str]:
-        """``$技能$`` 条目：技能表固定顺序。"""
-        return [
-            f"{name}:{self.skills[name]}"
-            for name in SKILL_LIST
-            if self.skills.get(name)
         ]
 
     def get_char_info(self) -> str:
@@ -669,17 +717,6 @@ class DNDCharacter(BaseModel):
         level_ability_part = self.ability_info.get_level_ability_info()
         if level_ability_part:
             parts.append(level_ability_part)
-        display_items = self._ability_display_items()
-        if display_items:
-            parts.append(
-                f"{CHAR_INFO_KEY_ABILITY_DISPLAY} {'; '.join(display_items)}"
-            )
-        save_items = self._save_items()
-        if save_items:
-            parts.append(f"{CHAR_INFO_KEY_SAVES} {'; '.join(save_items)}")
-        skill_items = self._skill_items()
-        if skill_items:
-            parts.append(f"{CHAR_INFO_KEY_SKILLS} {'; '.join(skill_items)}")
         prof_part = self.ability_info.get_prof_info()
         if prof_part:
             parts.append(prof_part)

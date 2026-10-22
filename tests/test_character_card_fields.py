@@ -21,8 +21,6 @@ from nonebot_plugin_dnddicer.character.services import (
     parse_items,
     parse_prof_entries,
     parse_progress,
-    parse_saves,
-    parse_skills,
     parse_spell_item,
     parse_spell_setting,
     parse_story,
@@ -83,38 +81,34 @@ def test_template_roundtrip() -> None:
     parsed = _parse(text)
     assert parsed.get_char_info() == text
     # 关键段都有内容
-    assert parsed.background["背景"] == "贤者"
+    assert parsed.background["背景"] == "智者"
     assert parsed.combat["AC"] == "15"
-    assert parsed.saves["智力"] == "+9"
-    assert parsed.skills["奥秘"] == "+10*"
-    assert parsed.feats == ["战法师:专注豁免具有优势；可借机施法"]
+    assert parsed.feats == [
+        "魔法学徒（法师）:习得光亮术、心灵之楔与护盾术；护盾术可免法术位施展一次，长休恢复",
+        "属性值提升:智力 +1、感知 +1",
+    ]
     assert parsed.traits == [
         "黑暗视觉（种族）:60 尺内微光视为明亮，黑暗视为微光",
-        "妖精血统（种族）:对抗魅惑的豁免具有优势，魔法无法使你入睡",
-        "出神（种族）:长休只需 4 小时，期间保持清醒",
+        "妖精血统（种族）:进行避免或结束魅惑状态的豁免时具有优势",
+        "敏锐感官（种族）:获得察觉熟练",
+        "出神（种族）:无需睡眠，魔法无法使你入睡；4 小时即可完成长休并保持清醒",
+        "高等精灵血系（种族）:习得魔法伎俩；3 级习得侦测魔法、5 级习得迷踪步，"
+        "始终准备，各可免法术位施展一次，长休恢复",
+        "仪式学家（法师）:法术书中的仪式法术可直接以仪式施展，无需准备",
+        "学者（法师）:获得调查专精",
+        "塑能学者（法师）:法术书免费加入燃烧之手、粉碎音波与火球术",
+        "强力戏法（塑能师）:伤害戏法攻击失手或目标豁免成功时，仍受一半伤害",
+        "记忆法术（法师）:短休时可研究法术书，替换一道已准备的一环及以上法术",
     ]
     assert "法术书x1[装备]" in parsed.items
-    assert parsed.combat_notes == ["法师护甲(8小时)", "专注:飞行术"]
-    assert parsed.ability_info.prof_weapons == ["匕首", "法杖", "轻弩"]
-    assert parsed.coins == {"CP": 0, "SP": 8, "EP": 0, "GP": 18, "PP": 0}
+    assert parsed.combat_notes == ["法师护甲(8小时)"]
+    assert parsed.ability_info.prof_weapons == ["匕首", "长棍"]
+    assert parsed.coins == {"CP": 0, "SP": 0, "EP": 0, "GP": 13, "PP": 0}
     assert parsed.progress == {"经验": "6500/14000", "激励": "有"}
-    assert parsed.story.startswith("张三出身于银月城的学者世家")
+    assert parsed.story.startswith("伊瑟兰出身于银月城的学者世家")
+    assert parsed.story.count("\n") == 2
     assert (parsed.spell_dc, parsed.spell_attack) == ("15", "+7")
-    assert parsed.weapons[1].note == "灵巧 · 轻型"
-
-
-def test_ability_display_requires_six() -> None:
-    with pytest.raises(AssertionError, match="写全六项属性"):
-        _parse(
-            "$等级$ 1\n$属性$ 10/10/10/10/10/10\n"
-            "$属性值$ 力量:10/+0"
-        )
-    with pytest.raises(AssertionError, match="调整值超出范围"):
-        _parse(
-            "$等级$ 1\n$属性$ 10/10/10/10/10/10\n"
-            "$属性值$ 力量:10/+0; 敏捷:10/+0; 体质:10/+0; "
-            "智力:10/+0; 感知:10/+0; 魅力:10/+11"
-        )
+    assert parsed.weapons[2].note == "灵巧 · 轻型"
 
 
 def test_combat_validation() -> None:
@@ -127,16 +121,6 @@ def test_combat_validation() -> None:
         parse_combat("AC:很高")
     with pytest.raises(AssertionError, match="先攻加值无效"):
         parse_combat("先攻:优势")
-
-
-def test_saves_and_skills_normalization() -> None:
-    assert parse_saves("力量:+7; 体质豁免：+6") == {"力量": "+7", "体质": "+6"}
-    with pytest.raises(AssertionError, match="豁免重复"):
-        parse_saves("力量:+7; 力量豁免:+6")
-    skills = parse_skills("观察:+5; 隐匿:+8*; 运动:＋3")
-    assert skills == {"察觉": "+5", "隐匿": "+8*", "运动": "+3"}
-    with pytest.raises(AssertionError, match="技能条目不完整"):
-        parse_skills("力量:+5")
 
 
 def test_prof_groups_and_check_entries() -> None:
@@ -191,9 +175,6 @@ def test_content_rejects_dollar() -> None:
             "$战斗$ AC:17; 先攻:+3; 速度:30; 被动察觉:12",
             lambda c: c.combat["AC"] == "17",
         ),
-        ("$技能$ 运动:+5; 隐匿:+8*", lambda c: c.skills == {
-            "运动": "+5", "隐匿": "+8*"
-        }),
         ("$物品$ 火把x3", lambda c: c.items == ["火把x3"]),
         (
             "$背景$ 背景:士兵; 阵营:守序善良",
@@ -213,7 +194,7 @@ def test_single_segment_merge_keeps_others(segment: str, check) -> None:
     assert merged.ability_info.ability == base.ability_info.ability
     assert merged.weapons == base.weapons
     assert merged.spells == base.spells
-    assert merged.ability_info.prof_weapons == ["匕首", "法杖", "轻弩"]
+    assert merged.ability_info.prof_weapons == ["匕首", "长棍"]
 
 
 def test_single_segment_merge_preserves_portrait() -> None:
@@ -256,6 +237,9 @@ def test_coins_progress_story_parsing() -> None:
     }
     assert parse_progress("经验:500; 激励:无") == {"经验": "500", "激励": "无"}
     assert parse_story("  一段故事  ") == "一段故事"
+    assert parse_story("第一段\n第二段\n\n第三段") == "第一段\n第二段\n\n第三段"
+    assert parse_story("长" * 1000) == "长" * 1000
+    assert parse_story("长" * 500 + "\n" + "长" * 500).count("\n") == 1
 
     with pytest.raises(AssertionError, match="钱币条目重复"):
         parse_coins("GP:1; GP:2")
@@ -266,7 +250,9 @@ def test_coins_progress_story_parsing() -> None:
     with pytest.raises(AssertionError, match="激励只能写"):
         parse_progress("激励:也许")
     with pytest.raises(AssertionError, match="故事内容过长"):
-        parse_story("长" * 301)
+        parse_story("长" * 1001)
+    with pytest.raises(AssertionError, match="故事内容不能包含符号"):
+        parse_story("故事里有 $姓名$")
 
 
 def test_weapon_note_parsing() -> None:
@@ -335,7 +321,32 @@ def test_single_segment_merge_new_segments() -> None:
     base = gen_template_char("g", "u")
     assert _parse("$钱币$ GP:99", existing=base).coins == {"GP": 99}
     assert _parse("$故事$ 新故事", existing=base).story == "新故事"
+    assert _parse(
+        "$故事$ 第一段\n第二段", existing=base
+    ).story == "第一段\n第二段"
     assert _parse("$进度$ 经验:1/2; 激励:无", existing=base).progress == {
         "经验": "1/2",
         "激励": "无",
     }
+
+
+def test_legacy_derived_segments_are_ignored() -> None:
+    """旧卡的属性值/豁免/技能段：整卡重录时静默忽略，单独录入则明确提示。"""
+    text = gen_template_char().get_char_info() + "\n"
+    text += (
+        "$属性值$ 力量:8/-1; 敏捷:15/+2; 体质:16/+3; "
+        "智力:18/+4; 感知:10/+0; 魅力:8/-1\n"
+        "$豁免$ 力量:+1; 智力:+9\n"
+        "$技能$ 运动:-1; 奥秘:+10*\n"
+    )
+    parsed = _parse(text)
+    assert parsed.get_char_info() == gen_template_char().get_char_info()
+    assert "$属性值$" not in parsed.get_char_info()
+    assert "$豁免$" not in parsed.get_char_info()
+    assert "$技能$" not in parsed.get_char_info()
+
+    base = gen_template_char("g", "u")
+    with pytest.raises(AssertionError, match="由骰娘按属性、等级与熟练自动计算"):
+        _parse("$技能$ 运动:+5", existing=base)
+    with pytest.raises(AssertionError, match="由骰娘按属性、等级与熟练自动计算"):
+        _parse("$豁免$ 力量:+5\n$技能$ 运动:+5")

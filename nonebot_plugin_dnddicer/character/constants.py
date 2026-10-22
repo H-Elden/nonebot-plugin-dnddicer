@@ -186,8 +186,8 @@ XP_VALUE_MAX = 9_999_999
 COIN_KEY_LIST = ("CP", "SP", "EP", "GP", "PP")
 #: 单个币值上限
 COIN_VALUE_MAX = 999_999
-#: ``$故事$`` 单行最大字数
-STORY_MAX_LEN = 300
+#: ``$故事$`` 最大字数（可多行多段；换行不计入字数，2026-10-22 起由 300 放宽）
+STORY_MAX_LEN = 1000
 #: ``$武器$`` 备注最大字数
 WEAPON_NOTE_MAX_LEN = 30
 #: ``$能力$`` 说明文本最大字数
@@ -222,6 +222,8 @@ CHAR_INFO_KEY_SPELL_SLOTS = "$法术位$"
 #: 完整卡面扩展段（2026-10-21）
 CHAR_INFO_KEY_BACKGROUND = "$背景$"
 CHAR_INFO_KEY_COMBAT = "$战斗$"
+#: 以下三段 2026-10-22 起由骰娘按属性/熟练自动计算：不再出现在卡文本里，
+#: 也不再接受录入；旧卡里若仍有这三段，解析时静默忽略（见 LEGACY_CHAR_INFO_KEY_LIST）。
 CHAR_INFO_KEY_ABILITY_DISPLAY = "$属性值$"
 CHAR_INFO_KEY_SAVES = "$豁免$"
 CHAR_INFO_KEY_SKILLS = "$技能$"
@@ -246,9 +248,6 @@ CHAR_INFO_KEY_LIST = [
     CHAR_INFO_KEY_COMBAT,
     CHAR_INFO_KEY_PROGRESS,
     CHAR_INFO_KEY_ABILITY,
-    CHAR_INFO_KEY_ABILITY_DISPLAY,
-    CHAR_INFO_KEY_SAVES,
-    CHAR_INFO_KEY_SKILLS,
     CHAR_INFO_KEY_PROF,
     CHAR_INFO_KEY_EXT,
     CHAR_INFO_KEY_FEATS,
@@ -261,3 +260,11 @@ CHAR_INFO_KEY_LIST = [
     CHAR_INFO_KEY_SPELL_SLOTS,
     CHAR_INFO_KEY_COMBAT_NOTES,
 ]
+
+#: 仅用于兼容旧卡的段：由骰娘自动计算，不输出、不接受单独录入。
+#: 解析器认识这些键是为了在整卡重录时静默忽略，而不是把它们当成未知段。
+LEGACY_CHAR_INFO_KEY_LIST = (
+    CHAR_INFO_KEY_ABILITY_DISPLAY,
+    CHAR_INFO_KEY_SAVES,
+    CHAR_INFO_KEY_SKILLS,
+)

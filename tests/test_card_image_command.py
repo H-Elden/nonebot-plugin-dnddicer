@@ -77,7 +77,7 @@ async def _expect_image(app: App, event, png: bytes) -> None:
         ctx.receive_event(bot, event)
 
 
-async def _save_card(user_id: int = _USER, name: str = "张三") -> None:
+async def _save_card(user_id: int = _USER, name: str = "伊瑟兰·晨星") -> None:
     char = gen_template_char(str(_GROUP), str(user_id))
     char.name = name
     await save_character(char)
@@ -96,8 +96,8 @@ async def test_card_image_sends_png(app: App):
     render.set_char_renderer(fake_renderer)
     await _expect_image(app, _event(".角色卡图"), _PNG_1PX)
     assert len(calls) == 1
-    assert calls[0].name == "张三"
-    assert calls[0].combat_notes == ("法师护甲(8小时)", "专注:飞行术")
+    assert calls[0].name == "伊瑟兰·晨星"
+    assert calls[0].combat_notes == ("法师护甲(8小时)",)
 
 
 @pytest.mark.asyncio
