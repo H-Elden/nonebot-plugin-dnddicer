@@ -164,6 +164,51 @@
   margin-bottom: 12px;
 }
 
+.cb-rules {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 8px;
+  background-color: var(--vp-c-bg-soft);
+}
+
+.cb-rules__label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cb-rules__switch {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 6px;
+  background-color: var(--vp-c-bg);
+}
+
+.cb-rules__btn {
+  padding: 3px 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--vp-c-text-2);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.cb-rules__btn--active {
+  background-color: var(--vp-c-brand-1);
+  color: #fff;
+}
+
+.cb-rules__hint {
+  color: var(--vp-c-text-3);
+  font-size: 12px;
+}
+
 .cb-toolbar__spacer {
   flex: 1;
 }
@@ -386,6 +431,26 @@
   max-width: 140px;
 }
 
+.cb-input--readonly {
+  background-color: var(--vp-c-bg-soft);
+  color: var(--vp-c-text-2);
+  cursor: not-allowed;
+}
+
+.cb-inline-note {
+  color: var(--vp-c-text-2);
+  font-size: 12px;
+}
+
+.cb-formula {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  color: var(--vp-c-text-3);
+  font-size: 11px;
+}
+
 .cb-input--tiny {
   width: 64px;
   padding: 2px 6px;
@@ -427,6 +492,14 @@
   flex-direction: column;
   gap: 3px;
   min-width: 0;
+}
+
+.cb-grid__cell--span2 {
+  grid-column: span 2;
+}
+
+.cb-grid__full {
+  grid-column: 1 / -1;
 }
 
 .cb-grid__label {
@@ -583,6 +656,11 @@
   align-items: center;
 }
 
+.cb-item-head--plain,
+.cb-item-row--plain {
+  grid-template-columns: minmax(0, 2fr) 90px;
+}
+
 .cb-icon {
   display: inline-flex;
   align-items: center;
@@ -614,6 +692,47 @@
   color: var(--vp-c-text-2);
   font-size: 13px;
   font-weight: 600;
+}
+
+.cb-subhead--minor {
+  margin-top: 6px;
+  font-weight: 500;
+}
+
+.cb-check-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
+.cb-prof-group {
+  margin-top: 10px;
+}
+
+.cb-prof-group .cb-grid__label {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.cb-chip--static {
+  cursor: default;
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.cb-chip__remove {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.cb-chip__remove:hover {
+  color: var(--vp-c-red-1, #ef4444);
 }
 
 .cb-chip-grid {

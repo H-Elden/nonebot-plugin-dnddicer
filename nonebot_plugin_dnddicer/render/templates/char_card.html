@@ -10,12 +10,11 @@
 <body>
 {%- macro box(filled) -%}<span class="box{% if filled %} filled{% endif %}"></span>{%- endmacro -%}
 {%- macro pips(filled, total) -%}{% for i in range(total) %}{{ box(i < filled) }}{% endfor %}{%- endmacro -%}
-{%- macro feature_panel(title, items) -%}<div class="panel"><div class="panel-title">{{ title }}</div>{% for item in items %}<div class="feature"><span class="f-name">{{ item.name }}</span>{% if item.uses %}<span class="f-uses">{{ item.uses }}</span>{% endif %}{% if item.text %}<div class="f-text">{{ item.text }}</div>{% endif %}</div>{% endfor %}</div>{%- endmacro -%}
+{%- macro feature_panel(title, items) -%}<div class="panel"><div class="panel-title">{{ title }}</div>{% for item in items %}<div class="feature">{% if item.level %}<span class="f-level">{{ item.level }}级</span>{% endif %}<span class="f-name">{{ item.name }}</span>{% if item.uses %}<span class="f-uses">{{ item.uses }}</span>{% endif %}{% if item.text %}<div class="f-text">{{ item.text }}</div>{% endif %}</div>{% endfor %}</div>{%- endmacro -%}
+{%- macro magic_panel(items) -%}<div class="panel magic-panel"><div class="panel-title">魔法物品</div>{% for item in items %}<div class="magic-item"><div class="m-head"><span class="m-name">{{ item.name }}</span><span class="m-tag">{{ item.tag }}</span></div>{% for paragraph in item.paragraphs %}<div class="m-text">{{ paragraph }}</div>{% endfor %}</div>{% endfor %}</div>{%- endmacro -%}
 {%- macro lines_panel(title, lines, cls) -%}<div class="panel"><div class="panel-title">{{ title }}</div>{% for line in lines %}<div class="{{ cls }}">{{ line }}</div>{% endfor %}</div>{%- endmacro -%}
 {%- macro item_panel(items) -%}<div class="panel"><div class="panel-title">装备</div>{% for item in items %}<div class="item-line">{{ item }}</div>{% endfor %}</div>{%- endmacro -%}
 {%- macro coin_panel(coins) -%}<div class="panel"><div class="panel-title">钱币</div><table class="coins"><tr>{% for coin in coins %}<th width="20%">{{ coin.label }}</th>{% endfor %}</tr><tr>{% for coin in coins %}<td width="20%">{{ coin.value }}</td>{% endfor %}</tr></table></div>{%- endmacro -%}
-{%- macro sub_left(v) -%}{% if v.traits %}{{ feature_panel("种族与职业特性", v.traits) }}{% endif %}{% if v.feats %}{{ feature_panel("专长", v.feats) }}{% endif %}{% if v.class_features %}{{ feature_panel("职业特性与能力", v.class_features) }}{% endif %}{%- endmacro -%}
-{%- macro sub_right(v) -%}{% if v.items %}{{ item_panel(v.items) }}{% endif %}{% if v.coins %}{{ coin_panel(v.coins) }}{% endif %}{%- endmacro -%}
 <div class="sheet card">
 <table class="top"><tr>
 <td class="photo-cell">{% if view.has_portrait %}<img class="photo" src="{{ view.portrait_data_uri }}" alt="">{% else %}<div class="photo placeholder">{{ view.portrait_initial }}</div>{% endif %}</td>
@@ -33,6 +32,7 @@
 <tr class="hp-row hp-last"><td class="hp-label">英雄激励</td><td>{{ box(view.inspiration is true) }}</td></tr>
 </table></td>
 </tr></table>
+{% if view.weapons %}<div class="panel weapon-panel"><div class="panel-title">武器与伤害</div><table class="weapons"><thead class="weapons-head"><tr><th class="w-name">名称</th><th class="w-hit">命中/DC</th><th class="w-dmg">伤害</th><th class="w-type">类型</th><th class="w-note">备注</th></tr></thead><tbody>{% for w in view.weapons %}<tr><td class="w-name">{{ w.name }}</td><td class="w-hit">{{ w.hit }}</td><td class="w-dmg">{{ w.damage }}</td><td class="w-type">{{ w.damage_type }}</td><td class="w-note">{{ w.note or "—" }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
 <table class="main"><tr>
 <td class="left-col">
 {% for ab in view.abilities %}
@@ -48,21 +48,20 @@
 </table>
 {% endfor %}
 {% if view.proficiencies %}{{ lines_panel("熟练与语言", view.proficiencies, "plain-line") }}{% endif %}
+{% if view.race_traits %}{{ feature_panel("种族特性", view.race_traits) }}{% endif %}
+{% if view.class_traits %}{{ feature_panel("职业特性", view.class_traits) }}{% endif %}
+{% if view.feats %}{{ feature_panel("专长", view.feats) }}{% endif %}
+{% if view.resources %}{{ feature_panel("限定资源", view.resources) }}{% endif %}
 {% if view.combat_notes %}{{ lines_panel("战斗记录", view.combat_notes, "note-line") }}{% endif %}
 </td>
 <td class="right-col">
-{% if view.weapons %}<div class="panel"><div class="panel-title">武器与伤害</div><table class="weapons"><thead class="weapons-head"><tr><th class="w-name">名称</th><th class="w-hit">命中/DC</th><th class="w-dmg">伤害</th><th class="w-type">类型</th><th class="w-note">备注</th></tr></thead><tbody>{% for w in view.weapons %}<tr><td class="w-name">{{ w.name }}</td><td class="w-hit">{{ w.hit }}</td><td class="w-dmg">{{ w.damage }}</td><td class="w-type">{{ w.damage_type }}</td><td class="w-note">{{ w.note or "—" }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
-{% set left_any = view.traits or view.feats or view.class_features %}
-{% set right_any = view.items or view.coins %}
-{% if left_any or right_any %}<table class="sub-two"><tr>
-{% if left_any and right_any %}<td class="sub-col sub-col-left">{{ sub_left(view) }}</td><td class="sub-col sub-col-right">{{ sub_right(view) }}</td>
-{% elif left_any %}<td class="sub-col-full" colspan="2">{{ sub_left(view) }}</td>
-{% else %}<td class="sub-col-full" colspan="2">{{ sub_right(view) }}</td>
-{% endif %}</tr></table>{% endif %}
-{% if view.background_rows %}<div class="panel"><div class="panel-title">背景与个性</div><table class="bg-two-col">{% for row in view.background_rows %}<tr>{% for cell in row.cells %}<td><span class="bg-key">{{ cell[0] }}</span>{{ cell[1] }}</td>{% endfor %}{% if row.cells|length == 1 %}<td></td>{% endif %}</tr>{% endfor %}</table></div>{% endif %}
-{% if view.story %}<div class="panel"><div class="panel-title">背景故事</div><div class="story-text">{% for line in view.story_lines %}<div class="story-line">{{ line if line else " " }}</div>{% endfor %}</div></div>{% endif %}
+{% if view.items %}{{ item_panel(view.items) }}{% endif %}
+{% if view.coins %}{{ coin_panel(view.coins) }}{% endif %}
 </td>
 </tr></table>
+{% if view.background_rows %}<div class="panel"><div class="panel-title">背景与个性</div><table class="bg-two-col">{% for row in view.background_rows %}<tr>{% for cell in row.cells %}<td><span class="bg-key">{{ cell[0] }}</span>{{ cell[1] }}</td>{% endfor %}{% if row.cells|length == 1 %}<td></td>{% endif %}</tr>{% endfor %}</table></div>{% endif %}
+{% if view.story %}<div class="panel"><div class="panel-title">背景故事</div><div class="story-text">{% for line in view.story_lines %}<div class="story-line">{{ line if line else " " }}</div>{% endfor %}</div></div>{% endif %}
+{% if view.magic_items %}{{ magic_panel(view.magic_items) }}{% endif %}
 {% if view.spell_groups or view.has_slots %}<div class="panel spell-panel"><div class="panel-title">戏法与已准备法术</div>
 <table class="spell-head"><tr>
 <td class="spell-cast"><table class="casting"><tr><td><div class="c-label">施法属性</div><div class="c-value">{{ view.spellcasting }}</div></td><td><div class="c-label">豁免 DC</div><div class="c-value">{{ view.spell_dc or "—" }}</div></td><td><div class="c-label">法术攻击</div><div class="c-value">{{ view.spell_attack or "—" }}</div></td></tr></table></td>

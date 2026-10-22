@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
+
 from nonebot_plugin_dnddicer.render import engine
 
 CSS_FILES = ("rich_card.css", "rule_card.css", "books_card.css", "char_card.css")
@@ -81,6 +83,7 @@ def test_template_css_is_not_html_escaped() -> None:
     sans-serif（拉丁走 DejaVu Sans、汉字走 Noto Sans CJK JP），表现为日文字形与
     同一行中英文基线不一致；配置项注入的字体规则同样会失效。
     """
+    pytest.importorskip("jinja2", reason="模板渲染需要可选的 [render] 依赖（含 Jinja2）")
     for name in HTML_FILES:
         html = _render_template(name)
         assert "&#34;" not in html, name

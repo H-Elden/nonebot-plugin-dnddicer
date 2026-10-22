@@ -18,17 +18,109 @@
     </div>
   </div>
 
-  <div class="cb-subhead">展示分组（只用于卡面）</div>
-  <div class="cb-grid cb-grid--2">
-    <label v-for="label in groups" :key="label" class="cb-grid__cell">
-      <span class="cb-grid__label">{{ label }}</span>
+  <div class="cb-subhead">护甲受训</div>
+  <div class="cb-check-grid">
+    <label v-for="name in armorOptions" :key="name" class="cb-check">
       <input
-        v-model="state[K.PROF].groups[label]"
-        class="cb-input"
-        :placeholder="groupPlaceholder(label)"
+        type="checkbox"
+        :checked="hasGroupValue('护甲', name)"
+        @change="toggleGroupValue('护甲', name)"
       />
+      {{ name }}
     </label>
   </div>
+
+  <div class="cb-subhead">武器熟练</div>
+  <div class="cb-check-grid">
+    <label v-for="name in weaponOptions" :key="name" class="cb-check">
+      <input
+        type="checkbox"
+        :checked="hasGroupValue('武器', name)"
+        @change="toggleGroupValue('武器', name)"
+      />
+      {{ name }}
+    </label>
+  </div>
+  <div class="cb-inline">
+    <input
+      v-model="weaponCustom"
+      class="cb-input"
+      placeholder="特定武器（如 长剑），回车添加"
+      @keyup.enter="addCustom('武器', weaponCustom); weaponCustom = ''"
+    />
+    <button type="button" class="cb-btn cb-btn--ghost cb-btn--small" @click="addCustom('武器', weaponCustom); weaponCustom = ''">
+      添加
+    </button>
+  </div>
+
+  <div class="cb-subhead">工具熟练</div>
+  <div class="cb-inline">
+    <select class="cb-select" @change="onToolSelect">
+      <option value="">选择工具后添加…</option>
+      <option v-for="name in toolOptions" :key="name" :value="name">{{ name }}</option>
+    </select>
+    <input
+      v-model="toolCustom"
+      class="cb-input"
+      placeholder="自定义工具，回车添加"
+      @keyup.enter="addCustom('工具', toolCustom); toolCustom = ''"
+    />
+    <button type="button" class="cb-btn cb-btn--ghost cb-btn--small" @click="addCustom('工具', toolCustom); toolCustom = ''">
+      添加
+    </button>
+  </div>
+
+  <div class="cb-subhead">语言</div>
+  <div class="cb-subhead cb-subhead--minor">标准语言</div>
+  <div class="cb-check-grid">
+    <label v-for="name in languageOptions" :key="name" class="cb-check">
+      <input
+        type="checkbox"
+        :checked="hasGroupValue('语言', name)"
+        @change="toggleGroupValue('语言', name)"
+      />
+      {{ name }}
+    </label>
+  </div>
+  <div class="cb-subhead cb-subhead--minor">稀有语言</div>
+  <div class="cb-check-grid">
+    <label v-for="name in exoticLanguageOptions" :key="name" class="cb-check">
+      <input
+        type="checkbox"
+        :checked="hasGroupValue('语言', name)"
+        @change="toggleGroupValue('语言', name)"
+      />
+      {{ name }}
+    </label>
+  </div>
+  <div class="cb-inline">
+    <input
+      v-model="languageCustom"
+      class="cb-input"
+      placeholder="自定义语言，回车添加"
+      @keyup.enter="addCustom('语言', languageCustom); languageCustom = ''"
+    />
+    <button type="button" class="cb-btn cb-btn--ghost cb-btn--small" @click="addCustom('语言', languageCustom); languageCustom = ''">
+      添加
+    </button>
+  </div>
+
+  <div v-for="label in groupLabels" :key="label" class="cb-prof-group">
+    <span class="cb-grid__label">{{ label }}</span>
+    <div class="cb-chip-grid">
+      <span v-for="value in groupValues(label)" :key="value" class="cb-chip cb-chip--static">
+        {{ value }}
+        <button
+          type="button"
+          class="cb-chip__remove"
+          title="移除"
+          @click="removeGroupValue(label, value)"
+        >×</button>
+      </span>
+      <span v-if="groupValues(label).length === 0" class="cb-muted">未选择</span>
+    </div>
+  </div>
+
   <p class="cb-hint">
     点一下熟练、再点一下专精（技能）；豁免是熟练开关。数值由骰娘按等级、属性与熟练自动计算，
     额外加值里的常数已计入；骰子加值（如 +1d4）会原样附在数值后面。
@@ -36,12 +128,10 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { K } from '../../card-builder/core.mjs'
 
-// $熟练$：豁免（熟练开关）与技能（未熟练 → 熟练 → 专精）的点击编辑，
-// 外加四个只用于卡面的展示分组。旧卡里的属性检定熟练若存在，额外给一个
-// 兼容分组，保证导入后仍可查看和清除。
+// $熟练$：豁免与技能的点击编辑，护甲/武器复选框，工具/语言多选 + 自定义。
 const props = defineProps({
   state: { type: Object, required: true },
   enums: { type: Object, required: true },
@@ -50,18 +140,21 @@ const props = defineProps({
   values: { type: Object, default: () => ({}) },
 })
 
-const groups = computed(() => props.enums.proficiency_groups || [])
-const sections = computed(() => {
-  const legacy = props.abilities.filter((name) => scaleOf(name) > 0)
-  const list = [
-    { label: '豁免', items: props.enums.saving_items || [], triple: false },
-    { label: '技能', items: props.skills, triple: true },
-  ]
-  if (legacy.length > 0) {
-    list.push({ label: '属性检定（旧卡兼容）', items: legacy, triple: false })
-  }
-  return list
-})
+const weaponCustom = ref('')
+const toolCustom = ref('')
+const languageCustom = ref('')
+
+const sections = computed(() => [
+  { label: '豁免', items: props.enums.saving_items || [], triple: false },
+  { label: '技能', items: props.skills, triple: true },
+])
+
+const armorOptions = computed(() => props.enums.armor_categories || [])
+const weaponOptions = computed(() => props.enums.weapon_categories || [])
+const toolOptions = computed(() => props.enums.tool_options || [])
+const languageOptions = computed(() => props.enums.languages_standard || [])
+const exoticLanguageOptions = computed(() => props.enums.languages_exotic || [])
+const groupLabels = computed(() => props.enums.proficiency_groups || [])
 
 function scaleOf(name) {
   return Number(props.state[K.PROF].checks[name] || 0)
@@ -101,13 +194,43 @@ function cycle(name, triple) {
   else checks[name] = 0
 }
 
-function groupPlaceholder(label) {
-  const placeholders = {
-    护甲: '轻甲·中甲',
-    武器: '军用武器·简易武器',
-    工具: '盗贼工具',
-    语言: '通用语·精灵语',
+function groupValues(label) {
+  const raw = props.state[K.PROF].groups[label] || ''
+  return raw.split('·').map((value) => value.trim()).filter((value) => value)
+}
+
+function setGroupValues(label, values) {
+  props.state[K.PROF].groups[label] = [...new Set(values)].join('·')
+}
+
+function hasGroupValue(label, value) {
+  return groupValues(label).includes(value)
+}
+
+function toggleGroupValue(label, value) {
+  const current = groupValues(label)
+  if (current.includes(value)) {
+    setGroupValues(label, current.filter((item) => item !== value))
+  } else {
+    setGroupValues(label, [...current, value])
   }
-  return placeholders[label] || '用 · 分隔多项'
+}
+
+function addCustom(label, value) {
+  const text = value.trim()
+  if (!text) return
+  if (text.includes('·')) return
+  const current = groupValues(label)
+  if (!current.includes(text)) setGroupValues(label, [...current, text])
+}
+
+function removeGroupValue(label, value) {
+  setGroupValues(label, groupValues(label).filter((item) => item !== value))
+}
+
+function onToolSelect(event) {
+  const value = event.target.value
+  if (value) addCustom('工具', value)
+  event.target.value = ''
 }
 </script>

@@ -2,7 +2,7 @@
   <RepeaterRows
     :items="state[K.FEATURE]"
     :max="limits.feature_max_count || 20"
-    add-label="添加能力"
+    add-label="添加限定资源"
     :factory="factory"
   >
     <template #default="{ item }">
@@ -57,7 +57,7 @@ import { computed } from 'vue'
 import { K } from '../../card-builder/core.mjs'
 import RepeaterRows from './RepeaterRows.vue'
 
-// $能力$：有使用次数的能力，恢复档四选（短休/长休/两者/手动）与可选恢复量。
+// $限定资源$：有使用次数的资源，恢复档四选（短休/长休/两者/手动）与可选恢复量。
 const props = defineProps({
   state: { type: Object, required: true },
   enums: { type: Object, required: true },

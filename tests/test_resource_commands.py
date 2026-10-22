@@ -19,7 +19,7 @@ _CARD = "\n".join([
     "$姓名$ 测试",
     "$等级$ 5",
     "$属性$ 10/10/10/10/10/10",
-    "$能力$ 引导神力:2/2短休+1,长休; 圣疗:25/25长休",
+    "$限定资源$ 引导神力:2/2短休+1,长休; 圣疗:25/25长休",
     "$法术$ 施法属性:智力; 火球术:3*; 闪电束:3; 火焰箭:0",
     "$法术位$ 1:4/4; 2:3/3; 契约3:2/2",
 ])
@@ -83,7 +83,7 @@ async def test_ability_list_detail_and_modify(app: App):
     await _record(app)
     await _expect(
         app, ability_matcher, _event(".能力"),
-        "当前能力（2 项）：\n"
+        "当前限定资源（2 项）：\n"
         "1. 引导神力 2/2（短休+1，长休）\n"
         "2. 圣疗 25/25（长休）\n"
         "用法：.能力 名称 查看详情；.能力 名称 -N 消耗、+N 恢复",
@@ -117,7 +117,7 @@ async def test_ability_fuzzy_match_and_errors(app: App):
     card = "\n".join([
         "$等级$ 5",
         "$属性$ 10/10/10/10/10/10",
-        "$能力$ 引导神力:2/2短休; 引路神力:1/1长休",
+        "$限定资源$ 引导神力:2/2短休; 引路神力:1/1长休",
     ])
     await _record(app, card=card)
     # 精确优先：输入完整名称命中同名条目
@@ -132,7 +132,7 @@ async def test_ability_fuzzy_match_and_errors(app: App):
     )
     await _expect(
         app, ability_matcher, _event(".能力 不存在"),
-        "找不到能力「不存在」（可用 .设置能力 录入，.能力 查看清单）",
+        "找不到限定资源「不存在」（可用 .设置能力 录入，.能力 查看清单）",
     )
     await _expect(
         app, ability_matcher, _event(".能力 引导神力 -0"), "次数至少为 1"
@@ -154,7 +154,7 @@ async def test_set_and_delete_ability(app: App):
     await _record(app)
     await _expect(
         app, set_feature_matcher, _event(".设置能力 奥术回想:1/1短休"),
-        "已设置能力：奥术回想（当前共 3 项）\n"
+        "已设置限定资源：奥术回想（当前共 3 项）\n"
         "1. 引导神力 2/2（短休+1，长休）\n"
         "2. 圣疗 25/25（长休）\n"
         "3. 奥术回想 1/1（短休）",
@@ -162,25 +162,25 @@ async def test_set_and_delete_ability(app: App):
     # 同名覆盖：当前值一并按新写法重置
     await _expect(
         app, set_feature_matcher, _event(".设置能力 奥术回想:0/1短休"),
-        "已设置能力：奥术回想（当前共 3 项）\n"
+        "已设置限定资源：奥术回想（当前共 3 项）\n"
         "1. 引导神力 2/2（短休+1，长休）\n"
         "2. 圣疗 25/25（长休）\n"
         "3. 奥术回想 0/1（短休）",
     )
     await _expect(
         app, set_feature_matcher, _event(".设置能力 引导神力:2/2随便"),
-        "能力恢复方式无效: 随便（可选：短休/长休/两者/手动，可加 +N 或 满）",
+        "限定资源恢复方式无效: 随便（可选：短休/长休/两者/手动，可加 +N 或 满）",
     )
     await _expect(
         app, del_feature_matcher, _event(".删除能力 奥术"),
-        "已删除能力: 奥术回想",
+        "已删除限定资源: 奥术回想",
     )
     await _expect(
         app, del_feature_matcher, _event(".删除能力 奥术"),
-        "未找到能力: 奥术（可用 .设置能力 查看当前能力）",
+        "未找到限定资源: 奥术（可用 .设置能力 查看当前限定资源）",
     )
     await _expect(app, ability_matcher, _event(".能力"), (
-        "当前能力（2 项）：\n"
+        "当前限定资源（2 项）：\n"
         "1. 引导神力 2/2（短休+1，长休）\n"
         "2. 圣疗 25/25（长休）\n"
         "用法：.能力 名称 查看详情；.能力 名称 -N 消耗、+N 恢复"

@@ -20,36 +20,41 @@ from ..engine.roll.result import RollResult
 from .constants import (
     ABILITY_LIST,
     ABILITY_NUM,
-    BACKGROUND_KEY_MAX_LEN,
-    BACKGROUND_MAX_COUNT,
+    BACKGROUND_KEY_LIST,
     BACKGROUND_VALUE_MAX_LEN,
     CHAR_INFO_KEY_ABILITY,
     CHAR_INFO_KEY_BACKGROUND,
     CHAR_INFO_KEY_CLASS,
+    CHAR_INFO_KEY_CLASS_TRAITS,
     CHAR_INFO_KEY_COINS,
     CHAR_INFO_KEY_COMBAT,
     CHAR_INFO_KEY_COMBAT_NOTES,
     CHAR_INFO_KEY_EXT,
-    CHAR_INFO_KEY_FEATURE,
     CHAR_INFO_KEY_FEATS,
     CHAR_INFO_KEY_HP,
     CHAR_INFO_KEY_HP_DICE,
     CHAR_INFO_KEY_ITEMS,
     CHAR_INFO_KEY_LEVEL,
     CHAR_INFO_KEY_LIST,
+    CHAR_INFO_KEY_MAGIC_ITEMS,
     CHAR_INFO_KEY_NAME,
     CHAR_INFO_KEY_PROF,
     CHAR_INFO_KEY_PROGRESS,
     CHAR_INFO_KEY_RACE,
+    CHAR_INFO_KEY_RACE_TRAITS,
+    CHAR_INFO_KEY_RESOURCE,
     CHAR_INFO_KEY_SPELL,
     CHAR_INFO_KEY_SPELL_SLOTS,
     CHAR_INFO_KEY_STORY,
     CHAR_INFO_KEY_SUBCLASS,
-    CHAR_INFO_KEY_TRAITS,
     CHAR_INFO_KEY_WEAPON,
     CHECK_ITEM_INDEX_DICT,
     CHECK_ITEM_LIST,
+    CLASS_FEATURE_MAX_COUNT,
+    CLASS_FEATURE_NAME_MAX_LEN,
+    CLASS_FEATURE_TEXT_MAX_LEN,
     CLASS_LIST,
+    CLASS_NAME_MAX_LEN,
     CLASS_SYNONYM_DICT,
     COIN_KEY_LIST,
     COIN_VALUE_MAX,
@@ -73,11 +78,18 @@ from .constants import (
     ITEM_MAX_COUNT,
     ITEM_NAME_MAX_LEN,
     ITEM_QUANTITY_MAX,
-    LEGACY_CHAR_INFO_KEY_LIST,
+    MAGIC_ITEM_MAX_COUNT,
+    MAGIC_ITEM_NAME_MAX_LEN,
+    MAGIC_ITEM_PARAGRAPH_MAX,
+    MAGIC_ITEM_TAG_MAX_LEN,
+    MAGIC_ITEM_TEXT_MAX_LEN,
     PREPARED_CASTERS_2014,
     PROFICIENCY_GROUP_ITEM_MAX,
     PROFICIENCY_GROUP_ITEM_MAX_LEN,
     PROFICIENCY_GROUP_LIST,
+    RACE_TRAIT_MAX_COUNT,
+    RACE_TRAIT_NAME_MAX_LEN,
+    RACE_TRAIT_TEXT_MAX_LEN,
     REST_LONG,
     REST_SHORT,
     SAVING_ALL_KEY,
@@ -102,9 +114,6 @@ from .constants import (
     SPELL_SLOT_MAX,
     SPELL_TIME_MAX_LEN,
     STORY_MAX_LEN,
-    TRAIT_ITEM_MAX_LEN,
-    TRAIT_MAX_COUNT,
-    TRAIT_TEXT_MAX_LEN,
     WEAPON_MAX_COUNT,
     WEAPON_NAME_FORBIDDEN_CHARS,
     WEAPON_NAME_FORBIDDEN_WORDS,
@@ -115,8 +124,10 @@ from .constants import (
 from .models import (
     AbilityInfo,
     CharacterFeature,
+    ClassFeature,
     DNDCharacter,
     HPInfo,
+    MagicItem,
     SpellEntry,
     SpellSlots,
     WeaponInfo,
@@ -131,19 +142,21 @@ def _normalize_name(name: str) -> str:
 def parse_template_to_dict(input_str: str) -> Dict[str, str]:
     """把角色卡模板文本（``$关键字$ 内容``）拆成 {关键字: 内容} 字典。
 
-    ``$`` 为段落分隔符，内容中不应再出现 ``$``；未知关键字静默跳过。
-    旧卡里的 ``$属性值$`` / ``$豁免$`` / ``$技能$`` 仍会被识别（便于整卡
-    重录时静默忽略），但它们已不再输出、也不接受单独录入。
+    ``$`` 为段落分隔符，内容中不应再出现 ``$``；未知段直接报错（不再静默
+    忽略），空的已知段跳过，便于可选段留空。
     """
-    known_keys = set(CHAR_INFO_KEY_LIST) | set(LEGACY_CHAR_INFO_KEY_LIST)
+    known_keys = set(CHAR_INFO_KEY_LIST)
+    matches = list(re.finditer(r"\$([^$\n]+)\$", input_str))
     result: Dict[str, str] = {}
-    parts = input_str.split("$")
-    for index in range(len(parts) - 1):
-        key = f"${parts[index]}$"
+    for index, match in enumerate(matches):
+        key = f"${match.group(1)}$"
         if key not in known_keys:
-            continue
-        content = parts[index + 1].strip()
-        if content and content not in known_keys:
+            raise AssertionError(
+                f"未知段: {key}（可用段见 .角色卡模板）"
+            )
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(input_str)
+        content = input_str[match.end():end].strip()
+        if content:
             result[key] = content
     return result
 
@@ -162,14 +175,24 @@ _CLASS_MULTI_SEPARATORS = ("/", "、", "+", ",", "，", "兼")
 
 
 def normalize_class_name(text: str) -> str:
-    """把职业段文本归一为 12 职业规范名；不支持兼职（复合写法报错）。"""
+    """归一职业名：标准职业与异译归一，扩展职业原样保存。
+
+    不支持兼职（复合写法报错）；只有精确等于「游荡者」时才套用偷袭骰。
+    """
     value = text.strip()
     name = CLASS_SYNONYM_DICT.get(value, value)
     if name in CLASS_LIST:
         return name
     if any(sep in value for sep in _CLASS_MULTI_SEPARATORS):
         raise AssertionError("当前版本暂不支持兼职，请填写单一职业名（如 游荡者）")
-    raise AssertionError(f"职业无效: {value}，可用职业: {'/'.join(CLASS_LIST)}")
+    if not name:
+        raise AssertionError("职业名称不能为空")
+    if len(name) > CLASS_NAME_MAX_LEN:
+        raise AssertionError(f"职业名称过长（≤{CLASS_NAME_MAX_LEN} 字）: {name}")
+    for char in ("$", "|", ";", ":"):
+        if char in name:
+            raise AssertionError(f"职业名称不能包含符号「{char}」: {name}")
+    return name
 
 
 def normalize_damage_type(text: str) -> str:
@@ -311,7 +334,7 @@ def parse_weapon_list(content: str, reserved_names: Iterable[str] = ()) -> List[
     return weapons
 
 
-# ── 能力次数 / 法术清单 / 法术位（2026-10-20 批②）────────────────────────
+# ── 限定资源次数 / 法术清单 / 法术位（2026-10-20 批②）────────────────────────
 
 
 def _split_semicolon_items(content: str) -> List[str]:
@@ -320,17 +343,17 @@ def _split_semicolon_items(content: str) -> List[str]:
 
 
 def validate_feature_name(name: str) -> None:
-    """能力名基础校验（解析与 .设置能力 共用；失败抛 AssertionError）。"""
+    """限定资源名称基础校验（解析与 .设置能力 共用；失败抛 AssertionError）。"""
     if not name:
-        raise AssertionError("能力名称不能为空")
+        raise AssertionError("限定资源名称不能为空")
     if len(name) > FEATURE_NAME_MAX_LEN:
-        raise AssertionError(f"能力名称过长（≤{FEATURE_NAME_MAX_LEN} 字）: {name}")
+        raise AssertionError(f"限定资源名称过长（≤{FEATURE_NAME_MAX_LEN} 字）: {name}")
     for ch in FEATURE_NAME_FORBIDDEN_CHARS:
         if ch in name:
-            raise AssertionError(f"能力名称不能包含符号「{ch}」: {name}")
+            raise AssertionError(f"限定资源名称不能包含符号「{ch}」: {name}")
     for word in FEATURE_NAME_FORBIDDEN_WORDS:
         if word in name:
-            raise AssertionError(f"能力名称不能包含「{word}」字样: {name}")
+            raise AssertionError(f"限定资源名称不能包含「{word}」字样: {name}")
 
 
 def _parse_recover_amount(text: str) -> str:
@@ -341,16 +364,16 @@ def _parse_recover_amount(text: str) -> str:
     matched = re.fullmatch(r"\+(\d+)", value)
     if not matched:
         raise AssertionError(
-            f"能力恢复量无效: {text}（可写 +N 或 满，如 短休+1、长休满）"
+            f"限定资源恢复量无效: {text}（可写 +N 或 满，如 短休+1、长休满）"
         )
     count = int(matched.group(1))
     if count <= 0:
-        raise AssertionError(f"能力恢复量必须大于 0: {text}")
+        raise AssertionError(f"限定资源恢复量必须大于 0: {text}")
     return f"+{count}"
 
 
 def normalize_feature_recover(spec: str) -> str:
-    """规范化能力恢复档串，返回如 ``短休+1,长休``。
+    """规范化限定资源恢复档串，返回如 ``短休+1,长休``。
 
     合法档位：``短休`` / ``长休`` / ``两者`` / ``手动``，多个用逗号连接；
     可后缀 ``+N``（恢复 N 次）或 ``满``（回满，默认，输出省略）。
@@ -360,7 +383,7 @@ def normalize_feature_recover(spec: str) -> str:
     raw = (spec or "").strip()
     if not raw:
         raise AssertionError(
-            "能力恢复方式不能为空"
+            "限定资源恢复方式不能为空"
             "（可选：短休/长休/两者/手动，可加 +N 或 满）"
         )
     amounts: Dict[str, str] = {}
@@ -374,17 +397,17 @@ def normalize_feature_recover(spec: str) -> str:
         )
         if mode is None:
             raise AssertionError(
-                f"能力恢复方式无效: {token}"
+                f"限定资源恢复方式无效: {token}"
                 "（可选：短休/长休/两者/手动，可加 +N 或 满）"
             )
         tail = token[len(mode):]
         if mode == "手动" and tail.strip():
             raise AssertionError(f"「手动」不能带恢复量: {token}")
         if mode in amounts:
-            raise AssertionError(f"能力恢复方式重复: {token}")
+            raise AssertionError(f"限定资源恢复方式重复: {token}")
         amounts[mode] = _parse_recover_amount(tail)
     if not amounts:
-        raise AssertionError("能力恢复方式不能为空")
+        raise AssertionError("限定资源恢复方式不能为空")
     if "两者" in amounts and ("短休" in amounts or "长休" in amounts):
         raise AssertionError("「两者」已含短休与长休，不要再分别写")
     return ",".join(
@@ -395,7 +418,7 @@ def normalize_feature_recover(spec: str) -> str:
 
 
 def parse_feature_item(item: str) -> CharacterFeature:
-    """解析单条能力：``名称:当前/上限恢复档[|说明]``。
+    """解析单条限定资源：``名称:当前/上限恢复档[|说明]``。
 
     例：``引导神力:2/2短休+1,长休``、``圣疗:25/25长休``、``狂暴:3/3两者``。
     恢复档可省略后缀（默认回满）；``|`` 之后是卡面说明（2026-10-21 批②，
@@ -406,31 +429,31 @@ def parse_feature_item(item: str) -> CharacterFeature:
     body, pipe, text = normalized.partition("|")
     text = text.strip()
     if pipe and not text:
-        raise AssertionError(f"能力说明不能为空: {raw}")
+        raise AssertionError(f"限定资源说明不能为空: {raw}")
     if "|" in text:
-        raise AssertionError(f"能力说明不能包含符号「|」: {raw}")
+        raise AssertionError(f"限定资源说明不能包含符号「|」: {raw}")
     if len(text) > FEATURE_TEXT_MAX_LEN:
         raise AssertionError(
-            f"能力说明过长（≤{FEATURE_TEXT_MAX_LEN} 字）: {raw}"
+            f"限定资源说明过长（≤{FEATURE_TEXT_MAX_LEN} 字）: {raw}"
         )
     name_part, separator, value_part = body.partition(":")
     if not separator:
         raise AssertionError(
-            f"能力条目不完整: {raw}（示例：引导神力:2/2短休+1,长休）"
+            f"限定资源条目不完整: {raw}（示例：引导神力:2/2短休+1,长休）"
         )
     name = name_part.strip()
     validate_feature_name(name)
     matched = re.match(r"^\s*(\d+)\s*/\s*(\d+)\s*(.*)$", value_part)
     if not matched:
         raise AssertionError(
-            f"能力次数无效: {raw}（写法：当前/上限恢复档，如 2/2短休+1,长休）"
+            f"限定资源次数无效: {raw}（写法：当前/上限恢复档，如 2/2短休+1,长休）"
         )
     uses_cur = int(matched.group(1))
     uses_max = int(matched.group(2))
     if uses_max <= 0:
-        raise AssertionError(f"能力上限必须大于 0: {raw}")
+        raise AssertionError(f"限定资源上限必须大于 0: {raw}")
     if uses_cur > uses_max:
-        raise AssertionError(f"能力当前次数不能超过上限: {raw}")
+        raise AssertionError(f"限定资源当前次数不能超过上限: {raw}")
     recover = normalize_feature_recover(matched.group(3))
     return CharacterFeature(
         name=name,
@@ -442,16 +465,16 @@ def parse_feature_item(item: str) -> CharacterFeature:
 
 
 def parse_feature_list(content: str) -> List[CharacterFeature]:
-    """解析 ``$能力$`` 段全文（分号分条；名称卡内唯一、数量 ≤ 上限）。"""
+    """解析 ``$限定资源$`` 段全文（分号分条；名称卡内唯一、数量 ≤ 上限）。"""
     items = _split_semicolon_items(content)
     if len(items) > FEATURE_MAX_COUNT:
-        raise AssertionError(f"能力数量最多 {FEATURE_MAX_COUNT} 项")
+        raise AssertionError(f"限定资源数量最多 {FEATURE_MAX_COUNT} 项")
     features: List[CharacterFeature] = []
     seen: set[str] = set()
     for item in items:
         feature = parse_feature_item(item)
         if feature.name in seen:
-            raise AssertionError(f"能力名称重复: {feature.name}")
+            raise AssertionError(f"限定资源名称重复: {feature.name}")
         seen.add(feature.name)
         features.append(feature)
     return features
@@ -847,15 +870,12 @@ def parse_feats(content: str) -> List[str]:
     return result
 
 
-def parse_traits(content: str) -> List[str]:
-    """解析 ``$特性$`` 段（``/`` 分条，可写 ``名称（来源）:说明``，名称唯一）。
-
-    说明（2026-10-21 批②）只用于卡面，最长 80 字；不写说明时回写保持原名。
-    """
-    _ensure_no_dollar(content, "特性")
+def parse_race_traits(content: str) -> List[str]:
+    """解析 ``$种族特性$`` 段（``/`` 分条，``名称:说明``，名称唯一）。"""
+    _ensure_no_dollar(content, "种族特性")
     items = [item.strip() for item in content.split("/") if item.strip()]
-    if len(items) > TRAIT_MAX_COUNT:
-        raise AssertionError(f"特性最多 {TRAIT_MAX_COUNT} 项")
+    if len(items) > RACE_TRAIT_MAX_COUNT:
+        raise AssertionError(f"种族特性最多 {RACE_TRAIT_MAX_COUNT} 项")
     result: List[str] = []
     seen: set[str] = set()
     for item in items:
@@ -863,24 +883,67 @@ def parse_traits(content: str) -> List[str]:
         name, _, text = normalized.partition(":")
         name, text = name.strip(), text.strip()
         if not name:
-            raise AssertionError(f"特性名称不能为空: {item}")
-        if len(name) > TRAIT_ITEM_MAX_LEN:
+            raise AssertionError(f"种族特性名称不能为空: {item}")
+        if len(name) > RACE_TRAIT_NAME_MAX_LEN:
             raise AssertionError(
-                f"特性名称过长（≤{TRAIT_ITEM_MAX_LEN} 字）: {name}"
+                f"种族特性名称过长（≤{RACE_TRAIT_NAME_MAX_LEN} 字）: {name}"
             )
-        if len(text) > TRAIT_TEXT_MAX_LEN:
+        if len(text) > RACE_TRAIT_TEXT_MAX_LEN:
             raise AssertionError(
-                f"特性说明过长（≤{TRAIT_TEXT_MAX_LEN} 字）: {text}"
+                f"种族特性说明过长（≤{RACE_TRAIT_TEXT_MAX_LEN} 字）: {text}"
             )
         if name in seen:
-            raise AssertionError(f"特性重复: {name}")
+            raise AssertionError(f"种族特性重复: {name}")
         seen.add(name)
         result.append(f"{name}:{text}" if text else name)
     return result
 
 
+def parse_class_features(content: str) -> List[ClassFeature]:
+    """解析 ``$职业特性$`` 段（``/`` 分条，``等级|名称:说明``，名称唯一）。"""
+    _ensure_no_dollar(content, "职业特性")
+    items = [item.strip() for item in content.split("/") if item.strip()]
+    if len(items) > CLASS_FEATURE_MAX_COUNT:
+        raise AssertionError(f"职业特性最多 {CLASS_FEATURE_MAX_COUNT} 项")
+    result: List[ClassFeature] = []
+    seen: set[str] = set()
+    for item in items:
+        normalized = _normalize_colon(item)
+        level_str, pipe, body = normalized.partition("|")
+        if not pipe:
+            raise AssertionError(
+                f"职业特性缺少等级: {item}（示例：3|塑能学者:说明）"
+            )
+        level_str = level_str.strip()
+        if not level_str.isdigit() or not 1 <= int(level_str) <= 20:
+            raise AssertionError(f"职业特性等级无效: {item}（写 1~20）")
+        name, _, text = body.partition(":")
+        name, text = name.strip(), text.strip()
+        if not name:
+            raise AssertionError(f"职业特性名称不能为空: {item}")
+        if len(name) > CLASS_FEATURE_NAME_MAX_LEN:
+            raise AssertionError(
+                f"职业特性名称过长（≤{CLASS_FEATURE_NAME_MAX_LEN} 字）: {name}"
+            )
+        if len(text) > CLASS_FEATURE_TEXT_MAX_LEN:
+            raise AssertionError(
+                f"职业特性说明过长（≤{CLASS_FEATURE_TEXT_MAX_LEN} 字）: {text}"
+            )
+        if name in seen:
+            raise AssertionError(f"职业特性重复: {name}")
+        seen.add(name)
+        result.append(
+            ClassFeature(level=int(level_str), name=name, text=text)
+        )
+    return result
+
+
 def parse_items(content: str) -> List[str]:
-    """解析 ``$物品$`` 段（``;`` 分条，``名称x数量[装备]`` 规范化回写）。"""
+    """解析 ``$物品$`` 段（``;`` 分条，``名称x数量`` 规范化回写）。
+
+    物品只记录名称与数量；魔法物品写入 ``$魔法物品$``，旧 ``[装备]`` 标记
+    已退役，出现即报错。
+    """
     _ensure_no_dollar(content, "物品")
     items = _split_semicolon_items(content)
     if len(items) > ITEM_MAX_COUNT:
@@ -888,13 +951,9 @@ def parse_items(content: str) -> List[str]:
     result: List[str] = []
     for item in items:
         raw = item.strip()
-        equipped = False
-        if raw.endswith("[装备]"):
-            equipped = True
-            raw = raw[: -len("[装备]")].strip()
         if "[" in raw or "]" in raw:
             raise AssertionError(
-                f"物品条目写法无效: {item}（装备标记只支持 [装备]）"
+                f"物品条目写法无效: {item}（物品只写 名称x数量，不再支持 [装备]）"
             )
         matched = re.match(r"^(.+?)(?:[xX×](\d+))?$", raw)
         if matched is None:
@@ -911,19 +970,75 @@ def parse_items(content: str) -> List[str]:
             raise AssertionError(
                 f"物品数量无效: {item}（1~{ITEM_QUANTITY_MAX}）"
             )
-        text = f"{name}x{quantity}"
-        if equipped:
-            text += "[装备]"
-        result.append(text)
+        result.append(f"{name}x{quantity}")
+    return result
+
+
+def _parse_magic_item_paragraphs(text: str, item: str) -> str:
+    """魔法物品说明：``//`` 分段，去空段、限段数与总字数。"""
+    paragraphs = [part.strip() for part in text.split("//")]
+    paragraphs = [part for part in paragraphs if part]
+    if len(paragraphs) > MAGIC_ITEM_PARAGRAPH_MAX:
+        raise AssertionError(
+            f"魔法物品说明最多 {MAGIC_ITEM_PARAGRAPH_MAX} 段: {item}"
+        )
+    total = sum(len(part) for part in paragraphs)
+    if total > MAGIC_ITEM_TEXT_MAX_LEN:
+        raise AssertionError(
+            f"魔法物品说明过长（≤{MAGIC_ITEM_TEXT_MAX_LEN} 字）: {item}"
+        )
+    return "//".join(paragraphs)
+
+
+def parse_magic_items(content: str) -> List[MagicItem]:
+    """解析 ``$魔法物品$`` 段（``;`` 分条，``名称|标签|说明``）。
+
+    说明里的 ``//`` 表示段落分隔；物品名与标签不得含 ``|`` / ``;`` / ``$``。
+    """
+    _ensure_no_dollar(content, "魔法物品")
+    items = _split_semicolon_items(content)
+    if len(items) > MAGIC_ITEM_MAX_COUNT:
+        raise AssertionError(f"魔法物品最多 {MAGIC_ITEM_MAX_COUNT} 件")
+    result: List[MagicItem] = []
+    seen: set[str] = set()
+    for item in items:
+        parts = [part.strip() for part in item.split("|")]
+        if len(parts) not in (2, 3):
+            raise AssertionError(
+                f"魔法物品条目不完整: {item}"
+                "（写法：名称|标签|说明，说明可省略）"
+            )
+        name, tag = parts[0], parts[1]
+        text = parts[2] if len(parts) == 3 else ""
+        if not name:
+            raise AssertionError(f"魔法物品名称不能为空: {item}")
+        if not tag:
+            raise AssertionError(f"魔法物品标签不能为空: {item}")
+        if len(name) > MAGIC_ITEM_NAME_MAX_LEN:
+            raise AssertionError(
+                f"魔法物品名称过长（≤{MAGIC_ITEM_NAME_MAX_LEN} 字）: {name}"
+            )
+        if len(tag) > MAGIC_ITEM_TAG_MAX_LEN:
+            raise AssertionError(
+                f"魔法物品标签过长（≤{MAGIC_ITEM_TAG_MAX_LEN} 字）: {tag}"
+            )
+        if name in seen:
+            raise AssertionError(f"魔法物品重复: {name}")
+        seen.add(name)
+        result.append(
+            MagicItem(
+                name=name,
+                tag=tag,
+                text=_parse_magic_item_paragraphs(text, item),
+            )
+        )
     return result
 
 
 def parse_background(content: str) -> Dict[str, str]:
-    """解析 ``$背景$`` 段（``;`` 分条，``键:值``；未知键保留）。"""
+    """解析 ``$背景$`` 段（``;`` 分条，``键:值``；只接受固定键）。"""
     _ensure_no_dollar(content, "背景")
     items = _split_semicolon_items(content)
-    if len(items) > BACKGROUND_MAX_COUNT:
-        raise AssertionError(f"背景条目最多 {BACKGROUND_MAX_COUNT} 项")
     result: Dict[str, str] = {}
     for item in items:
         normalized = _normalize_colon(item)
@@ -934,9 +1049,9 @@ def parse_background(content: str) -> Dict[str, str]:
             raise AssertionError(
                 f"背景条目不完整: {item}（示例：背景:士兵; 阵营:守序善良）"
             )
-        if len(key) > BACKGROUND_KEY_MAX_LEN:
+        if key not in BACKGROUND_KEY_LIST:
             raise AssertionError(
-                f"背景键过长（≤{BACKGROUND_KEY_MAX_LEN} 字）: {key}"
+                f"背景键无效: {key}（可用：{'/'.join(BACKGROUND_KEY_LIST)}）"
             )
         if len(value) > BACKGROUND_VALUE_MAX_LEN:
             raise AssertionError(
@@ -1055,7 +1170,7 @@ def parse_coins(content: str) -> Dict[str, int]:
 def match_features(
     features: Iterable[CharacterFeature], name: str
 ) -> List[CharacterFeature]:
-    """按名称匹配能力：精确（大小写不敏感）优先，其次子串模糊匹配。
+    """按名称匹配限定资源：精确（大小写不敏感）优先，其次子串模糊匹配。
 
     与武器/目标搜索同款两级；返回空 = 未找到、多项 = 歧义（调用方列候选、不猜）。
     """
@@ -1365,7 +1480,7 @@ class CharacterService:
         $属性$ 10/11/12/15/12/8
         $熟练$ 力量/2*隐匿/奥秘
         $额外加值$ 运动:优势/隐匿:优势+2/游说:-2
-        $能力$ 奥术回想:1/1短休
+        $限定资源$ 奥术回想:1/1短休
         $武器$ 短剑+6,1d4+4穿刺/长弓+5,1d8+3穿刺
         $法术$ 施法属性:智力; 火球术:3*; 火焰箭:0
         $法术位$ 1:4/4; 2:3/3; 契约3:2/2
@@ -1378,18 +1493,8 @@ class CharacterService:
         带两个及以上段时按整卡覆盖。无 ``existing`` 时行为与旧版一致。
         """
         data = parse_template_to_dict(input_str)
-        # 属性值 / 豁免 / 技能自 2026-10-22 起由骰娘自动计算：旧卡整卡重录时
-        # 静默忽略这三段；若只发了这三段，给出明确提示而不是「角色卡已设置」。
-        if data and all(key in LEGACY_CHAR_INFO_KEY_LIST for key in data):
-            raise AssertionError(
-                "属性值、豁免与技能由骰娘按属性、等级与熟练自动计算，无需记录"
-            )
         if existing is not None and len(data) == 1:
             key, content = next(iter(data.items()))
-            if key in LEGACY_CHAR_INFO_KEY_LIST:
-                raise AssertionError(
-                    "属性值、豁免与技能由骰娘按属性、等级与熟练自动计算，无需记录"
-                )
             return CharacterService._merge_single_segment(
                 existing, key, content, reserved_names
             )
@@ -1479,8 +1584,8 @@ class CharacterService:
         weapon_str = data.get(CHAR_INFO_KEY_WEAPON, "").strip()
         weapons = parse_weapon_list(weapon_str, reserved_names) if weapon_str else []
 
-        # ── 能力 / 法术 / 法术位（可选段，2026-10-20 批②）──
-        feature_str = data.get(CHAR_INFO_KEY_FEATURE, "").strip()
+        # ── 限定资源 / 法术 / 法术位（可选段）──
+        feature_str = data.get(CHAR_INFO_KEY_RESOURCE, "").strip()
         features = parse_feature_list(feature_str) if feature_str else []
         spell_str = data.get(CHAR_INFO_KEY_SPELL, "").strip()
         if spell_str:
@@ -1497,7 +1602,9 @@ class CharacterService:
         background_str = data.get(CHAR_INFO_KEY_BACKGROUND, "").strip()
         combat_str = data.get(CHAR_INFO_KEY_COMBAT, "").strip()
         feats_str = data.get(CHAR_INFO_KEY_FEATS, "").strip()
-        traits_str = data.get(CHAR_INFO_KEY_TRAITS, "").strip()
+        race_traits_str = data.get(CHAR_INFO_KEY_RACE_TRAITS, "").strip()
+        class_traits_str = data.get(CHAR_INFO_KEY_CLASS_TRAITS, "").strip()
+        magic_items_str = data.get(CHAR_INFO_KEY_MAGIC_ITEMS, "").strip()
         items_str = data.get(CHAR_INFO_KEY_ITEMS, "").strip()
         notes_str = data.get(CHAR_INFO_KEY_COMBAT_NOTES, "").strip()
         story_str = data.get(CHAR_INFO_KEY_STORY, "").strip()
@@ -1506,7 +1613,13 @@ class CharacterService:
         background = parse_background(background_str) if background_str else {}
         combat = parse_combat(combat_str) if combat_str else {}
         feats = parse_feats(feats_str) if feats_str else []
-        traits = parse_traits(traits_str) if traits_str else []
+        race_traits = parse_race_traits(race_traits_str) if race_traits_str else []
+        class_traits = (
+            parse_class_features(class_traits_str) if class_traits_str else []
+        )
+        magic_items = (
+            parse_magic_items(magic_items_str) if magic_items_str else []
+        )
         items = parse_items(items_str) if items_str else []
         combat_notes = parse_combat_notes(notes_str) if notes_str else []
         story = parse_story(story_str) if story_str else ""
@@ -1532,7 +1645,9 @@ class CharacterService:
             portrait=existing.portrait if existing is not None else "",
             combat=combat,
             feats=feats,
-            traits=traits,
+            race_traits=race_traits,
+            class_traits=class_traits,
+            magic_items=magic_items,
             items=items,
             background=background,
             combat_notes=combat_notes,
@@ -1548,7 +1663,8 @@ def gen_template_char(group_id: str = "", user_id: str = "") -> DNDCharacter:
 
     示例为按 2024 规则完整建立的 5 级高等精灵法师（塑能师）：
     27 点购点、智者背景（+2 智力 / +1 体质）、4 级属性提升（+1 智力 / +1 感知），
-    覆盖 ``$能力$`` / ``$法术$`` / ``$法术位$`` 与完整卡面各段。
+    覆盖 ``$限定资源$`` / ``$魔法物品$`` / ``$种族特性$`` / ``$职业特性$``
+    与 ``$法术$`` / ``$法术位$`` 及完整卡面各段。
     """
     character = DNDCharacter(
         group_id=group_id, user_id=user_id, name="伊瑟兰·晨星", is_init=True
@@ -1570,15 +1686,17 @@ def gen_template_char(group_id: str = "", user_id: str = "") -> DNDCharacter:
     for name in ("奥秘", "历史", "洞悉", "察觉", "智力豁免", "感知豁免"):
         character.ability_info.check_prof[CHECK_ITEM_INDEX_DICT[name]] = 1
     character.ability_info.check_prof[CHECK_ITEM_INDEX_DICT["调查"]] = 2
-    # 命中与伤害与卡自洽：法术攻击 +7 = 智力 +4 + 熟练 +3；匕首 +5 = 敏捷 +2 + 熟练 +3；
-    # 长棍 +2 = 力量 -1 + 熟练 +3。
+    # 防护斗篷：豁免 +1（AC 已计入 $战斗$；法术攻击 +1 计入武器与 $法术$ 头键）
+    character.ability_info.check_ext[EXT_ITEM_INDEX_DICT["豁免"]] = "+1"
+    # 命中与伤害与卡自洽：法术攻击 +8 = 智力 +4 + 熟练 +3 + 战法师魔杖 +1；
+    # 匕首 +5 = 敏捷 +2 + 熟练 +3；长棍 +2 = 力量 -1 + 熟练 +3。
     character.weapons = [
         WeaponInfo(
-            name="火焰箭", attack_bonus="+7", damage_expr="2d10",
+            name="火焰箭", attack_bonus="+8", damage_expr="2d10",
             damage_type="火焰", note="法术攻击 · 120尺",
         ),
         WeaponInfo(
-            name="冷冻射线", attack_bonus="+7", damage_expr="2d8",
+            name="冷冻射线", attack_bonus="+8", damage_expr="2d8",
             damage_type="寒冷", note="法术攻击 · 60尺 · 速度-10",
         ),
         WeaponInfo(
@@ -1596,7 +1714,7 @@ def gen_template_char(group_id: str = "", user_id: str = "") -> DNDCharacter:
             uses_cur=1,
             uses_max=1,
             recover="短休",
-            text="短休时恢复总环阶不超过 3 的法术位（6 环以下），长休前一次",
+            text="短休时恢复总环阶不超过 3 的法术位（6 环以下），每长休一次",
         ),
         CharacterFeature(
             name="魔法学徒",
@@ -1608,7 +1726,7 @@ def gen_template_char(group_id: str = "", user_id: str = "") -> DNDCharacter:
     ]
     character.spellcasting_ability = "智力"
     character.spell_dc = "15"
-    character.spell_attack = "+7"
+    character.spell_attack = "+8"
     character.spells = [
         SpellEntry(
             name="火焰箭", level=0,
@@ -1701,39 +1819,74 @@ def gen_template_char(group_id: str = "", user_id: str = "") -> DNDCharacter:
         slots_max=[4, 3, 2, 0, 0, 0, 0, 0, 0],
     )
     character.combat = {
-        "AC": "15", "先攻": "+2", "速度": "30", "被动察觉": "13",
+        "AC": "16", "先攻": "+2", "速度": "30", "被动察觉": "13",
     }
     character.ability_info.prof_armor = []
-    character.ability_info.prof_weapons = ["匕首", "长棍"]
+    character.ability_info.prof_weapons = ["简易武器"]
     character.ability_info.prof_tools = ["书法工具"]
     character.ability_info.prof_languages = ["通用语", "精灵语", "龙语"]
     character.feats = [
         "魔法学徒（法师）:习得光亮术、心灵之楔与护盾术；护盾术可免法术位施展一次，长休恢复",
         "属性值提升:智力 +1、感知 +1",
     ]
-    character.traits = [
-        "黑暗视觉（种族）:60 尺内微光视为明亮，黑暗视为微光",
-        "妖精血统（种族）:进行避免或结束魅惑状态的豁免时具有优势",
-        "敏锐感官（种族）:获得察觉熟练",
-        "出神（种族）:无需睡眠，魔法无法使你入睡；4 小时即可完成长休并保持清醒",
-        "高等精灵血系（种族）:习得魔法伎俩；3 级习得侦测魔法、5 级习得迷踪步，"
+    character.race_traits = [
+        "黑暗视觉:60 尺内微光视为明亮，黑暗视为微光",
+        "妖精血统:进行避免或结束魅惑状态的豁免时具有优势",
+        "敏锐感官:获得察觉熟练",
+        "出神:无需睡眠，魔法无法使你入睡；4 小时即可完成长休并保持清醒",
+        "高等精灵血系:习得魔法伎俩；3 级习得侦测魔法、5 级习得迷踪步，"
         "始终准备，各可免法术位施展一次，长休恢复",
-        "仪式学家（法师）:法术书中的仪式法术可直接以仪式施展，无需准备",
-        "学者（法师）:获得调查专精",
-        "塑能学者（法师）:法术书免费加入燃烧之手、粉碎音波与火球术",
-        "强力戏法（塑能师）:伤害戏法攻击失手或目标豁免成功时，仍受一半伤害",
-        "记忆法术（法师）:短休时可研究法术书，替换一道已准备的一环及以上法术",
+    ]
+    character.class_traits = [
+        ClassFeature(
+            level=1,
+            name="仪式学家",
+            text="法术书中的仪式法术可直接以仪式施展，无需准备",
+        ),
+        ClassFeature(
+            level=1,
+            name="奥术回想",
+            text="短休时恢复总环阶不超过 3 的法术位（6 环以下），每长休一次",
+        ),
+        ClassFeature(level=2, name="学者", text="获得调查专精"),
+        ClassFeature(
+            level=3,
+            name="塑能学者",
+            text="法术书免费加入燃烧之手、粉碎音波与火球术",
+        ),
+        ClassFeature(
+            level=3,
+            name="强力戏法",
+            text="伤害戏法攻击失手或目标豁免成功时，仍受一半伤害",
+        ),
+        ClassFeature(
+            level=5,
+            name="记忆法术",
+            text="短休时可研究法术书，替换一道已准备的一环及以上法术",
+        ),
+    ]
+    character.magic_items = [
+        MagicItem(
+            name="战法师魔杖 +1",
+            tag="魔杖，非普通（需施法者同调）",
+            text="持握这根魔杖期间，你的法术攻击检定获得 +1 加值。"
+            "//此外，你在进行法术攻击检定时无视半身掩护。",
+        ),
+        MagicItem(
+            name="防护斗篷",
+            tag="奇物，非普通（需同调）",
+            text="着装此斗篷期间，你的 AC 和豁免获得 +1 加值。",
+        ),
     ]
     character.items = [
-        "法术书x1[装备]", "长棍x1[装备]", "匕首x2[装备]", "长袍x1[装备]",
+        "法术书x1", "长棍x1", "匕首x2", "长袍x1",
         "学者套组x1", "书法工具x1", "书籍（历史）x1", "羊皮纸x8",
         "治疗药水x1",
     ]
     character.background = {
         "背景": "智者", "阵营": "中立善良", "信仰": "密斯特拉", "体型": "中型",
         "年龄": "132", "外貌": "银发绿眼，深蓝法袍",
-        "个性": "喜欢追问原理", "理想": "知识应当被分享",
-        "羁绊": "导师的笔记", "缺点": "说话太直",
+        "个性": "喜欢追问原理",
     }
     character.progress = {"经验": "6500/14000", "激励": "有"}
     character.coins = {"CP": 0, "SP": 0, "EP": 0, "GP": 13, "PP": 0}
@@ -2156,10 +2309,10 @@ class HPService:
 
 
 class RestService:
-    """休息结算：能力次数与法术位恢复、施法准备提醒判定（2026-10-20 批③）。
+    """休息结算：限定资源次数与法术位恢复、施法准备提醒判定（2026-10-20 批③）。
 
     只做内存对象上的纯结算（不掷骰、不落盘）；命令层负责读取卡、播报与保存。
-    恢复档语义与 ``$能力$`` 录入一致：``短休`` / ``长休`` / ``两者`` +
+    恢复档语义与 ``$限定资源$`` 录入一致：``短休`` / ``长休`` / ``两者`` +
     可选 ``+N``（``满`` 已在录入时规范化为无后缀）。
     """
 
@@ -2191,7 +2344,7 @@ class RestService:
     def recover_features(
         features: Iterable[CharacterFeature], rest_kind: str
     ) -> List[Tuple[str, int, int, int]]:
-        """按休息类型恢复能力次数，返回变更列表 ``(名称, 旧, 新, 上限)``。
+        """按休息类型恢复限定资源次数，返回变更列表 ``(名称, 旧, 新, 上限)``。
 
         只返回真正发生变化的能力；已满或恢复档不匹配的条目不动。
         """

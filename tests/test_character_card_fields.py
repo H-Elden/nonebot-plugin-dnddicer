@@ -1,7 +1,7 @@
-"""完整角色卡面扩展段与分段录入（2026-10-21）。
+"""完整角色卡面扩展段与分段录入。
 
-覆盖九类完整卡面扩展段与 ``$熟练$`` 扩展分组：
-解析、校验、规范化回写、单段合并、多段整卡、旧卡输出不变。
+覆盖种族特性、职业特性、限定资源、魔法物品、背景固定键与 ``$熟练$`` 扩展
+分组：解析、校验、规范化回写、单段合并、多段整卡、未知段拒绝。
 """
 
 from __future__ import annotations
@@ -12,19 +12,22 @@ from nonebot_plugin_dnddicer.character.constants import EXT_ITEM_INDEX_DICT
 from nonebot_plugin_dnddicer.character.services import (
     CharacterService,
     gen_template_char,
+    normalize_class_name,
     parse_background,
+    parse_class_features,
     parse_coins,
     parse_combat,
     parse_combat_notes,
     parse_feature_item,
     parse_feats,
     parse_items,
+    parse_magic_items,
     parse_prof_entries,
     parse_progress,
+    parse_race_traits,
     parse_spell_item,
     parse_spell_setting,
     parse_story,
-    parse_traits,
     parse_weapon_item,
 )
 
@@ -50,8 +53,8 @@ def test_old_card_output_unchanged() -> None:
     text = char.get_char_info()
     for key in (
         "$背景$", "$战斗$", "$属性值$", "$豁免$", "$技能$",
-        "$专长$", "$特性$", "$物品$", "$战斗记录$",
-        "$故事$", "$进度$", "$钱币$",
+        "$专长$", "$特性$", "$种族特性$", "$职业特性$", "$限定资源$",
+        "$魔法物品$", "$物品$", "$战斗记录$", "$故事$", "$进度$", "$钱币$",
     ):
         assert key not in text
     assert "$姓名$ 伊丽莎白" in text
@@ -80,35 +83,48 @@ def test_template_roundtrip() -> None:
     text = gen_template_char().get_char_info()
     parsed = _parse(text)
     assert parsed.get_char_info() == text
-    # 关键段都有内容
     assert parsed.background["背景"] == "智者"
-    assert parsed.combat["AC"] == "15"
+    assert "理想" not in parsed.background
+    assert parsed.combat["AC"] == "16"
     assert parsed.feats == [
         "魔法学徒（法师）:习得光亮术、心灵之楔与护盾术；护盾术可免法术位施展一次，长休恢复",
         "属性值提升:智力 +1、感知 +1",
     ]
-    assert parsed.traits == [
-        "黑暗视觉（种族）:60 尺内微光视为明亮，黑暗视为微光",
-        "妖精血统（种族）:进行避免或结束魅惑状态的豁免时具有优势",
-        "敏锐感官（种族）:获得察觉熟练",
-        "出神（种族）:无需睡眠，魔法无法使你入睡；4 小时即可完成长休并保持清醒",
-        "高等精灵血系（种族）:习得魔法伎俩；3 级习得侦测魔法、5 级习得迷踪步，"
+    assert parsed.race_traits == [
+        "黑暗视觉:60 尺内微光视为明亮，黑暗视为微光",
+        "妖精血统:进行避免或结束魅惑状态的豁免时具有优势",
+        "敏锐感官:获得察觉熟练",
+        "出神:无需睡眠，魔法无法使你入睡；4 小时即可完成长休并保持清醒",
+        "高等精灵血系:习得魔法伎俩；3 级习得侦测魔法、5 级习得迷踪步，"
         "始终准备，各可免法术位施展一次，长休恢复",
-        "仪式学家（法师）:法术书中的仪式法术可直接以仪式施展，无需准备",
-        "学者（法师）:获得调查专精",
-        "塑能学者（法师）:法术书免费加入燃烧之手、粉碎音波与火球术",
-        "强力戏法（塑能师）:伤害戏法攻击失手或目标豁免成功时，仍受一半伤害",
-        "记忆法术（法师）:短休时可研究法术书，替换一道已准备的一环及以上法术",
     ]
-    assert "法术书x1[装备]" in parsed.items
+    assert [(item.level, item.name) for item in parsed.class_traits] == [
+        (1, "仪式学家"),
+        (1, "奥术回想"),
+        (2, "学者"),
+        (3, "塑能学者"),
+        (3, "强力戏法"),
+        (5, "记忆法术"),
+    ]
+    assert [(item.name, item.tag) for item in parsed.magic_items] == [
+        ("战法师魔杖 +1", "魔杖，非普通（需施法者同调）"),
+        ("防护斗篷", "奇物，非普通（需同调）"),
+    ]
+    assert parsed.magic_items[0].get_paragraphs() == [
+        "持握这根魔杖期间，你的法术攻击检定获得 +1 加值。",
+        "此外，你在进行法术攻击检定时无视半身掩护。",
+    ]
+    assert parsed.items[0] == "法术书x1"
+    assert all("[装备]" not in item for item in parsed.items)
     assert parsed.combat_notes == ["法师护甲(8小时)"]
-    assert parsed.ability_info.prof_weapons == ["匕首", "长棍"]
+    assert parsed.ability_info.prof_weapons == ["简易武器"]
     assert parsed.coins == {"CP": 0, "SP": 0, "EP": 0, "GP": 13, "PP": 0}
     assert parsed.progress == {"经验": "6500/14000", "激励": "有"}
     assert parsed.story.startswith("伊瑟兰出身于银月城的学者世家")
     assert parsed.story.count("\n") == 2
-    assert (parsed.spell_dc, parsed.spell_attack) == ("15", "+7")
+    assert (parsed.spell_dc, parsed.spell_attack) == ("15", "+8")
     assert parsed.weapons[2].note == "灵巧 · 轻型"
+    assert parsed.ability_info.check_ext[EXT_ITEM_INDEX_DICT["豁免"]] == "+1"
 
 
 def test_combat_validation() -> None:
@@ -141,13 +157,19 @@ def test_prof_groups_and_check_entries() -> None:
 
 def test_feats_traits_items_background_notes() -> None:
     assert parse_feats("巨武器大师/幸运") == ["巨武器大师", "幸运"]
-    assert parse_traits("黑暗视觉（种族）/ 引导神力 (职业)") == [
-        "黑暗视觉（种族）", "引导神力 (职业)"
+    assert parse_race_traits("黑暗视觉 / 妖精血统:豁免优势") == [
+        "黑暗视觉", "妖精血统:豁免优势"
     ]
-    items = parse_items("治疗药水x2; 长剑[装备]; 绳索50尺x1; 火把x3[装备]")
-    assert items == ["治疗药水x2", "长剑x1[装备]", "绳索50尺x1", "火把x3[装备]"]
-    bg = parse_background("背景:士兵; 阵营:守序善良; 自定义:值")
-    assert bg == {"背景": "士兵", "阵营": "守序善良", "自定义": "值"}
+    class_traits = parse_class_features(
+        "1|仪式学家:仪式法术直接施展/3|塑能学者"
+    )
+    assert [item.get_info() for item in class_traits] == [
+        "1|仪式学家:仪式法术直接施展", "3|塑能学者"
+    ]
+    items = parse_items("治疗药水x2; 长剑x1; 绳索50尺x1; 火把x3")
+    assert items == ["治疗药水x2", "长剑x1", "绳索50尺x1", "火把x3"]
+    bg = parse_background("背景:士兵; 阵营:守序善良; 理想:守护家园")
+    assert bg == {"背景": "士兵", "阵营": "守序善良", "理想": "守护家园"}
     assert parse_combat_notes("祝福术(专注,3轮); 中毒") == [
         "祝福术(专注,3轮)", "中毒"
     ]
@@ -155,8 +177,31 @@ def test_feats_traits_items_background_notes() -> None:
         parse_items("很长" * 20)
     with pytest.raises(AssertionError, match="背景条目重复"):
         parse_background("背景:士兵; 背景:贤者")
+    with pytest.raises(AssertionError, match="背景键无效"):
+        parse_background("自定义:值")
     with pytest.raises(AssertionError, match="战斗记录条目过长"):
         parse_combat_notes("很长" * 40)
+    with pytest.raises(AssertionError, match="不再支持 \\[装备\\]"):
+        parse_items("长剑[装备]")
+
+
+def test_magic_items_parsing() -> None:
+    items = parse_magic_items(
+        "防护斗篷|奇物，非普通（需同调）|AC 和豁免 +1。//专注时仍生效; "
+        "战法师魔杖 +1|魔杖，非普通"
+    )
+    assert items[0].get_paragraphs() == ["AC 和豁免 +1。", "专注时仍生效"]
+    assert items[1].get_info() == "战法师魔杖 +1|魔杖，非普通"
+    with pytest.raises(AssertionError, match="条目不完整"):
+        parse_magic_items("防护斗篷|奇物|说明|多余")
+    with pytest.raises(AssertionError, match="标签不能为空"):
+        parse_magic_items("防护斗篷||说明")
+    with pytest.raises(AssertionError, match="名称过长"):
+        parse_magic_items("长" * 31 + "|奇物")
+    with pytest.raises(AssertionError, match="最多 .* 段"):
+        parse_magic_items("防护斗篷|奇物|" + "//".join(["段"] * 6))
+    with pytest.raises(AssertionError, match="说明过长"):
+        parse_magic_items("防护斗篷|奇物|" + "长" * 501)
 
 
 def test_content_rejects_dollar() -> None:
@@ -182,7 +227,19 @@ def test_content_rejects_dollar() -> None:
         ),
         ("$战斗记录$ 中毒", lambda c: c.combat_notes == ["中毒"]),
         ("$专长$ 幸运", lambda c: c.feats == ["幸运"]),
-        ("$特性$ 黑暗视觉（种族）", lambda c: c.traits == ["黑暗视觉（种族）"]),
+        ("$种族特性$ 黑暗视觉", lambda c: c.race_traits == ["黑暗视觉"]),
+        (
+            "$职业特性$ 3|塑能学者:说明",
+            lambda c: c.class_traits[0].get_info() == "3|塑能学者:说明",
+        ),
+        (
+            "$限定资源$ 奥术回想:1/1短休",
+            lambda c: c.features[0].name == "奥术回想",
+        ),
+        (
+            "$魔法物品$ 防护斗篷|奇物，非普通|AC +1",
+            lambda c: c.magic_items[0].name == "防护斗篷",
+        ),
     ],
 )
 def test_single_segment_merge_keeps_others(segment: str, check) -> None:
@@ -194,7 +251,7 @@ def test_single_segment_merge_keeps_others(segment: str, check) -> None:
     assert merged.ability_info.ability == base.ability_info.ability
     assert merged.weapons == base.weapons
     assert merged.spells == base.spells
-    assert merged.ability_info.prof_weapons == ["匕首", "长棍"]
+    assert merged.ability_info.prof_weapons == ["简易武器"]
 
 
 def test_single_segment_merge_preserves_portrait() -> None:
@@ -219,6 +276,9 @@ def test_multi_segment_full_replace_clears_omitted() -> None:
     assert replaced.spells == []
     assert replaced.background == {}
     assert replaced.combat == {}
+    assert replaced.race_traits == []
+    assert replaced.class_traits == []
+    assert replaced.magic_items == []
 
 
 def test_single_segment_without_existing_fails() -> None:
@@ -226,7 +286,22 @@ def test_single_segment_without_existing_fails() -> None:
         _parse("$姓名$ 李四")
 
 
-# ── 批②：钱币 / 进度 / 故事 / 武器备注 / 法术详情 / 说明文本 ──────────
+def test_custom_class_is_accepted() -> None:
+    assert normalize_class_name("法师") == "法师"
+    assert normalize_class_name("盗贼") == "游荡者"
+    assert normalize_class_name("机关术师") == "机关术师"
+    char = _parse(
+        "$等级$ 5\n$属性$ 10/10/10/10/10/10\n"
+        "$职业$ 机关术师\n$子职$ 铸甲师"
+    )
+    assert (char.char_class, char.subclass) == ("机关术师", "铸甲师")
+    with pytest.raises(AssertionError, match="暂不支持兼职"):
+        normalize_class_name("法师/战士")
+    with pytest.raises(AssertionError, match="职业名称过长"):
+        normalize_class_name("长" * 21)
+
+
+# ── 钱币 / 进度 / 故事 / 武器备注 / 法术详情 / 说明文本 ──────────────
 
 
 def test_coins_progress_story_parsing() -> None:
@@ -289,9 +364,9 @@ def test_spell_details_parsing() -> None:
 
 def test_spell_setting_header_keys() -> None:
     ability, spells, dc, attack = parse_spell_setting(
-        "施法属性:智力; 豁免DC:15; 法术攻击:+7; 火球术:3"
+        "施法属性:智力; 豁免DC:15; 法术攻击:+8; 火球术:3"
     )
-    assert (ability, dc, attack) == ("智力", "15", "+7")
+    assert (ability, dc, attack) == ("智力", "15", "+8")
     assert spells[0].name == "火球术"
     with pytest.raises(AssertionError, match="豁免DC必须是"):
         parse_spell_setting("豁免DC:很高")
@@ -303,15 +378,15 @@ def test_feature_and_feat_description() -> None:
     feature = parse_feature_item("奥术回想:1/1短休|短休时回复一个法术位")
     assert feature.text == "短休时回复一个法术位"
     assert feature.get_info() == "奥术回想:1/1短休|短休时回复一个法术位"
-    with pytest.raises(AssertionError, match="能力说明过长"):
+    with pytest.raises(AssertionError, match="限定资源说明过长"):
         parse_feature_item("奥术回想:1/1短休|" + "长" * 81)
 
     assert parse_feats("战法师:专注豁免具有优势/幸运") == [
         "战法师:专注豁免具有优势",
         "幸运",
     ]
-    assert parse_traits("黑暗视觉（种族）:60 尺内微光视为明亮") == [
-        "黑暗视觉（种族）:60 尺内微光视为明亮"
+    assert parse_race_traits("黑暗视觉:60 尺内微光视为明亮") == [
+        "黑暗视觉:60 尺内微光视为明亮"
     ]
     with pytest.raises(AssertionError, match="专长说明过长"):
         parse_feats("战法师:" + "长" * 61)
@@ -330,23 +405,12 @@ def test_single_segment_merge_new_segments() -> None:
     }
 
 
-def test_legacy_derived_segments_are_ignored() -> None:
-    """旧卡的属性值/豁免/技能段：整卡重录时静默忽略，单独录入则明确提示。"""
-    text = gen_template_char().get_char_info() + "\n"
-    text += (
-        "$属性值$ 力量:8/-1; 敏捷:15/+2; 体质:16/+3; "
-        "智力:18/+4; 感知:10/+0; 魅力:8/-1\n"
-        "$豁免$ 力量:+1; 智力:+9\n"
-        "$技能$ 运动:-1; 奥秘:+10*\n"
-    )
-    parsed = _parse(text)
-    assert parsed.get_char_info() == gen_template_char().get_char_info()
-    assert "$属性值$" not in parsed.get_char_info()
-    assert "$豁免$" not in parsed.get_char_info()
-    assert "$技能$" not in parsed.get_char_info()
-
+def test_legacy_segments_are_rejected() -> None:
+    """旧段不再兼容：整卡与单段录入都直接报未知段。"""
+    text = gen_template_char().get_char_info() + "\n$属性值$ 力量:8/-1\n"
+    with pytest.raises(AssertionError, match="未知段: \\$属性值\\$"):
+        _parse(text)
     base = gen_template_char("g", "u")
-    with pytest.raises(AssertionError, match="由骰娘按属性、等级与熟练自动计算"):
-        _parse("$技能$ 运动:+5", existing=base)
-    with pytest.raises(AssertionError, match="由骰娘按属性、等级与熟练自动计算"):
-        _parse("$豁免$ 力量:+5\n$技能$ 运动:+5")
+    for segment in ("$技能$ 运动:+5", "$豁免$ 力量:+5", "$特性$ 黑暗视觉", "$能力$ 奥术回想:1/1短休"):
+        with pytest.raises(AssertionError, match="未知段"):
+            _parse(segment, existing=base)

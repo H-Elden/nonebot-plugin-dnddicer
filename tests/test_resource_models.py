@@ -1,6 +1,6 @@
 """能力 / 法术 / 法术位模型与解析单测（2026-10-20 批②，不依赖 nonebug）。
 
-覆盖：``$能力$`` 四档恢复语法与数量校验、``$法术$`` 施法属性与准备标记、
+覆盖：``$限定资源$`` 四档恢复语法与数量校验、``$法术$`` 施法属性与准备标记、
 ``$法术位$`` 各环与契约魔法，以及模板往返与旧卡兼容。
 """
 
@@ -32,7 +32,7 @@ from nonebot_plugin_dnddicer.character.services import (
 
 
 # =========================================================================
-# $能力$
+# $限定资源$
 # =========================================================================
 
 
@@ -69,15 +69,15 @@ def test_feature_list_semicolon_both_widths():
 @pytest.mark.parametrize(
     "item, message",
     [
-        ("引导神力2/2短休", "能力条目不完整"),
-        ("引导神力:2/2", "能力恢复方式不能为空"),
+        ("引导神力2/2短休", "限定资源条目不完整"),
+        ("引导神力:2/2", "限定资源恢复方式不能为空"),
         ("引导神力:2/2短休+0", "恢复量必须大于 0"),
-        ("引导神力:2/2短休+", "能力恢复量无效"),
+        ("引导神力:2/2短休+", "限定资源恢复量无效"),
         ("引导神力:2/2两者,短休", "「两者」已含短休与长休"),
-        ("引导神力:2/2短休,短休", "能力恢复方式重复"),
+        ("引导神力:2/2短休,短休", "限定资源恢复方式重复"),
         ("引导神力:2/2手动+1", "「手动」不能带恢复量"),
         ("引导神力:3/2短休", "当前次数不能超过上限"),
-        ("引导神力:2/0短休", "能力上限必须大于 0"),
+        ("引导神力:2/0短休", "限定资源上限必须大于 0"),
         ("引导/神力:2/2短休", "不能包含符号「/」"),
         ("引导神力-:2/2短休", "不能包含符号「-」"),
         ("攻击神力:2/2短休", "不能包含「攻击」字样"),
@@ -91,16 +91,16 @@ def test_feature_item_errors(item: str, message: str):
 
 def test_feature_list_limits_and_duplicates():
     items = "; ".join(
-        f"能力{i}:1/1长休" for i in range(FEATURE_MAX_COUNT + 1)
+        f"限定资源{i}:1/1长休" for i in range(FEATURE_MAX_COUNT + 1)
     )
-    with pytest.raises(AssertionError, match="能力数量最多"):
+    with pytest.raises(AssertionError, match="限定资源数量最多"):
         parse_feature_list(items)
-    with pytest.raises(AssertionError, match="能力名称重复"):
+    with pytest.raises(AssertionError, match="限定资源名称重复"):
         parse_feature_list("奥术回想:1/1短休; 奥术回想:1/1长休")
 
 
 def test_feature_old_card_defaults():
-    """旧卡没有 $能力$ 段：字段按默认空列表读入。"""
+    """旧卡没有 $限定资源$ 段：字段按默认空列表读入。"""
     char = DNDCharacter.model_validate(
         {"group_id": "g", "user_id": "u", "name": "旧卡"}
     )
@@ -226,10 +226,11 @@ def test_spell_slots_empty_render():
 
 
 def test_template_contains_new_segments_and_roundtrips():
-    """模板覆盖能力/法术/法术位三段，且可再次解析回同一份记录。"""
+    """模板覆盖限定资源/魔法物品/法术/法术位，且可再次解析回同一份记录。"""
     text = gen_template_char().get_char_info()
-    assert "$能力$ 奥术回想:1/1短休|" in text
-    assert "$法术$ 施法属性:智力; 豁免DC:15; 法术攻击:+7; 火焰箭:0|" in text
+    assert "$限定资源$ 奥术回想:1/1短休|" in text
+    assert "$魔法物品$ 战法师魔杖 +1|" in text
+    assert "$法术$ 施法属性:智力; 豁免DC:15; 法术攻击:+8; 火焰箭:0|" in text
     assert "$法术位$ 1:4/4; 2:3/3; 3:2/2" in text
 
     char = CharacterService.parse(text, "g", "u")
@@ -237,7 +238,7 @@ def test_template_contains_new_segments_and_roundtrips():
     assert char.features[0].name == "奥术回想"
     assert char.features[0].text
     assert char.spellcasting_ability == "智力"
-    assert (char.spell_dc, char.spell_attack) == ("15", "+7")
+    assert (char.spell_dc, char.spell_attack) == ("15", "+8")
     by_name = {spell.name: spell for spell in char.spells}
     assert by_name["火球术"].prepared is True
     assert by_name["火球术"].cast_time == "1动作"
@@ -250,7 +251,7 @@ def test_full_card_parse_with_new_segments():
         "$姓名$ 测试",
         "$等级$ 5",
         "$属性$ 10/10/10/10/10/10",
-        "$能力$ 引导神力:2/2短休+1,长休; 圣疗:25/25长休",
+        "$限定资源$ 引导神力:2/2短休+1,长休; 圣疗:25/25长休",
         "$法术$ 施法属性:魅力; 制裁斩:1*; 治疗真言:1",
         "$法术位$ 1:2/2",
     ])

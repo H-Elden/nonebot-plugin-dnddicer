@@ -29,11 +29,13 @@ export const K = Object.freeze({
   PROF: '$熟练$',
   EXT: '$额外加值$',
   FEATS: '$专长$',
-  TRAITS: '$特性$',
+  RACE_TRAITS: '$种族特性$',
+  CLASS_TRAITS: '$职业特性$',
   WEAPON: '$武器$',
   ITEMS: '$物品$',
   COINS: '$钱币$',
-  FEATURE: '$能力$',
+  FEATURE: '$限定资源$',
+  MAGIC_ITEMS: '$魔法物品$',
   SPELL: '$法术$',
   SPELL_SLOTS: '$法术位$',
   COMBAT_NOTES: '$战斗记录$',
@@ -43,8 +45,8 @@ export const K = Object.freeze({
 export const SEGMENT_KINDS = Object.freeze({
   [K.NAME]: 'text',
   [K.RACE]: 'text',
-  [K.CLASS]: 'select',
-  [K.SUBCLASS]: 'text',
+  [K.CLASS]: 'class',
+  [K.SUBCLASS]: 'subclass',
   [K.BACKGROUND]: 'background',
   [K.STORY]: 'longtext',
   [K.LEVEL]: 'number',
@@ -56,11 +58,13 @@ export const SEGMENT_KINDS = Object.freeze({
   [K.PROF]: 'prof',
   [K.EXT]: 'ext',
   [K.FEATS]: 'feats',
-  [K.TRAITS]: 'traits',
+  [K.RACE_TRAITS]: 'raceTraits',
+  [K.CLASS_TRAITS]: 'classTraits',
   [K.WEAPON]: 'weapons',
   [K.ITEMS]: 'items',
   [K.COINS]: 'coins',
   [K.FEATURE]: 'features',
+  [K.MAGIC_ITEMS]: 'magicItems',
   [K.SPELL]: 'spells',
   [K.SPELL_SLOTS]: 'slots',
   [K.COMBAT_NOTES]: 'notes',
@@ -161,17 +165,22 @@ export function createCardBuilder(spec) {
   const classSynonyms = enums.class_synonyms || {}
   const damageTypeSynonyms = enums.damage_type_synonyms || {}
   const damageTypes = enums.damage_types || []
-  const classes = enums.classes || []
   const proficiencyGroups = enums.proficiency_groups || []
-  const backgroundKeys = enums.background_keys || []
+  const backgroundKeys5r = enums.background_keys_5r || []
+  const backgroundKeys5e = enums.background_keys_5e || backgroundKeys5r
+  const backgroundKeys = enums.background_keys || [
+    ...new Set([...backgroundKeys5r, ...backgroundKeys5e]),
+  ]
+  const subclassLevel5r = Number(enums.subclass_level_5r || 3)
+  const subclassLevel5e = enums.subclass_level_5e || {}
+  const defaultSubclassLevel = Number(enums.default_subclass_level || 3)
+  const xpThresholds = Array.isArray(enums.xp_thresholds) ? enums.xp_thresholds : []
   const coinKeys = enums.coin_keys || []
   const recoverModes = enums.recover_modes || []
   const spellDetailKeys = enums.spell_detail_keys || []
 
   const segments = spec.segments.slice()
   const segmentMap = new Map(segments.map((segment) => [segment.key, segment]))
-  const legacySegments = Array.isArray(spec.legacy_segments) ? spec.legacy_segments : []
-  const legacyMap = new Map(legacySegments.map((segment) => [segment.key, segment]))
   const order =
     Array.isArray(spec.output_order) && spec.output_order.length > 0
       ? spec.output_order.slice()
@@ -211,6 +220,35 @@ export function createCardBuilder(spec) {
   function normalizeDamageTypeName(name) {
     if (damageTypeSynonyms[name]) return damageTypeSynonyms[name]
     return damageTypes.includes(name) ? name : ''
+  }
+
+  function backgroundKeysFor(version) {
+    return version === '5e' ? backgroundKeys5e : backgroundKeys5r
+  }
+
+  /** 职业的子职等级：5r 固定 3；5e 按职业；自定义职业默认 3。 */
+  function subclassLevelFor(className, version = '5r') {
+    if (version !== '5e') return subclassLevel5r
+    return subclassLevel5e[normalizeClassName(className)] || defaultSubclassLevel
+  }
+
+  function proficiencyBonusOfLevel(level) {
+    const value = Number(level)
+    if (!Number.isFinite(value) || value < 1) return ''
+    return 2 + Math.floor((value - 1) / 4)
+  }
+
+  function xpNextForLevel(level) {
+    const value = Number(level)
+    if (!Number.isInteger(value) || value < 1 || value >= 20) return ''
+    return xpThresholds[value] === undefined ? '' : String(xpThresholds[value])
+  }
+
+  function isSubclassAvailable(state, version = '5r') {
+    const level = Number(trimOf(state[K.LEVEL]))
+    const className = trimOf(state[K.CLASS])
+    if (!Number.isFinite(level) || level < 1) return false
+    return level >= subclassLevelFor(className, version)
   }
 
   function singleLine(value, label) {
@@ -539,37 +577,37 @@ export function createCardBuilder(spec) {
     for (const item of splitSemicolon(content)) {
       const [body, textRaw] = partition(withHalfColon(item), '|')
       const text = textRaw.trim()
-      if (text.includes('|')) fail(`能力说明不能包含符号「|」: ${item}`)
+      if (text.includes('|')) fail(`限定资源说明不能包含符号「|」: ${item}`)
       if (charLength(text) > (limits.feature_text_max_len || 80)) {
-        fail(`能力说明过长（≤${limits.feature_text_max_len || 80} 字）: ${item}`)
+        fail(`限定资源说明过长（≤${limits.feature_text_max_len || 80} 字）: ${item}`)
       }
       const [rawName, rawValue] = partition(body, ':')
       const name = rawName.trim()
       if (!rawValue) {
-        fail(`能力条目不完整: ${item}（示例：引导神力:2/2短休+1,长休）`)
+        fail(`限定资源条目不完整: ${item}（示例：引导神力:2/2短休+1,长休）`)
       }
-      if (!name) fail('能力名称不能为空')
+      if (!name) fail('限定资源名称不能为空')
       if (charLength(name) > (limits.feature_name_max_len || 20)) {
-        fail(`能力名称过长（≤${limits.feature_name_max_len || 20} 字）: ${name}`)
+        fail(`限定资源名称过长（≤${limits.feature_name_max_len || 20} 字）: ${name}`)
       }
       for (const char of [
         '/', ',', '，', ':', '：', ';', '；', '$', '+', '-', '|', '｜',
       ]) {
-        if (name.includes(char)) fail(`能力名称不能包含符号「${char}」: ${name}`)
+        if (name.includes(char)) fail(`限定资源名称不能包含符号「${char}」: ${name}`)
       }
       for (const word of ['攻击', '命中', '伤害', '检定', '豁免']) {
-        if (name.includes(word)) fail(`能力名称不能包含「${word}」字样: ${name}`)
+        if (name.includes(word)) fail(`限定资源名称不能包含「${word}」字样: ${name}`)
       }
       const matched = /^(\d+)\s*\/\s*(\d+)\s*(.*)$/.exec(rawValue.trim())
       if (!matched) {
-        fail(`能力次数无效: ${item}（写法：当前/上限恢复档，如 2/2短休+1,长休）`)
+        fail(`限定资源次数无效: ${item}（写法：当前/上限恢复档，如 2/2短休+1,长休）`)
       }
       const cur = Number(matched[1])
       const max = Number(matched[2])
-      if (max <= 0) fail(`能力上限必须大于 0: ${item}`)
-      if (cur > max) fail(`能力当前次数不能超过上限: ${item}`)
+      if (max <= 0) fail(`限定资源上限必须大于 0: ${item}`)
+      if (cur > max) fail(`限定资源当前次数不能超过上限: ${item}`)
       const modes = parseFeatureRecover(matched[3])
-      if (seen.has(name)) fail(`能力名称重复: ${name}`)
+      if (seen.has(name)) fail(`限定资源名称重复: ${name}`)
       seen.add(name)
       rows.push({ name, cur: String(cur), max: String(max), modes, text })
     }
@@ -586,15 +624,15 @@ export function createCardBuilder(spec) {
       if (!token) continue
       const mode = recoverModes.find((item) => token.startsWith(item))
       if (!mode) {
-        fail(`能力恢复方式无效: ${token}（可选：短休/长休/两者/手动，可加 +N 或 满）`)
+        fail(`限定资源恢复方式无效: ${token}（可选：短休/长休/两者/手动，可加 +N 或 满）`)
       }
       const tail = token.slice(mode.length).trim()
       if (mode === '手动' && tail) fail(`「手动」不能带恢复量: ${token}`)
-      if (modes[mode].on) fail(`能力恢复方式重复: ${token}`)
+      if (modes[mode].on) fail(`限定资源恢复方式重复: ${token}`)
       if (tail && tail !== '满') {
         const matched = /^\+(\d+)$/.exec(tail)
         if (!matched || Number(matched[1]) <= 0) {
-          fail(`能力恢复量无效: ${tail}（可写 +N 或 满，如 短休+1、长休满）`)
+          fail(`限定资源恢复量无效: ${tail}（可写 +N 或 满，如 短休+1、长休满）`)
         }
         modes[mode] = { on: true, amount: String(Number(matched[1])) }
       } else {
@@ -603,7 +641,7 @@ export function createCardBuilder(spec) {
       found += 1
     }
     if (found === 0) {
-      fail('能力恢复方式不能为空（可选：短休/长休/两者/手动，可加 +N 或 满）')
+      fail('限定资源恢复方式不能为空（可选：短休/长休/两者/手动，可加 +N 或 满）')
     }
     if (modes['两者'].on && (modes['短休'].on || modes['长休'].on)) {
       fail('「两者」已含短休与长休，不要再分别写')
@@ -787,14 +825,9 @@ export function createCardBuilder(spec) {
   function parseItems(content) {
     const rows = []
     for (const item of splitSemicolon(content)) {
-      let raw = item.trim()
-      let equipped = false
-      if (raw.endsWith('[装备]')) {
-        equipped = true
-        raw = raw.slice(0, -4).trim()
-      }
+      const raw = item.trim()
       if (raw.includes('[') || raw.includes(']')) {
-        fail(`物品条目写法无效: ${item}（装备标记只支持 [装备]）`)
+        fail(`物品条目写法无效: ${item}（只写 名称x数量，不再支持 [装备]）`)
       }
       const matched = /^(.+?)(?:[xX×](\d+))?$/.exec(raw)
       if (!matched) fail(`物品条目写法无效: ${item}`)
@@ -807,7 +840,7 @@ export function createCardBuilder(spec) {
       if (quantity < 1 || quantity > (limits.item_quantity_max || 999)) {
         fail(`物品数量无效: ${item}（1~${limits.item_quantity_max || 999}）`)
       }
-      rows.push({ name, qty: String(quantity), equipped })
+      rows.push({ name, qty: String(quantity) })
     }
     return rows
   }
@@ -834,7 +867,7 @@ export function createCardBuilder(spec) {
   }
 
   function parseBackground(content) {
-    const rows = []
+    const result = Object.fromEntries(backgroundKeys.map((key) => [key, '']))
     const seen = new Set()
     for (const item of splitSemicolon(content)) {
       const [rawKey, rawValue] = partition(withHalfColon(item), ':')
@@ -843,17 +876,17 @@ export function createCardBuilder(spec) {
       if (!key || !value) {
         fail(`背景条目不完整: ${item}（示例：背景:士兵; 阵营:守序善良）`)
       }
-      if (charLength(key) > (limits.background_key_max_len || 10)) {
-        fail(`背景键过长（≤${limits.background_key_max_len || 10} 字）: ${key}`)
+      if (!backgroundKeys.includes(key)) {
+        fail(`背景键无效: ${key}（可用：${backgroundKeys.join('/')}）`)
       }
       if (charLength(value) > (limits.background_value_max_len || 100)) {
         fail(`背景内容过长（≤${limits.background_value_max_len || 100} 字）: ${key}`)
       }
       if (seen.has(key)) fail(`背景条目重复: ${key}`)
       seen.add(key)
-      rows.push({ key, value })
+      result[key] = value
     }
-    return { rows }
+    return result
   }
 
   function parseNotes(content) {
@@ -880,13 +913,96 @@ export function createCardBuilder(spec) {
   }
 
   function parseClassName(content) {
-    const value = content.trim()
+    const value = trimOf(content)
+    if (!value) fail('职业名称不能为空')
     const name = normalizeClassName(value)
-    if (classes.includes(name)) return name
     if (/[/、+,，兼]/.test(value)) {
       fail('当前版本暂不支持兼职，请填写单一职业名（如 游荡者）')
     }
-    fail(`职业无效: ${value}，可用职业: ${classes.join('/')}`)
+    if (charLength(name) > (limits.class_name_max_len || 20)) {
+      fail(`职业名称过长（≤${limits.class_name_max_len || 20} 字）: ${name}`)
+    }
+    for (const char of ['$', '|', ';', '；', ':', '：']) {
+      if (name.includes(char)) fail(`职业名称不能包含符号「${char}」: ${name}`)
+    }
+    return name
+  }
+
+  function parseClassTraits(content) {
+    const rows = []
+    const seen = new Set()
+    for (const item of content.split('/')) {
+      const raw = item.trim()
+      if (!raw) continue
+      const [levelText, body] = partition(withHalfColon(raw), '|')
+      if (!body) fail(`职业特性缺少等级: ${raw}（示例：3|塑能学者:说明）`)
+      const level = trimOf(levelText)
+      if (!/^\d+$/.test(level) || Number(level) < 1 || Number(level) > 20) {
+        fail(`职业特性等级无效: ${raw}（写 1~20）`)
+      }
+      const [rawName, rawText] = partition(body, ':')
+      const name = rawName.trim()
+      const text = rawText.trim()
+      if (!name) fail(`职业特性名称不能为空: ${raw}`)
+      if (charLength(name) > (limits.class_feature_name_max_len || 30)) {
+        fail(`职业特性名称过长（≤${limits.class_feature_name_max_len || 30} 字）: ${name}`)
+      }
+      if (charLength(text) > (limits.class_feature_text_max_len || 80)) {
+        fail(`职业特性说明过长（≤${limits.class_feature_text_max_len || 80} 字）: ${text}`)
+      }
+      if (seen.has(name)) fail(`职业特性重复: ${name}`)
+      seen.add(name)
+      rows.push({ level: String(Number(level)), name, text })
+    }
+    return rows
+  }
+
+  function magicParagraphsOf(text) {
+    return normalizeNewlines(text)
+      .split(/\n\s*\n/)
+      .map((paragraph) => paragraph.replace(/\n/g, ' ').trim())
+      .filter((paragraph) => paragraph !== '')
+  }
+
+  function parseMagicItems(content) {
+    const rows = []
+    const seen = new Set()
+    for (const item of splitSemicolon(content)) {
+      const parts = item.split('|').map((part) => part.trim())
+      if (parts.length !== 2 && parts.length !== 3) {
+        fail(`魔法物品条目不完整: ${item}（写法：名称|标签|说明，说明可省略）`)
+      }
+      const [name, tag] = parts
+      const text = parts.length === 3 ? parts[2] : ''
+      if (!name) fail(`魔法物品名称不能为空: ${item}`)
+      if (!tag) fail(`魔法物品标签不能为空: ${item}`)
+      if (charLength(name) > (limits.magic_item_name_max_len || 30)) {
+        fail(`魔法物品名称过长（≤${limits.magic_item_name_max_len || 30} 字）: ${name}`)
+      }
+      if (charLength(tag) > (limits.magic_item_tag_max_len || 60)) {
+        fail(`魔法物品标签过长（≤${limits.magic_item_tag_max_len || 60} 字）: ${tag}`)
+      }
+      for (const field of [name, tag]) {
+        for (const char of ['|', ';', '；', '$']) {
+          if (field.includes(char)) fail(`魔法物品名称/标签不能包含符号「${char}」: ${field}`)
+        }
+      }
+      if (seen.has(name)) fail(`魔法物品重复: ${name}`)
+      seen.add(name)
+      const paragraphs = text
+        .split('//')
+        .map((paragraph) => paragraph.trim())
+        .filter((paragraph) => paragraph !== '')
+      if (paragraphs.length > (limits.magic_item_paragraph_max || 5)) {
+        fail(`魔法物品说明最多 ${limits.magic_item_paragraph_max || 5} 段: ${item}`)
+      }
+      const total = paragraphs.reduce((sum, paragraph) => sum + charLength(paragraph), 0)
+      if (total > (limits.magic_item_text_max_len || 500)) {
+        fail(`魔法物品说明过长（≤${limits.magic_item_text_max_len || 500} 字）: ${item}`)
+      }
+      rows.push({ name, tag, text: paragraphs.join('\n\n') })
+    }
+    return rows
   }
 
   function parseSegment(key, content) {
@@ -896,8 +1012,10 @@ export function createCardBuilder(spec) {
         return singleLine(content, labelOf(key))
       case 'longtext':
         return parseStory(content)
-      case 'select':
+      case 'class':
         return parseClassName(content)
+      case 'subclass':
+        return singleLine(content, '子职')
       case 'number': {
         const value = integerOf(content, '等级')
         if (value <= 0) fail(`等级必须为正整数: ${content}`)
@@ -924,13 +1042,17 @@ export function createCardBuilder(spec) {
           limits.feat_name_max_len || 20,
           limits.feat_text_max_len || 60,
         )
-      case 'traits':
+      case 'raceTraits':
         return parseNamedRows(
           content,
-          '特性',
-          limits.trait_name_max_len || 40,
-          limits.trait_text_max_len || 80,
+          '种族特性',
+          limits.race_trait_name_max_len || 30,
+          limits.race_trait_text_max_len || 80,
         )
+      case 'classTraits':
+        return parseClassTraits(content)
+      case 'magicItems':
+        return parseMagicItems(content)
       case 'weapons':
         return parseWeapons(content)
       case 'items':
@@ -960,15 +1082,13 @@ export function createCardBuilder(spec) {
       [K.RACE]: '',
       [K.CLASS]: '',
       [K.SUBCLASS]: '',
-      [K.BACKGROUND]: {
-        rows: backgroundKeys.map((key) => ({ key, value: '' })),
-      },
+      [K.BACKGROUND]: Object.fromEntries(backgroundKeys.map((key) => [key, ''])),
       [K.STORY]: '',
       [K.LEVEL]: '',
       [K.HP]: { cur: '', max: '', temp: '' },
       [K.HP_DICE]: { num: '', max: '', type: '' },
       [K.COMBAT]: { AC: '', 先攻: '', 速度: '', 被动察觉: '' },
-      [K.PROGRESS]: { xp: '', xpNext: '', inspiration: '' },
+      [K.PROGRESS]: { xp: '', xpNext: '', inspiration: '无' },
       [K.ABILITY]: abilities.map(() => ''),
       [K.PROF]: {
         checks: Object.fromEntries(checkItems.map((name) => [name, 0])),
@@ -976,11 +1096,12 @@ export function createCardBuilder(spec) {
       },
       [K.EXT]: [{ key: '', adv: '', bonus: '' }],
       [K.FEATS]: [{ name: '', text: '' }],
-      [K.TRAITS]: [{ name: '', text: '' }],
+      [K.RACE_TRAITS]: [{ name: '', text: '' }],
+      [K.CLASS_TRAITS]: [{ level: '1', name: '', text: '' }],
       [K.WEAPON]: [
         { name: '', noAttack: false, attack: '', damage: '', type: '', note: '' },
       ],
-      [K.ITEMS]: [{ name: '', qty: '1', equipped: false }],
+      [K.ITEMS]: [{ name: '', qty: '1' }],
       [K.COINS]: Object.fromEntries(coinKeys.map((key) => [key, ''])),
       [K.FEATURE]: [
         {
@@ -993,10 +1114,13 @@ export function createCardBuilder(spec) {
           text: '',
         },
       ],
+      [K.MAGIC_ITEMS]: [{ name: '', tag: '', text: '' }],
       [K.SPELL]: {
         ability: '',
         dc: '',
         attack: '',
+        dcManual: false,
+        attackManual: false,
         list: [{ name: '', level: '0', prepared: false, ...emptySpellDetail() }],
       },
       [K.SPELL_SLOTS]: {
@@ -1018,26 +1142,13 @@ export function createCardBuilder(spec) {
     return text
   }
 
-  function buildBackground(state) {
-    const rows = state[K.BACKGROUND].rows || []
-    const map = new Map()
-    for (const row of rows) {
-      const key = trimOf(row.key)
-      const value = trimOf(row.value)
-      if (!key) {
-        if (value) fail('背景条目要先写键（如 阵营）')
-        continue
-      }
-      if (!value) continue
-      if (map.has(key)) fail(`背景条目重复: ${key}`)
-      map.set(key, value)
-    }
+  function buildBackground(state, options = {}) {
+    const values = state[K.BACKGROUND] || {}
+    const allowed = backgroundKeysFor(options.rulesVersion || '5r')
     const items = []
-    for (const key of backgroundKeys) {
-      if (map.has(key)) items.push(`${key}:${map.get(key)}`)
-    }
-    for (const [key, value] of map) {
-      if (!backgroundKeys.includes(key)) items.push(`${key}:${value}`)
+    for (const key of allowed) {
+      const value = trimOf(values[key])
+      if (value) items.push(`${key}:${value}`)
     }
     return items.join('; ')
   }
@@ -1067,11 +1178,52 @@ export function createCardBuilder(spec) {
     return `${normalizeIntText(num)}/${normalizeIntText(max || num)} D${normalizeIntText(type)}`
   }
 
+  function deriveProficiencyBonus(state) {
+    return proficiencyBonusOfLevel(trimOf(state[K.LEVEL]))
+  }
+
+  function deriveXpNext(state) {
+    return xpNextForLevel(Number(trimOf(state[K.LEVEL])))
+  }
+
+  /** 先攻 = 敏捷调整值 + 先攻熟练 + 先攻额外加值；卡文本只取常数部分。 */
+  function deriveInitiative(state) {
+    const raw = deriveCheckValues(state)['先攻'] || ''
+    const matched = /^[+-]?\d+/.exec(raw)
+    return matched ? normalizeSigned(matched[0], '先攻') : ''
+  }
+
+  /**
+   * 法术豁免 DC / 法术攻击的公式值：8 + 熟练 + 施法属性调整值 /
+   * 熟练 + 施法属性调整值。只用于网页端预填，插件只记录卡文本里的数。
+   */
+  function deriveSpellStats(state) {
+    const spell = state[K.SPELL] || {}
+    const ability = trimOf(spell.ability)
+    const index = abilities.indexOf(ability)
+    const level = Number(trimOf(state[K.LEVEL]))
+    const score = Number(trimOf((state[K.ABILITY] || [])[index] || ''))
+    if (index < 0 || !Number.isFinite(level) || level < 1) {
+      return { dc: '', attack: '', available: false }
+    }
+    if (!Number.isFinite(score) || score < 1) {
+      return { dc: '', attack: '', available: false }
+    }
+    const prof = 2 + Math.floor((level - 1) / 4)
+    const mod = Math.floor((score - 10) / 2)
+    return {
+      dc: String(8 + prof + mod),
+      attack: formatSigned(prof + mod),
+      available: true,
+    }
+  }
+
   function buildCombat(state) {
     const combat = state[K.COMBAT]
+    const derived = deriveInitiative(state)
     const items = []
     for (const key of ['AC', '先攻', '速度', '被动察觉']) {
-      const value = trimOf(combat[key])
+      const value = key === '先攻' ? derived || trimOf(combat[key]) : trimOf(combat[key])
       if (!value) continue
       if (key === '先攻') items.push(`${key}:${normalizeSigned(value, '先攻')}`)
       else if (key === '速度') items.push(`${key}:${value}`)
@@ -1083,11 +1235,14 @@ export function createCardBuilder(spec) {
   function buildProgress(state) {
     const progress = state[K.PROGRESS]
     const xp = trimOf(progress.xp)
-    const next = trimOf(progress.xpNext)
+    // 等级已知时用规则表；只有单段导入（还没有等级）才保留原卡上的下一级值
+    const next =
+      deriveXpNext(state) || (trimOf(state[K.LEVEL]) ? '' : trimOf(progress.xpNext))
     const items = []
-    if (next && !xp) fail('经验要写了当前值才能写下一级')
     if (xp) items.push(`经验:${normalizeIntText(xp)}${next ? `/${normalizeIntText(next)}` : ''}`)
-    if (progress.inspiration) items.push(`激励:${progress.inspiration}`)
+    if (progress.inspiration === '有' || (xp && progress.inspiration === '无')) {
+      items.push(`激励:${progress.inspiration}`)
+    }
     return items.join('; ')
   }
 
@@ -1279,16 +1434,13 @@ export function createCardBuilder(spec) {
   }
 
   function buildItems(state) {
-    // 空白行不算内容：数量默认 1 是表单初值，只有写了名称或勾了装备才导出
-    const rows = state[K.ITEMS].filter(
-      (row) => trimOf(row.name) || row.equipped,
-    )
+    // 空白行不算内容：数量默认 1 是表单初值，只有写了名称才导出
+    const rows = state[K.ITEMS].filter((row) => trimOf(row.name))
     const items = []
     for (const row of rows) {
       const name = trimOf(row.name)
-      if (!name) fail('物品要先写名称')
       const qty = trimOf(row.qty) || '1'
-      items.push(`${name}x${normalizeIntText(qty)}${row.equipped ? '[装备]' : ''}`)
+      items.push(`${name}x${normalizeIntText(qty)}`)
     }
     return items.join('; ')
   }
@@ -1326,16 +1478,62 @@ export function createCardBuilder(spec) {
     const items = []
     for (const row of rows) {
       const name = trimOf(row.name)
-      if (!name) fail('能力要先写名称')
+      if (!name) fail('限定资源要先写名称')
       const cur = trimOf(row.cur)
       const max = trimOf(row.max)
-      if (!cur || !max) fail(`能力「${name}」要写当前/上限（如 1/1）`)
+      if (!cur || !max) fail(`限定资源「${name}」要写当前/上限（如 1/1）`)
       const recover = recoverText(row.modes)
-      if (!recover) fail(`能力「${name}」要选恢复方式（短休/长休/两者/手动）`)
+      if (!recover) fail(`限定资源「${name}」要选恢复方式（短休/长休/两者/手动）`)
       const text = trimOf(row.text)
       items.push(
         `${name}:${normalizeIntText(cur)}/${normalizeIntText(max)}${recover}${text ? `|${text}` : ''}`,
       )
+    }
+    return items.join('; ')
+  }
+
+  function buildClassTraits(state) {
+    const rows = state[K.CLASS_TRAITS].filter(
+      (row) => trimOf(row.name) || trimOf(row.text),
+    )
+    const sorted = rows
+      .map((row, index) => ({ row, index }))
+      .sort(
+        (left, right) =>
+          Number(trimOf(left.row.level) || 0) - Number(trimOf(right.row.level) || 0) ||
+          left.index - right.index,
+      )
+      .map((entry) => entry.row)
+    const items = []
+    for (const row of sorted) {
+      const name = trimOf(row.name)
+      if (!name) fail('职业特性要先写名称')
+      const level = trimOf(row.level) || '1'
+      if (!/^\d+$/.test(level) || Number(level) < 1 || Number(level) > 20) {
+        fail(`职业特性「${name}」的等级无效: ${level}（写 1~20）`)
+      }
+      const text = trimOf(row.text)
+      items.push(`${Number(level)}|${name}${text ? `:${text}` : ''}`)
+    }
+    return items.join('/')
+  }
+
+  function buildMagicItems(state) {
+    const rows = state[K.MAGIC_ITEMS].filter(
+      (row) => trimOf(row.name) || trimOf(row.tag) || trimOf(row.text),
+    )
+    const items = []
+    for (const row of rows) {
+      const name = trimOf(row.name)
+      const tag = trimOf(row.tag)
+      if (!name) fail('魔法物品要先写名称')
+      if (!tag) fail(`魔法物品「${name}」要写标签（如 奇物，非普通）`)
+      const paragraphs = magicParagraphsOf(row.text)
+      if (paragraphs.length > (limits.magic_item_paragraph_max || 5)) {
+        fail(`魔法物品「${name}」说明最多 ${limits.magic_item_paragraph_max || 5} 段`)
+      }
+      const body = paragraphs.join('//')
+      items.push(`${name}|${tag}${body ? `|${body}` : ''}`)
     }
     return items.join('; ')
   }
@@ -1353,12 +1551,15 @@ export function createCardBuilder(spec) {
 
   function buildSpells(state) {
     const spells = state[K.SPELL]
+    const derived = deriveSpellStats(state)
+    const dc = spells.dcManual ? trimOf(spells.dc) : derived.dc || trimOf(spells.dc)
+    const attack = spells.attackManual
+      ? trimOf(spells.attack)
+      : derived.attack || trimOf(spells.attack)
     const items = []
     if (trimOf(spells.ability)) items.push(`施法属性:${trimOf(spells.ability)}`)
-    if (trimOf(spells.dc)) items.push(`豁免DC:${normalizeIntText(spells.dc)}`)
-    if (trimOf(spells.attack)) {
-      items.push(`法术攻击:${normalizeSigned(spells.attack, '法术攻击')}`)
-    }
+    if (dc) items.push(`豁免DC:${normalizeIntText(dc)}`)
+    if (attack) items.push(`法术攻击:${normalizeSigned(attack, '法术攻击')}`)
     const rows = spells.list.filter(
       (row) =>
         trimOf(row.name) ||
@@ -1424,17 +1625,27 @@ export function createCardBuilder(spec) {
       .trim()
   }
 
-  function buildContent(state, key) {
+  function buildContent(state, key, options = {}) {
     const kind = SEGMENT_KINDS[key]
     switch (kind) {
       case 'text':
-      case 'select':
+      case 'class':
       case 'number':
         return buildText(key, state[key])
+      case 'subclass': {
+        const levelText = trimOf(state[K.LEVEL])
+        if (
+          levelText &&
+          !isSubclassAvailable(state, options.rulesVersion || '5r')
+        ) {
+          return ''
+        }
+        return buildText(key, state[key])
+      }
       case 'longtext':
         return buildStory(state)
       case 'background':
-        return buildBackground(state)
+        return buildBackground(state, options)
       case 'hp':
         return buildHp(state)
       case 'hpdice':
@@ -1451,8 +1662,10 @@ export function createCardBuilder(spec) {
         return buildExt(state)
       case 'feats':
         return buildNamedRows(state, K.FEATS, '专长')
-      case 'traits':
-        return buildNamedRows(state, K.TRAITS, '特性')
+      case 'raceTraits':
+        return buildNamedRows(state, K.RACE_TRAITS, '种族特性')
+      case 'classTraits':
+        return buildClassTraits(state)
       case 'weapons':
         return buildWeapons(state)
       case 'items':
@@ -1461,6 +1674,8 @@ export function createCardBuilder(spec) {
         return buildCoins(state)
       case 'features':
         return buildFeatures(state)
+      case 'magicItems':
+        return buildMagicItems(state)
       case 'spells':
         return buildSpells(state)
       case 'slots':
@@ -1472,8 +1687,8 @@ export function createCardBuilder(spec) {
     }
   }
 
-  function contentFor(state, key) {
-    const content = buildContent(state, key)
+  function contentFor(state, key, options = {}) {
+    const content = buildContent(state, key, options)
     if (!content) return ''
     if (content.includes('$')) {
       fail(`${labelOf(key)}内容不能包含符号「$」`)
@@ -1509,29 +1724,23 @@ export function createCardBuilder(spec) {
       })
       return { state, errors, warnings, found: 0 }
     }
-    const parts = source.split('$')
+    const matches = [...source.matchAll(/\$([^$\n]+)\$/g)]
     const seen = new Set()
-    for (let index = 0; index + 1 < parts.length; index += 1) {
-      const key = `$${parts[index]}$`
+    for (let index = 0; index < matches.length; index += 1) {
+      const match = matches[index]
+      const key = `$${match[1]}$`
+      const end =
+        index + 1 < matches.length ? matches[index + 1].index : source.length
+      const content = source.slice(match.index + match[0].length, end).trim()
       if (!segmentMap.has(key)) {
-        const legacy = legacyMap.get(key)
-        if (legacy) {
-          warnings.push({
-            key,
-            label: legacy.label || '旧段',
-            message: legacy.message || `旧段 ${key} 已由骰娘自动计算，导入时忽略`,
-          })
-        } else if (/^\$[\u4e00-\u9fa5A-Za-z]{1,8}\$$/.test(key)) {
-          warnings.push({
-            key,
-            label: '未知段',
-            message: `未知段 ${key} 已忽略（不在当前段清单中）`,
-          })
-        }
+        errors.push({
+          key,
+          label: '未知段',
+          message: `未知段 ${key}（不在当前段清单中，请检查是否用了旧写法）`,
+        })
         continue
       }
-      const content = parts[index + 1].trim()
-      if (!content || segmentMap.has(content) || legacyMap.has(content)) continue
+      if (!content) continue
       if (seen.has(key)) {
         warnings.push({
           key,
@@ -1551,6 +1760,13 @@ export function createCardBuilder(spec) {
       }
     }
     const found = seen.size
+    if (state[K.SPELL]) {
+      const spell = state[K.SPELL]
+      const derived = deriveSpellStats(state)
+      spell.dcManual = Boolean(spell.dc) && (!derived.available || derived.dc !== spell.dc)
+      spell.attackManual =
+        Boolean(spell.attack) && (!derived.available || derived.attack !== spell.attack)
+    }
     if (found === 0 && errors.length === 0) {
       errors.push({
         key: '',
@@ -1558,17 +1774,28 @@ export function createCardBuilder(spec) {
         message: '没有识别到任何有效的 $段名$ 段，请检查粘贴内容',
       })
     }
-    return { state, errors, warnings, found }
+    const extraBackground = backgroundKeys5e.filter(
+      (key) =>
+        !backgroundKeys5r.includes(key) &&
+        trimOf(state[K.BACKGROUND] && state[K.BACKGROUND][key]),
+    )
+    return {
+      state,
+      errors,
+      warnings,
+      found,
+      rulesVersion: extraBackground.length > 0 ? '5e' : '5r',
+    }
   }
 
   // ── 导出 ──────────────────────────────────────────────────────────────
 
-  function serializeCard(state) {
+  function serializeCard(state, options = {}) {
     const lines = []
     for (const key of order) {
       let content = ''
       try {
-        content = contentFor(state, key)
+        content = contentFor(state, key, options)
       } catch {
         content = ''
       }
@@ -1577,12 +1804,12 @@ export function createCardBuilder(spec) {
     return lines.join('\n')
   }
 
-  function buildMinimalCard(state) {
+  function buildMinimalCard(state, options = {}) {
     const lines = []
     for (const key of [K.NAME, K.LEVEL, K.ABILITY]) {
       let content = ''
       try {
-        content = contentFor(state, key)
+        content = contentFor(state, key, options)
       } catch {
         content = ''
       }
@@ -1591,12 +1818,12 @@ export function createCardBuilder(spec) {
     return lines.join('\n')
   }
 
-  function buildSegmentCommands(state) {
+  function buildSegmentCommands(state, options = {}) {
     const commands = []
     for (const key of order) {
       let content = ''
       try {
-        content = contentFor(state, key)
+        content = contentFor(state, key, options)
       } catch {
         content = ''
       }
@@ -1623,7 +1850,7 @@ export function createCardBuilder(spec) {
 
   // ── 校验 ──────────────────────────────────────────────────────────────
 
-  function validateState(state) {
+  function validateState(state, options = {}) {
     const errors = []
     const warnings = []
     const errorKeys = new Set()
@@ -1647,7 +1874,7 @@ export function createCardBuilder(spec) {
     for (const key of order) {
       let content = ''
       try {
-        content = contentFor(state, key)
+        content = contentFor(state, key, options)
       } catch (error) {
         pushError(key, error instanceof Error ? error.message : String(error))
         continue
@@ -1684,10 +1911,19 @@ export function createCardBuilder(spec) {
       pushWarning(K.NAME, '没写姓名时，骰娘会用群名片作为显示名')
     }
     if (isBlank(state[K.CLASS]) && !isBlank(state[K.SUBCLASS])) {
-      pushWarning(K.SUBCLASS, '写了子职但没写职业，卡面会缺少职业')
+      pushWarning(K.SUBCLASS, '写了子职但没写职业，子职不会导出')
+    } else if (
+      !isBlank(state[K.LEVEL]) &&
+      !isBlank(state[K.SUBCLASS]) &&
+      !isSubclassAvailable(state, options.rulesVersion || '5r')
+    ) {
+      pushWarning(
+        K.SUBCLASS,
+        `当前等级尚未获得子职（${trimOf(state[K.CLASS]) || '自定义职业'}在 ${subclassLevelFor(trimOf(state[K.CLASS]), options.rulesVersion || '5r')} 级获得），子职不会导出`,
+      )
     }
 
-    const cardText = serializeCard(state)
+    const cardText = serializeCard(state, options)
     const length = charLength(cardText)
     if (length === 0) {
       pushWarning('', '还没有填写任何内容')
@@ -1719,5 +1955,12 @@ export function createCardBuilder(spec) {
     charLength,
     deriveAbilityModifiers,
     deriveCheckValues,
+    deriveProficiencyBonus,
+    deriveXpNext,
+    deriveInitiative,
+    deriveSpellStats,
+    backgroundKeysFor,
+    subclassLevelFor,
+    isSubclassAvailable,
   }
 }

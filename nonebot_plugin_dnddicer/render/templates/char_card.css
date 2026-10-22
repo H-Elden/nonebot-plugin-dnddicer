@@ -431,6 +431,16 @@ body {
   border-bottom: 1px dotted #d8c9a8;
 }
 
+.f-level {
+  display: inline-block;
+  font-size: 9px;
+  color: #5f4a2a;
+  background: #efe2c8;
+  border: 1px solid #d8c9a8;
+  padding: 0 3px;
+  margin-right: 4px;
+}
+
 .f-name {
   font-weight: bold;
   color: #7a1f1f;
@@ -539,6 +549,50 @@ body {
   line-height: 1.55;
   padding: 4px 7px;
   color: #3b3a36;
+}
+
+.story-line {
+  text-indent: 2em;
+}
+
+/* ── 魔法物品 ─────────────────────────────────────────────────── */
+.magic-panel {
+  margin-top: 7px;
+}
+
+.weapon-panel {
+  margin-bottom: 7px;
+}
+
+.magic-item {
+  padding: 4px 7px;
+  border-bottom: 1px dotted #d8c9a8;
+}
+
+.m-head {
+  margin-bottom: 1px;
+}
+
+.m-name {
+  font-weight: bold;
+  color: #7a1f1f;
+  font-size: 11px;
+  margin-right: 5px;
+}
+
+.m-tag {
+  font-size: 9.5px;
+  color: #5f4a2a;
+  background: #f3ead8;
+  border: 1px solid #d8c9a8;
+  padding: 0 3px;
+}
+
+.m-text {
+  font-size: 10px;
+  line-height: 1.45;
+  color: #3b3a36;
+  margin-top: 1px;
 }
 
 /* ── 底部法术区 ───────────────────────────────────────────────── */

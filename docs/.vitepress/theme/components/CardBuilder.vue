@@ -5,6 +5,27 @@
       也可以把骰娘输出的卡整段粘进「导入卡文本」，表单会自动回填。
     </p>
 
+    <div class="cb-rules">
+      <span class="cb-rules__label">规则版本</span>
+      <div class="cb-rules__switch">
+        <button
+          type="button"
+          class="cb-rules__btn"
+          :class="{ 'cb-rules__btn--active': rulesVersion === '5r' }"
+          @click="rulesVersion = '5r'"
+        >5r（2024）</button>
+        <button
+          type="button"
+          class="cb-rules__btn"
+          :class="{ 'cb-rules__btn--active': rulesVersion === '5e' }"
+          @click="rulesVersion = '5e'"
+        >5e（2014）</button>
+      </div>
+      <span class="cb-rules__hint">
+        只影响表单字段与子职门槛，不写入卡文本；群内结算请在群里用 <code>.规则版本</code> 设置。
+      </span>
+    </div>
+
     <div class="cb-toolbar">
       <button type="button" class="cb-btn cb-btn--ghost" @click="loadExample">载入示例卡</button>
       <button type="button" class="cb-btn cb-btn--ghost" @click="importOpen = !importOpen">
@@ -48,8 +69,8 @@
       </ul>
     </section>
 
-    <datalist id="cb-background-keys">
-      <option v-for="key in backgroundKeys" :key="key" :value="key" />
+    <datalist id="cb-class-options">
+      <option v-for="name in enums.classes" :key="name" :value="name" />
     </datalist>
 
     <details
@@ -81,14 +102,25 @@
             :placeholder="placeholder(segment)"
           />
 
-          <select
-            v-else-if="kindOf(segment.key) === 'select'"
+          <input
+            v-else-if="kindOf(segment.key) === 'class'"
             v-model="state[segment.key]"
-            class="cb-select"
-          >
-            <option value="">未选择</option>
-            <option v-for="name in enums.classes" :key="name" :value="name">{{ name }}</option>
-          </select>
+            class="cb-input"
+            list="cb-class-options"
+            placeholder="法师（可手填扩展职业）"
+          />
+
+          <template v-else-if="kindOf(segment.key) === 'subclass'">
+            <input
+              v-if="subclassVisible"
+              v-model="state[segment.key]"
+              class="cb-input"
+              placeholder="塑能师"
+            />
+            <p v-else class="cb-hint">
+              当前等级还没有获得子职（{{ subclassRuleText }}），这里不需要填写。
+            </p>
+          </template>
 
           <template v-else-if="kindOf(segment.key) === 'longtext'">
             <textarea
@@ -102,13 +134,17 @@
             </p>
           </template>
 
-          <input
-            v-else-if="kindOf(segment.key) === 'number'"
-            v-model="state[segment.key]"
-            class="cb-input cb-input--short"
-            inputmode="numeric"
-            placeholder="5"
-          />
+          <div v-else-if="kindOf(segment.key) === 'number'" class="cb-inline">
+            <input
+              v-model="state[segment.key]"
+              class="cb-input cb-input--short"
+              inputmode="numeric"
+              placeholder="5"
+            />
+            <span class="cb-inline-note">
+              熟练加值 {{ proficiencyBonus !== '' ? `+${proficiencyBonus}` : '—' }}
+            </span>
+          </div>
 
           <div v-else-if="kindOf(segment.key) === 'hp'" class="cb-grid cb-grid--3">
             <label class="cb-grid__cell">
@@ -144,11 +180,23 @@
             <label v-for="key in combatKeys" :key="key" class="cb-grid__cell">
               <span class="cb-grid__label">{{ key }}</span>
               <input
+                v-if="key === '先攻'"
+                class="cb-input cb-input--readonly"
+                :value="initiativeValue || state[K.COMBAT].先攻"
+                readonly
+                title="先攻由敏捷调整值、先攻熟练与额外加值自动算出"
+                placeholder="+2"
+              />
+              <input
+                v-else
                 v-model="state[K.COMBAT][key]"
                 class="cb-input"
                 :placeholder="combatPlaceholder(key)"
               />
             </label>
+            <p class="cb-hint cb-grid__full">
+              先攻只读：敏捷调整值 + 先攻熟练 + 额外加值里的「先攻」项；骰子加值不写入卡面。
+            </p>
           </div>
 
           <div v-else-if="kindOf(segment.key) === 'progress'" class="cb-grid cb-grid--3">
@@ -157,17 +205,24 @@
               <input v-model="state[K.PROGRESS].xp" class="cb-input" inputmode="numeric" placeholder="6500" />
             </label>
             <label class="cb-grid__cell">
-              <span class="cb-grid__label">经验（下一级）</span>
-              <input v-model="state[K.PROGRESS].xpNext" class="cb-input" inputmode="numeric" placeholder="14000" />
+              <span class="cb-grid__label">经验（下一级，自动）</span>
+              <input
+                class="cb-input cb-input--readonly"
+                :value="xpNextValue"
+                readonly
+                placeholder="14000"
+              />
             </label>
             <label class="cb-grid__cell">
               <span class="cb-grid__label">英雄激励</span>
               <select v-model="state[K.PROGRESS].inspiration" class="cb-select">
-                <option value="">不写</option>
                 <option value="有">有</option>
                 <option value="无">无</option>
               </select>
             </label>
+            <p class="cb-hint cb-grid__full">
+              下一级经验按等级自动生成，不能手填；20 级没有下一级。
+            </p>
           </div>
 
           <AbilityGroupEditor
@@ -229,13 +284,19 @@
           />
 
           <NamedList
-            v-else-if="kindOf(segment.key) === 'traits'"
+            v-else-if="kindOf(segment.key) === 'raceTraits'"
             :state="state"
-            :field-key="K.TRAITS"
-            :max="limits.trait_max_count || 30"
-            name-placeholder="黑暗视觉（种族）"
+            :field-key="K.RACE_TRAITS"
+            :max="limits.race_trait_max_count || 20"
+            name-placeholder="黑暗视觉"
             text-placeholder="60 尺内微光视为明亮（≤80 字）"
-            add-label="添加特性"
+            add-label="添加种族特性"
+          />
+
+          <ClassFeatureList
+            v-else-if="kindOf(segment.key) === 'classTraits'"
+            :state="state"
+            :limits="limits"
           />
 
           <WeaponList
@@ -270,12 +331,19 @@
             :limits="limits"
           />
 
+          <MagicItemList
+            v-else-if="kindOf(segment.key) === 'magicItems'"
+            :state="state"
+            :limits="limits"
+          />
+
           <SpellList
             v-else-if="kindOf(segment.key) === 'spells'"
             :state="state"
             :enums="enums"
             :limits="limits"
             :abilities="abilities"
+            :derived="spellStats"
           />
 
           <SlotList
@@ -312,33 +380,18 @@
           </template>
 
           <template v-else-if="kindOf(segment.key) === 'background'">
-            <RepeaterRows
-              :items="state[K.BACKGROUND].rows"
-              :max="limits.background_max_count || 12"
-              add-label="添加背景条目"
-              :factory="backgroundFactory"
-              compact
-            >
-              <template #default="{ item }">
-                <div class="cb-kv">
-                  <input
-                    v-model="item.key"
-                    class="cb-input"
-                    list="cb-background-keys"
-                    placeholder="阵营"
-                    aria-label="背景键"
-                  />
-                  <input
-                    v-model="item.value"
-                    class="cb-input"
-                    placeholder="中立善良"
-                    aria-label="背景值"
-                  />
-                </div>
-              </template>
-            </RepeaterRows>
+            <div class="cb-grid cb-grid--2">
+              <label v-for="key in backgroundFields" :key="key" class="cb-grid__cell">
+                <span class="cb-grid__label">{{ key }}</span>
+                <input
+                  v-model="state[K.BACKGROUND][key]"
+                  class="cb-input"
+                  :placeholder="backgroundPlaceholder(key)"
+                />
+              </label>
+            </div>
             <p class="cb-hint">
-              常用键：背景 / 阵营 / 信仰 / 体型 / 年龄 / 外貌 / 个性 / 理想 / 羁绊 / 缺点；也可以自己加键。
+              背景字段固定，空值不会写入卡文本。5r 不显示理想 / 羁绊 / 缺点；切到 5e 可填写。
             </p>
           </template>
         </BuilderField>
@@ -392,7 +445,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 
 import spec from '../card-builder/card-spec.json'
 import {
@@ -402,9 +455,11 @@ import {
 } from '../card-builder/core.mjs'
 import AbilityGroupEditor from './card-builder/AbilityGroupEditor.vue'
 import BuilderField from './card-builder/BuilderField.vue'
+import ClassFeatureList from './card-builder/ClassFeatureList.vue'
 import CopyButton from './card-builder/CopyButton.vue'
 import FeatureList from './card-builder/FeatureList.vue'
 import ItemList from './card-builder/ItemList.vue'
+import MagicItemList from './card-builder/MagicItemList.vue'
 import NamedList from './card-builder/NamedList.vue'
 import ProficiencyEditor from './card-builder/ProficiencyEditor.vue'
 import RepeaterRows from './card-builder/RepeaterRows.vue'
@@ -417,18 +472,21 @@ const enums = spec.enums
 const limits = spec.limits
 const abilities = enums.abilities
 const skills = enums.skills
-const backgroundKeys = enums.background_keys
 const combatKeys = ['AC', '先攻', '速度', '被动察觉']
+const rulesVersion = ref('5r')
 
 const state = reactive(builder.createState())
 const openGroups = reactive(
   Object.fromEntries(builder.groups.map((group, index) => [group.id, index < 4])),
 )
 
-const validation = computed(() => builder.validateState(state))
-const segmentCommands = computed(() => builder.buildSegmentCommands(state))
+const queryOptions = computed(() => ({ rulesVersion: rulesVersion.value }))
+const validation = computed(() => builder.validateState(state, queryOptions.value))
+const segmentCommands = computed(() => builder.buildSegmentCommands(state, queryOptions.value))
 const wholeCommand = computed(() => `${CARD_COMMAND}\n${validation.value.text}`)
-const minimalCommand = computed(() => `${CARD_COMMAND}\n${builder.buildMinimalCard(state)}`)
+const minimalCommand = computed(
+  () => `${CARD_COMMAND}\n${builder.buildMinimalCard(state, queryOptions.value)}`,
+)
 const canCopy = computed(
   () => validation.value.errors.length === 0 && validation.value.text.length > 0,
 )
@@ -437,6 +495,29 @@ const storyLength = computed(() =>
 )
 const abilityModifiers = computed(() => builder.deriveAbilityModifiers(state))
 const checkValues = computed(() => builder.deriveCheckValues(state))
+const proficiencyBonus = computed(() => builder.deriveProficiencyBonus(state))
+const xpNextValue = computed(() => builder.deriveXpNext(state))
+const initiativeValue = computed(() => builder.deriveInitiative(state))
+const spellStats = computed(() => builder.deriveSpellStats(state))
+const backgroundFields = computed(() => builder.backgroundKeysFor(rulesVersion.value))
+const subclassVisible = computed(() =>
+  builder.isSubclassAvailable(state, rulesVersion.value),
+)
+const subclassRuleText = computed(() => {
+  if (!state[K.CLASS]) return '填写职业与等级后会按规则显示'
+  const level = builder.subclassLevelFor(state[K.CLASS], rulesVersion.value)
+  return `${state[K.CLASS]}在 ${level} 级获得子职`
+})
+
+watch(
+  [() => state[K.LEVEL], () => state[K.CLASS], rulesVersion],
+  () => {
+    if (!subclassVisible.value && state[K.SUBCLASS]) {
+      state[K.SUBCLASS] = ''
+      showNotice('等级或职业变化后不再满足子职条件，已清空子职', 'warn')
+    }
+  },
+)
 
 const errorsByKey = computed(() => {
   const map = {}
@@ -459,7 +540,7 @@ const filledKeys = computed(() => {
   const keys = new Set()
   for (const segment of builder.segments) {
     try {
-      if (builder.contentFor(state, segment.key)) keys.add(segment.key)
+      if (builder.contentFor(state, segment.key, queryOptions.value)) keys.add(segment.key)
     } catch {
       keys.add(segment.key)
     }
@@ -512,7 +593,22 @@ function placeholder(segment) {
 }
 
 function combatPlaceholder(key) {
-  return { AC: '15', 先攻: '+2', 速度: '30', 被动察觉: '13' }[key] || ''
+  return { AC: '16', 先攻: '+2', 速度: '30', 被动察觉: '13' }[key] || ''
+}
+
+function backgroundPlaceholder(key) {
+  return {
+    背景: '智者',
+    阵营: '中立善良',
+    信仰: '密斯特拉',
+    体型: '中型',
+    年龄: '132',
+    外貌: '银发绿眼，深蓝法袍',
+    个性: '喜欢追问原理',
+    理想: '知识应当被分享',
+    羁绊: '导师的笔记',
+    缺点: '说话太直',
+  }[key] || ''
 }
 
 function groupCount(group) {
@@ -530,6 +626,7 @@ function applyState(nextState) {
 }
 
 function loadExample() {
+  rulesVersion.value = '5r'
   const parsed = builder.parseCardText(builder.buildExampleCard())
   if (parsed.errors.length > 0) {
     showNotice('示例卡载入失败，请反馈这个问题', 'error')
@@ -548,6 +645,7 @@ function doImport() {
     return
   }
   applyState(result.state)
+  rulesVersion.value = result.rulesVersion || '5r'
   importOpen.value = false
   showNotice(`已导入 ${result.found} 个段`)
 }
@@ -580,9 +678,5 @@ function scrollToExport() {
 
 function extFactory() {
   return { key: '', adv: '', bonus: '' }
-}
-
-function backgroundFactory() {
-  return { key: '', value: '' }
 }
 </script>

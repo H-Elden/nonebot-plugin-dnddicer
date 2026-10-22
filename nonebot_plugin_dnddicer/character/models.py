@@ -19,25 +19,27 @@ from .constants import (
     CHAR_INFO_KEY_ABILITY,
     CHAR_INFO_KEY_BACKGROUND,
     CHAR_INFO_KEY_CLASS,
+    CHAR_INFO_KEY_CLASS_TRAITS,
     CHAR_INFO_KEY_COINS,
     CHAR_INFO_KEY_COMBAT,
     CHAR_INFO_KEY_COMBAT_NOTES,
     CHAR_INFO_KEY_EXT,
-    CHAR_INFO_KEY_FEATURE,
     CHAR_INFO_KEY_FEATS,
     CHAR_INFO_KEY_HP,
     CHAR_INFO_KEY_HP_DICE,
     CHAR_INFO_KEY_ITEMS,
     CHAR_INFO_KEY_LEVEL,
+    CHAR_INFO_KEY_MAGIC_ITEMS,
     CHAR_INFO_KEY_NAME,
     CHAR_INFO_KEY_PROF,
     CHAR_INFO_KEY_PROGRESS,
     CHAR_INFO_KEY_RACE,
+    CHAR_INFO_KEY_RACE_TRAITS,
+    CHAR_INFO_KEY_RESOURCE,
     CHAR_INFO_KEY_SPELL,
     CHAR_INFO_KEY_SPELL_SLOTS,
     CHAR_INFO_KEY_STORY,
     CHAR_INFO_KEY_SUBCLASS,
-    CHAR_INFO_KEY_TRAITS,
     CHAR_INFO_KEY_WEAPON,
     COIN_KEY_LIST,
     COMBAT_KEY_LIST,
@@ -489,14 +491,14 @@ class WeaponInfo(BaseModel):
 
 
 class CharacterFeature(BaseModel):
-    """有使用次数的能力（``$能力$`` 段，2026-10-20 批②新增）。
+    """有使用次数的限定资源（``$限定资源$`` 段）。
 
-    录入与展示格式一致（可复制回 ``$能力$``）：
+    录入与展示格式一致（可复制回 ``$限定资源$``）：
     ``名称:当前/上限恢复档``，如 ``引导神力:2/2短休+1,长休``；
-    末尾可加 ``|说明``（2026-10-21 批②，卡面只展示、不参与结算）。
+    末尾可加 ``|说明``（卡面只展示、不参与结算）。
     ``recover`` 为规范化后的恢复档串（``短休`` / ``长休`` / ``两者`` / ``手动``，
     可带 ``+N``），解析与校验见 ``character/services.py`` 的
-    ``parse_feature_item``；恢复量在休息结算时读取（后续批次接入）。
+    ``parse_feature_item``；恢复量在休息结算时读取。
     """
 
     name: str
@@ -515,6 +517,44 @@ class CharacterFeature(BaseModel):
     def get_recover_display(self) -> str:
         """恢复档的中文展示（逗号转全角），如 ``短休+1，长休``。"""
         return self.recover.replace(",", "，")
+
+
+class ClassFeature(BaseModel):
+    """职业特性（``$职业特性$`` 段）：获得等级 + 名称 + 说明。"""
+
+    level: int = 1
+    name: str
+    text: str = ""
+
+    def get_info(self) -> str:
+        """展示/回写文本，如 ``3|塑能学者:...``。"""
+        text = f"{self.level}|{self.name}"
+        if self.text:
+            text += f":{self.text}"
+        return text
+
+
+class MagicItem(BaseModel):
+    """魔法物品（``$魔法物品$`` 段）：名称 + 标签 + 多段说明。
+
+    ``text`` 以 ``//`` 分隔段落，回写时保持同一格式；说明只用于卡面展示，
+    不参与任何计算。
+    """
+
+    name: str
+    tag: str = ""
+    text: str = ""
+
+    def get_info(self) -> str:
+        """展示/回写文本，如 ``防护斗篷|奇物，非普通（需同调）|第一段//第二段``。"""
+        body = f"{self.name}|{self.tag}"
+        if self.text:
+            body += f"|{self.text}"
+        return body
+
+    def get_paragraphs(self) -> List[str]:
+        """说明段落列表（空段落已丢弃）。"""
+        return [part for part in self.text.split("//") if part]
 
 
 class SpellEntry(BaseModel):
@@ -631,24 +671,26 @@ class DNDCharacter(BaseModel):
     group_id: str
     user_id: str
     name: str = ""
-    race: str = ""        # 种族（$种族$；本批次仅记录展示）
-    char_class: str = ""  # 职业（$职业$；12 职业规范名之一，偷袭骰计算依据）
-    subclass: str = ""    # 子职（$子职$；本批次仅记录展示）
+    race: str = ""        # 种族（$种族$；仅记录展示）
+    char_class: str = ""  # 职业（$职业$；标准 12 职业或扩展职业名，偷袭骰只认游荡者）
+    subclass: str = ""    # 子职（$子职$；仅记录展示）
     hp_info: HPInfo = Field(default_factory=HPInfo)
     ability_info: AbilityInfo = Field(default_factory=AbilityInfo)
     weapons: List[WeaponInfo] = Field(default_factory=list)  # 自定义武器/法术项
-    features: List[CharacterFeature] = Field(default_factory=list)  # 有次数的能力
+    features: List[CharacterFeature] = Field(default_factory=list)  # 限定资源
     spells: List[SpellEntry] = Field(default_factory=list)  # 已知/准备法术
     spell_slots: SpellSlots = Field(default_factory=SpellSlots)  # 各环与契约法术位
     spellcasting_ability: str = ""  # 施法属性（六属性名；空 = 未填写）
     #: 立绘相对文件名（如 ``portraits/<群>_<QQ>.png``；空 = 未设置）
     portrait: str = ""
-    # 完整卡面扩展（2026-10-21；全部有默认值，旧卡零迁移）
+    # 完整卡面扩展
     # 注：六属性展示值、豁免、技能三类派生数据自 2026-10-22 起不再手填/存储，
     # 由 ``AbilityInfo.get_check_display`` 在出图时按属性、等级、熟练与额外加值计算。
     combat: Dict[str, str] = Field(default_factory=dict)  # $战斗$
     feats: List[str] = Field(default_factory=list)  # $专长$
-    traits: List[str] = Field(default_factory=list)  # $特性$
+    race_traits: List[str] = Field(default_factory=list)  # $种族特性$
+    class_traits: List[ClassFeature] = Field(default_factory=list)  # $职业特性$
+    magic_items: List[MagicItem] = Field(default_factory=list)  # $魔法物品$
     items: List[str] = Field(default_factory=list)  # $物品$
     background: Dict[str, str] = Field(default_factory=dict)  # $背景$
     combat_notes: List[str] = Field(default_factory=list)  # $战斗记录$
@@ -660,18 +702,12 @@ class DNDCharacter(BaseModel):
     is_init: bool = False
 
     def _background_items(self) -> List[str]:
-        """``$背景$`` 条目：常用键按固定顺序，未列出的键按录入顺序追加。"""
-        items = [
+        """``$背景$`` 条目：固定键按顺序输出，只写已填项。"""
+        return [
             f"{key}:{self.background[key]}"
             for key in BACKGROUND_KEY_LIST
             if self.background.get(key)
         ]
-        items.extend(
-            f"{key}:{value}"
-            for key, value in self.background.items()
-            if key not in BACKGROUND_KEY_LIST and value
-        )
-        return items
 
     def _combat_items(self) -> List[str]:
         """``$战斗$`` 条目：固定顺序，仅输出已填项。"""
@@ -684,8 +720,7 @@ class DNDCharacter(BaseModel):
     def get_char_info(self) -> str:
         """完整角色卡文本（$xxx$ 段落格式，可再次 .角色卡记录）。
 
-        段顺序：身份 → 数值 → 能力 → 装备 → 法术（新增段只插在各自的
-        逻辑位置，既有段的先后保持不变，旧卡输出不受影响）。
+        段顺序：身份 → 数值 → 特性 → 装备 → 资源 → 法术。
         """
         parts = []
         if self.name:
@@ -722,11 +757,13 @@ class DNDCharacter(BaseModel):
             parts.append(prof_part)
         if self.feats:
             parts.append(f"{CHAR_INFO_KEY_FEATS} {'/'.join(self.feats)}")
-        if self.traits:
-            parts.append(f"{CHAR_INFO_KEY_TRAITS} {'/'.join(self.traits)}")
-        if self.features:
-            feature_str = "; ".join(feature.get_info() for feature in self.features)
-            parts.append(f"{CHAR_INFO_KEY_FEATURE} {feature_str}")
+        if self.race_traits:
+            parts.append(
+                f"{CHAR_INFO_KEY_RACE_TRAITS} {'/'.join(self.race_traits)}"
+            )
+        if self.class_traits:
+            class_str = "/".join(item.get_info() for item in self.class_traits)
+            parts.append(f"{CHAR_INFO_KEY_CLASS_TRAITS} {class_str}")
         if self.weapons:
             weapon_str = "/".join(weapon.get_info() for weapon in self.weapons)
             parts.append(f"{CHAR_INFO_KEY_WEAPON} {weapon_str}")
@@ -740,6 +777,12 @@ class DNDCharacter(BaseModel):
             ]
             if coin_items:
                 parts.append(f"{CHAR_INFO_KEY_COINS} {'; '.join(coin_items)}")
+        if self.features:
+            feature_str = "; ".join(feature.get_info() for feature in self.features)
+            parts.append(f"{CHAR_INFO_KEY_RESOURCE} {feature_str}")
+        if self.magic_items:
+            magic_str = "; ".join(item.get_info() for item in self.magic_items)
+            parts.append(f"{CHAR_INFO_KEY_MAGIC_ITEMS} {magic_str}")
         spell_parts: List[str] = []
         if self.spellcasting_ability:
             spell_parts.append(f"施法属性:{self.spellcasting_ability}")

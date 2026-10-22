@@ -34,7 +34,7 @@ def test_header_and_core_stats() -> None:
     assert view.name == "伊瑟兰·晨星"
     assert view.subtitle == "高等精灵 · 法师（塑能师） · 5 级"
     assert {stat.label: stat.value for stat in view.core_stats} == {
-        "AC": "15",
+        "AC": "16",
         "先攻": "+2",
         "速度": "30",
         "被动察觉": "13",
@@ -56,11 +56,12 @@ def test_ability_blocks_merge_saves_and_skills() -> None:
     strength = view.abilities[0]
     assert (strength.score, strength.mod) == ("8", "-1")
     assert strength.save is not None
-    assert (strength.save.value, strength.save.proficient) == ("-1", False)
+    # 防护斗篷：全部豁免 +1
+    assert (strength.save.value, strength.save.proficient) == ("+0", False)
 
     intelligence = view.abilities[3]
     assert (intelligence.score, intelligence.mod) == ("18", "+4")
-    assert (intelligence.save.value, intelligence.save.proficient) == ("+7", True)
+    assert (intelligence.save.value, intelligence.save.proficient) == ("+8", True)
 
     skills = {skill.name: skill for ability in view.abilities for skill in ability.skills}
     assert "先攻" not in skills  # 先攻在页眉核心数值里，不重复进技能行
@@ -178,12 +179,12 @@ def test_weapons_five_columns() -> None:
         "火焰箭", "冷冻射线", "匕首", "长棍",
     ]
     assert (view.weapons[0].hit, view.weapons[0].damage, view.weapons[0].damage_type) == (
-        "+7",
+        "+8",
         "2d10",
         "火焰",
     )
     assert view.weapons[0].note == "法术攻击 · 120尺"
-    assert (view.weapons[1].hit, view.weapons[1].damage) == ("+7", "2d8")
+    assert (view.weapons[1].hit, view.weapons[1].damage) == ("+8", "2d8")
     assert view.weapons[1].damage_type == "寒冷"
     assert view.weapons[1].note == "法术攻击 · 60尺 · 速度-10"
     assert view.weapons[2].hit == "+5"
@@ -245,12 +246,13 @@ def test_spells_grouped_by_level() -> None:
 
 def test_items_proficiencies_background() -> None:
     view = build_card_view(gen_template_char())
-    assert "法术书 [装备]" in view.items
+    assert "法术书" in view.items
     assert "治疗药水" in view.items
-    assert "长棍 [装备]" in view.items
-    assert view.proficiencies[0] == "武器：匕首、长棍"
+    assert "长棍" in view.items
+    assert all("[装备]" not in item for item in view.items)
+    assert view.proficiencies[0] == "武器：简易武器"
     assert view.background_rows[0].cells[0] == ("背景", "智者")
-    assert len(view.background_rows) == 5  # 10 项 → 5 行
+    assert len(view.background_rows) == 4  # 5r 七项 → 4 行
 
 
 def test_background_rows_pairing() -> None:
@@ -270,7 +272,13 @@ def test_empty_card_has_no_panels() -> None:
     assert view.hp == "—" and view.temp_hp == "—" and view.hit_dice == "—"
     assert all(ability.score == "—" for ability in view.abilities)
     assert view.weapons == () and view.items == () and view.combat_notes == ()
-    assert view.feats == () and view.traits == () and view.class_features == ()
+    assert (
+        view.feats == ()
+        and view.race_traits == ()
+        and view.class_traits == ()
+        and view.resources == ()
+        and view.magic_items == ()
+    )
     assert view.background_rows == () and view.proficiencies == ()
     assert view.has_slots is False
     assert all(slot.empty for row in view.slot_rows for slot in row)
@@ -288,9 +296,21 @@ def test_card_face_extensions_are_wired() -> None:
     assert view.story_lines[1].startswith("此后伊瑟兰离开书斋")
     assert any(spell.note for group in view.spell_groups for spell in group.spells)
     assert view.feats[0].text == "习得光亮术、心灵之楔与护盾术；护盾术可免法术位施展一次，长休恢复"
-    assert view.traits[0].text.startswith("60 尺内微光")
-    assert view.class_features[0].text.startswith("短休时恢复")
-    assert (view.spell_dc, view.spell_attack) == ("15", "+7")
+    assert view.race_traits[0].text.startswith("60 尺内微光")
+    assert [(item.level, item.name) for item in view.class_traits][:3] == [
+        (1, "仪式学家"),
+        (1, "奥术回想"),
+        (2, "学者"),
+    ]
+    assert view.class_traits[0].text.startswith("法术书中的仪式")
+    assert view.resources[0].text.startswith("短休时恢复")
+    assert view.magic_items[0].name == "战法师魔杖 +1"
+    assert view.magic_items[0].tag.startswith("魔杖")
+    assert view.magic_items[0].paragraphs[1].startswith("此外")
+    assert view.magic_items[1].paragraphs == (
+        "着装此斗篷期间，你的 AC 和豁免获得 +1 加值。",
+    )
+    assert (view.spell_dc, view.spell_attack) == ("15", "+8")
 
 
 def test_coins_fill_missing_denominations() -> None:

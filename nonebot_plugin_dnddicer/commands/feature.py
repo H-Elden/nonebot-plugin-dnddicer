@@ -1,16 +1,15 @@
-"""有使用次数的能力命令：``.能力`` / ``.设置能力`` / ``.删除能力``。
+"""限定资源命令：``.能力`` / ``.设置能力`` / ``.删除能力``。
 
 命令面（2026-10-20 批②新增）：
-
-- ``.能力``：列出卡上全部能力（当前/上限与恢复档）；
-- ``.能力 名称``：查看单个能力详情；
+- ``.能力``：列出卡上全部限定资源（当前/上限与恢复档）；
+- ``.能力 名称``：查看单个限定资源详情；
 - ``.能力 名称 -N`` / ``+N``：消耗 / 恢复 N 次（N 缺省 1），不会越过 0 与上限；
 - ``.设置能力 名称:当前/上限恢复档``：录入或覆盖（多项用 ``;`` 分隔）；
 - ``.删除能力 名称``：删除（支持模糊匹配，多个用 ``/`` 分隔）。
 
 恢复档（``短休`` / ``长休`` / ``两者`` / ``手动``，可后缀 ``+N`` 或 ``满``）
-本批只做记录与展示；短休 / 长休的自动恢复在休息批次接入。名称匹配沿用
-武器与目标搜索的两级口径：精确优先，其次子串，多候选列清单、不猜。
+短休 / 长休时由休息服务自动恢复。名称匹配沿用武器与目标搜索的两级口径：
+精确优先，其次子串，多候选列清单、不猜。
 """
 
 from __future__ import annotations
@@ -28,7 +27,7 @@ from . import base, text
 
 _HELP = (
     ".能力 [名称[±N]]\n"
-    "  无参数：列出卡上能力与恢复档\n"
+    "  无参数：列出卡上限定资源与恢复档\n"
     "  写名称：查看详情；名称 -N 消耗、+N 恢复\n"
     "  录入：.设置能力 名称:当前/上限恢复\n"
     "  示例：.能力 引导神力 -1"
@@ -47,7 +46,7 @@ set_feature_matcher = base.on_dnd_command(
 
 _HELP_DEL_FEATURE = (
     ".删除能力 名称 （多个用 / 分隔）\n"
-    "  删除卡上能力，名称支持模糊匹配\n"
+    "  删除卡上限定资源，名称支持模糊匹配\n"
     "  未找到或名称不明确时逐项回报"
 )
 del_feature_matcher = base.on_dnd_command(
@@ -59,7 +58,7 @@ _FEATURE_ACTION_RE = re.compile(r"^(.*?)\s*([+-])\s*(\d*)$")
 
 
 def _format_feature_lines(features: List[CharacterFeature]) -> str:
-    """能力清单的编号多行展示（清单 / 设置 / 删除反馈共用）。"""
+    """限定资源清单的编号多行展示（清单 / 设置 / 删除反馈共用）。"""
     return "\n".join(
         text.TXT_FEATURE_ITEM.format(
             index=index,
@@ -213,7 +212,7 @@ async def handle_set_feature(event: MessageEvent) -> None:
             merged.append(feature)
         set_names.append(feature.name)
     if len(merged) > FEATURE_MAX_COUNT:
-        await set_feature_matcher.finish(f"能力数量最多 {FEATURE_MAX_COUNT} 项")
+        await set_feature_matcher.finish(f"限定资源数量最多 {FEATURE_MAX_COUNT} 项")
 
     character.features = merged
     await save_character(character)

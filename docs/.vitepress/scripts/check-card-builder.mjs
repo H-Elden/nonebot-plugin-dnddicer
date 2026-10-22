@@ -5,7 +5,7 @@
  * 1. `card-spec.json` 与 `core.mjs` 的段清单/回写顺序互相对齐；
  * 2. 样例卡「解析 → 回写 → 再解析」稳定，规范样例逐字不变；
  * 3. 整卡命令、分段命令、精简整卡都能被导入逻辑读回；
- * 4. 编辑表单后回写的内容仍可被解析，关键值不丢。
+ * 4. 编辑表单后回写的内容仍可被解析，关键值与派生值不丢。
  *
  * 失败时逐条打印（带样例名与段名），并以退出码 1 结束构建。
  */
@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url'
 
 import {
   CARD_COMMAND,
+  K,
   SEGMENT_KINDS,
   createCardBuilder,
 } from '../theme/card-builder/core.mjs'
@@ -61,8 +62,8 @@ function main() {
   // ── 1. 清单对齐 ──────────────────────────────────────────────────────
   const specKeys = spec.segments.map((segment) => segment.key)
   const kindKeys = Object.keys(SEGMENT_KINDS)
-  checkEqual('段清单数量', specKeys.length, 23)
-  checkEqual('表单形态数量', kindKeys.length, 23)
+  checkEqual('段清单数量', specKeys.length, 25)
+  checkEqual('表单形态数量', kindKeys.length, 25)
   for (const key of specKeys) {
     check(`段 ${key} 有表单形态`, Boolean(SEGMENT_KINDS[key]))
   }
@@ -76,6 +77,8 @@ function main() {
     '段的 group 都在分组表内',
     spec.segments.every((segment) => spec.groups.some((group) => group.id === segment.group)),
   )
+  check('旧段已从清单删除', !specKeys.some((key) => ['$特性$', '$能力$', '$属性值$', '$豁免$', '$技能$'].includes(key)))
+  check('没有 legacy_segments 字段', !('legacy_segments' in spec))
 
   // ── 2. 示例卡 = 模板样例 ────────────────────────────────────────────
   const exampleCard = builder.buildExampleCard()
@@ -85,19 +88,19 @@ function main() {
 
   // ── 3. 各样例往返 ───────────────────────────────────────────────────
   const fixtures = fixtureData.fixtures
-  check('至少 3 个样例', fixtures.length >= 3)
-  const states = new Map()
+  check('至少 2 个样例', fixtures.length >= 2)
   for (const fixture of fixtures) {
     const name = fixture.name
+    const options = { rulesVersion: fixture.rulesVersion || '5r' }
     const parsed = builder.parseCardText(fixture.text)
-    states.set(name, parsed.state)
     check(`${name}: 解析无错误`, parsed.errors.length === 0, JSON.stringify(parsed.errors))
     check(`${name}: 段数大于 0`, parsed.found > 0)
-    const serialized = builder.serializeCard(parsed.state)
+    checkEqual(`${name}: 导入识别规则版本`, parsed.rulesVersion, options.rulesVersion)
+    const serialized = builder.serializeCard(parsed.state, options)
     check(`${name}: 回写结果非空`, serialized.length > 0)
     const reparsed = builder.parseCardText(serialized)
     check(`${name}: 回写可再次解析`, reparsed.errors.length === 0, JSON.stringify(reparsed.errors))
-    const reserialized = builder.serializeCard(reparsed.state)
+    const reserialized = builder.serializeCard(reparsed.state, options)
     checkEqual(`${name}: 回写幂等`, reserialized, serialized)
     if (fixture.canonical) {
       checkEqual(`${name}: 规范样例逐字往返`, serialized, fixture.text)
@@ -109,7 +112,7 @@ function main() {
       }
     }
     // 每个非空段都能生成一条可单独导入的分段命令
-    const commands = builder.buildSegmentCommands(parsed.state)
+    const commands = builder.buildSegmentCommands(parsed.state, options)
     check(`${name}: 分段命令非空`, commands.length > 0)
     for (const item of commands) {
       check(
@@ -121,7 +124,7 @@ function main() {
       check(`${name}: 单段命令只含一段 ${item.key}`, single.found === 1)
       checkEqual(
         `${name}: 单段命令内容不变 ${item.key}`,
-        builder.contentFor(single.state, item.key),
+        builder.contentFor(single.state, item.key, options),
         item.content,
       )
       check(
@@ -133,8 +136,8 @@ function main() {
     const whole = `${CARD_COMMAND}\n${serialized}`
     const wholeParsed = builder.parseCardText(whole)
     check(`${name}: 整卡命令可导入`, wholeParsed.errors.length === 0)
-    checkEqual(`${name}: 整卡命令内容不变`, builder.serializeCard(wholeParsed.state), serialized)
-    const minimal = builder.buildMinimalCard(parsed.state)
+    checkEqual(`${name}: 整卡命令内容不变`, builder.serializeCard(wholeParsed.state, options), serialized)
+    const minimal = builder.buildMinimalCard(parsed.state, options)
     check(`${name}: 精简整卡非空`, minimal.length > 0)
     check(`${name}: 精简整卡含等级`, minimal.includes('$等级$'))
     check(`${name}: 精简整卡含属性`, minimal.includes('$属性$'))
@@ -154,20 +157,20 @@ function main() {
     templateFixture.text,
   )
 
-  // 旧卡的属性值/豁免/技能段：识别为旧段并提示忽略，不报错
+  // 旧段不再兼容：导入直接报未知段
   const legacyDerived = builder.parseCardText(
     '$姓名$ 旧卡\n$等级$ 1\n$属性$ 10/10/10/10/10/10\n' +
       '$技能$ 运动:+5\n$豁免$ 力量:+2\n' +
       '$属性值$ 力量:10/+0; 敏捷:10/+0; 体质:10/+0; 智力:10/+0; 感知:10/+0; 魅力:10/+0',
   )
-  check('旧派生段导入不报错', legacyDerived.errors.length === 0, JSON.stringify(legacyDerived.errors))
+  check('旧派生段导入报错', legacyDerived.errors.length >= 3, JSON.stringify(legacyDerived.errors))
   check(
-    '旧派生段给出忽略提示',
-    legacyDerived.warnings.filter(
-      (item) => item.label === '技能' || item.label === '豁免' || item.label === '属性值',
-    ).length === 3,
-    JSON.stringify(legacyDerived.warnings),
+    '旧派生段提示未知段',
+    legacyDerived.errors.every((item) => item.message.includes('未知段')),
+    JSON.stringify(legacyDerived.errors),
   )
+  checkThrows('单段旧特性被拒绝', () => builder.parseSegment('$特性$', '黑暗视觉'))
+  checkThrows('单段旧能力被拒绝', () => builder.parseSegment('$能力$', '奥术回想:1/1短休'))
 
   // ── 4. 表单编辑后回写 ───────────────────────────────────────────────
   const state = builder.createState()
@@ -184,28 +187,45 @@ function main() {
     emptyValidation.errors.some((item) => item.key === '$等级$') &&
       emptyValidation.errors.some((item) => item.key === '$属性$'),
   )
+  checkEqual('空状态激励默认无', state['$进度$'].inspiration, '无')
 
-  state['$姓名$'] = '测试角色'
-  state['$种族$'] = '人类'
-  state['$职业$'] = '战士'
-  state['$等级$'] = '5'
-  state['$属性$'] = ['16', '12', '14', '10', '11', '13']
-  state['$生命值$'] = { cur: '44', max: '44', temp: '' }
-  state['$生命骰$'] = { num: '5', max: '5', type: '10' }
-  state['$战斗$'] = { AC: '18', 先攻: '+1', 速度: '30', 被动察觉: '12' }
-  state['$进度$'] = { xp: '6500', xpNext: '14000', inspiration: '有' }
-  state['$专长$'] = [{ name: '巨武器大师', text: '可以用附赠动作再攻击一次' }]
-  state['$武器$'] = [
+  state[K.NAME] = '测试角色'
+  state[K.RACE] = '人类'
+  state[K.CLASS] = '战士'
+  state[K.SUBCLASS] = '战斗大师'
+  state[K.LEVEL] = '5'
+  state[K.ABILITY] = ['16', '12', '14', '10', '11', '13']
+  state[K.BACKGROUND]['背景'] = '士兵'
+  state[K.BACKGROUND]['阵营'] = '守序善良'
+  state[K.BACKGROUND]['理想'] = '5e 专属背景项'
+  state[K.HP] = { cur: '44', max: '44', temp: '' }
+  state[K.HP_DICE] = { num: '5', max: '5', type: '10' }
+  state[K.COMBAT] = { AC: '18', 先攻: '+9', 速度: '30', 被动察觉: '12' }
+  state[K.PROGRESS] = { xp: '6500', xpNext: '99999', inspiration: '有' }
+  state[K.FEATS] = [{ name: '巨武器大师', text: '可以用附赠动作再攻击一次' }]
+  state[K.RACE_TRAITS] = [{ name: '黑暗视觉', text: '60 尺内微光视为明亮' }]
+  state[K.CLASS_TRAITS] = [
+    { level: '3', name: '战斗大师', text: '获得战技' },
+    { level: '1', name: '战斗风格', text: '选择一种战斗风格' },
+  ]
+  state[K.WEAPON] = [
     { name: '长剑', noAttack: false, attack: '+6', damage: '1d8+3', type: '挥砍', note: '双手' },
     { name: '火焰箭', noAttack: true, attack: '', damage: '2d10', type: '火焰', note: '120尺' },
   ]
-  state['$物品$'] = [{ name: '治疗药水', qty: '2', equipped: false }]
-  state['$钱币$'] = { CP: '0', SP: '8', EP: '0', GP: '18', PP: '0' }
-  state['$熟练$'].checks['力量豁免'] = 1
-  state['$熟练$'].checks['运动'] = 2
-  state['$熟练$'].groups['武器'] = '军用武器·简易武器'
-  state['$额外加值$'] = [{ key: '运动', adv: '优势', bonus: '+2' }]
-  state['$能力$'] = [
+  state[K.ITEMS] = [{ name: '治疗药水', qty: '2' }]
+  state[K.COINS] = { CP: '0', SP: '8', EP: '0', GP: '18', PP: '0' }
+  state[K.PROF].checks['力量豁免'] = 1
+  state[K.PROF].checks['运动'] = 2
+  state[K.PROF].checks['先攻'] = 1
+  state[K.PROF].groups['护甲'] = '轻甲·中甲·盾牌'
+  state[K.PROF].groups['武器'] = '简易武器·军用武器'
+  state[K.PROF].groups['工具'] = '书法工具'
+  state[K.PROF].groups['语言'] = '通用语·精灵语'
+  state[K.EXT] = [
+    { key: '先攻', adv: '', bonus: '+2' },
+    { key: '运动', adv: '优势', bonus: '+2' },
+  ]
+  state[K.FEATURE] = [
     {
       name: '动作如潮',
       cur: '1',
@@ -219,29 +239,105 @@ function main() {
       text: '短休回复一次',
     },
   ]
-  state['$法术$'] = {
-    ability: '',
+  state[K.MAGIC_ITEMS] = [
+    {
+      name: '防护斗篷',
+      tag: '奇物，非普通（需同调）',
+      text: 'AC 和豁免 +1。\n\n这件斗篷由银线织成。',
+    },
+  ]
+  state[K.SPELL] = {
+    ability: '智力',
     dc: '',
     attack: '',
+    dcManual: false,
+    attackManual: false,
     list: [],
   }
-  state['$法术位$'].levels[0] = { cur: '2', max: '2' }
-  state['$战斗记录$'] = ['祝福术(专注,3轮)']
+  state[K.SPELL_SLOTS].levels[0] = { cur: '2', max: '2' }
+  state[K.COMBAT_NOTES] = ['祝福术(专注,3轮)']
 
   const editedValidation = builder.validateState(state)
   check('编辑后的表单无错误', editedValidation.errors.length === 0, JSON.stringify(editedValidation.errors))
   const editedText = builder.serializeCard(state)
   const editedParsed = builder.parseCardText(editedText)
   check('编辑后的卡可再次解析', editedParsed.errors.length === 0)
-  checkEqual('编辑后的卡姓名保留', editedParsed.state['$姓名$'], '测试角色')
-  checkEqual('编辑后的卡等级保留', editedParsed.state['$等级$'], '5')
-  checkEqual('编辑后的卡职业保留', editedParsed.state['$职业$'], '战士')
-  checkEqual('编辑后的卡武器数', editedParsed.state['$武器$'].length, 2)
-  checkEqual('编辑后的卡专长说明', editedParsed.state['$专长$'][0].text, '可以用附赠动作再攻击一次')
-  checkEqual('编辑后的卡熟练组', editedParsed.state['$熟练$'].groups['武器'], '军用武器·简易武器')
-  checkEqual('编辑后的卡能力恢复档', builder.contentFor(editedParsed.state, '$能力$'), '动作如潮:1/1短休+1,长休|短休回复一次')
-  checkEqual('编辑后的卡战斗记录', editedParsed.state['$战斗记录$'][0], '祝福术(专注,3轮)')
-  checkEqual('编辑后的卡技能专精', editedParsed.state['$熟练$'].checks['运动'], 2)
+  checkEqual('编辑后的卡姓名保留', editedParsed.state[K.NAME], '测试角色')
+  checkEqual('编辑后的卡等级保留', editedParsed.state[K.LEVEL], '5')
+  checkEqual('编辑后的卡职业保留', editedParsed.state[K.CLASS], '战士')
+  checkEqual('编辑后的卡武器数', editedParsed.state[K.WEAPON].length, 2)
+  checkEqual('编辑后的卡专长说明', editedParsed.state[K.FEATS][0].text, '可以用附赠动作再攻击一次')
+  checkEqual('编辑后的卡熟练组', editedParsed.state[K.PROF].groups['护甲'], '轻甲·中甲·盾牌')
+  checkEqual('编辑后的卡限定资源', builder.contentFor(editedParsed.state, K.FEATURE), '动作如潮:1/1短休+1,长休|短休回复一次')
+  checkEqual('编辑后的卡战斗记录', editedParsed.state[K.COMBAT_NOTES][0], '祝福术(专注,3轮)')
+  checkEqual('编辑后的卡技能专精', editedParsed.state[K.PROF].checks['运动'], 2)
+
+  // 背景：固定键、5r 过滤 5e 专属项、未知键报错
+  const fiveRText = builder.serializeCard(state, { rulesVersion: '5r' })
+  const fiveEText = builder.serializeCard(state, { rulesVersion: '5e' })
+  check('5r 不输出理想', !fiveRText.includes('理想:'), fiveRText)
+  check('5e 输出理想', fiveEText.includes('理想:5e 专属背景项'))
+  checkThrows('未知背景键被拒绝', () => builder.parseSegment(K.BACKGROUND, '故乡:无冬城'))
+
+  // 先攻只读派生：敏捷 +1 + 先攻熟练 +3 + 额外 +2 = +6，忽略表单里的 +9
+  checkEqual('先攻派生值', builder.deriveInitiative(state), '+6')
+  check('卡文本用派生先攻', editedText.includes('先攻:+6'), editedText)
+  check('卡文本不用表单先攻', !editedText.includes('先攻:+9'))
+  checkEqual('熟练加值', builder.deriveProficiencyBonus(state), 3)
+  checkEqual('下一级经验自动', builder.deriveXpNext(state), '14000')
+  check('卡文本用自动下一级经验', editedText.includes('经验:6500/14000'))
+  check('卡文本不用手填下一级经验', !editedText.includes('99999'))
+
+  // 职业特性按等级升序
+  checkEqual(
+    '职业特性按等级排序',
+    builder.contentFor(state, K.CLASS_TRAITS),
+    '1|战斗风格:选择一种战斗风格/3|战斗大师:获得战技',
+  )
+
+  // 魔法物品说明转 // 分段
+  checkEqual(
+    '魔法物品说明分段',
+    builder.contentFor(state, K.MAGIC_ITEMS),
+    '防护斗篷|奇物，非普通（需同调）|AC 和豁免 +1。//这件斗篷由银线织成。',
+  )
+
+  // 装备不再有 [装备]
+  check('物品无装备标记', !editedText.includes('[装备]'))
+  checkThrows('物品 [装备] 被拒绝', () => builder.parseSegment(K.ITEMS, '长剑[装备]'))
+
+  // 法术公式与手动覆盖：智力 10（+0）、5 级（熟练 +3）→ DC 11 / 攻击 +3
+  checkEqual('法术 DC 公式', builder.deriveSpellStats(state).dc, '11')
+  checkEqual('法术攻击公式', builder.deriveSpellStats(state).attack, '+3')
+  check('卡文本自动写法术 DC', editedText.includes('豁免DC:11'))
+  check('卡文本自动写法术攻击', editedText.includes('法术攻击:+3'))
+  state[K.SPELL].attackManual = true
+  state[K.SPELL].attack = '+8'
+  checkEqual(
+    '手动法术攻击保留',
+    builder.contentFor(state, K.SPELL),
+    '施法属性:智力; 豁免DC:11; 法术攻击:+8',
+  )
+
+  // 子职门槛：5r 3 级；5e 法师 2 级、牧师 1 级；自定义职业默认 3 级
+  const gate = builder.createState()
+  gate[K.LEVEL] = '2'
+  gate[K.CLASS] = '法师'
+  gate[K.SUBCLASS] = '塑能师'
+  check('5r 2 级法师不输出子职', builder.contentFor(gate, K.SUBCLASS, { rulesVersion: '5r' }) === '')
+  gate[K.LEVEL] = '3'
+  check('5r 3 级法师输出子职', builder.contentFor(gate, K.SUBCLASS, { rulesVersion: '5r' }) === '塑能师')
+  gate[K.LEVEL] = '1'
+  check('5e 1 级法师不输出子职', builder.contentFor(gate, K.SUBCLASS, { rulesVersion: '5e' }) === '')
+  gate[K.LEVEL] = '2'
+  check('5e 2 级法师输出子职', builder.contentFor(gate, K.SUBCLASS, { rulesVersion: '5e' }) === '塑能师')
+  gate[K.LEVEL] = '1'
+  gate[K.CLASS] = '牧师'
+  check('5e 1 级牧师输出子职', builder.contentFor(gate, K.SUBCLASS, { rulesVersion: '5e' }) === '塑能师')
+  gate[K.CLASS] = '机关术师'
+  gate[K.LEVEL] = '2'
+  check('自定义职业 2 级不输出子职', builder.contentFor(gate, K.SUBCLASS, { rulesVersion: '5e' }) === '')
+  checkEqual('自定义职业可解析', builder.parseSegment(K.CLASS, '机关术师'), '机关术师')
 
   // 派生值预览：等级 5（熟练 +3）、力量 16（+3），运动专精 → +3 + 3×2 + 2 = +11
   const derived = builder.deriveCheckValues(state)
@@ -253,30 +349,28 @@ function main() {
 
   // 故事多行保留，上限按换行不计
   const storyState = builder.createState()
-  storyState['$故事$'] = '第一行\n第二行'
-  checkEqual('故事换行保留', builder.contentFor(storyState, '$故事$'), '第一行\n第二行')
+  storyState[K.STORY] = '第一行\n第二行'
+  checkEqual('故事换行保留', builder.contentFor(storyState, K.STORY), '第一行\n第二行')
   const storyRoundtrip = builder.parseCardText('$故事$ 第一行\n第二行')
-  checkEqual('故事多行可导入', storyRoundtrip.state['$故事$'], '第一行\n第二行')
-  const longStory = builder.createState()
-  longStory['$故事$'] = '长'.repeat(1001)
-  checkThrows('故事超过 1000 字报错', () => builder.parseSegment('$故事$', longStory['$故事$']))
+  checkEqual('故事多行可导入', storyRoundtrip.state[K.STORY], '第一行\n第二行')
+  checkThrows('故事超过 1000 字报错', () => builder.parseSegment(K.STORY, '长'.repeat(1001)))
   const storyWithNewlines = builder.createState()
-  storyWithNewlines['$故事$'] = `${'长'.repeat(500)}\n${'长'.repeat(500)}`
+  storyWithNewlines[K.STORY] = `${'长'.repeat(500)}\n${'长'.repeat(500)}`
   checkEqual(
     '故事字数不计换行',
-    builder.contentFor(storyWithNewlines, '$故事$').replace(/\n/g, '').length,
+    builder.contentFor(storyWithNewlines, K.STORY).replace(/\n/g, '').length,
     1000,
   )
 
   // 武器命中加值允许骰子表达式（与插件同口径）
   const diceState = builder.createState()
-  diceState['$等级$'] = '5'
-  diceState['$属性$'] = ['10', '10', '10', '10', '10', '10']
-  diceState['$武器$'] = [
+  diceState[K.LEVEL] = '5'
+  diceState[K.ABILITY] = ['10', '10', '10', '10', '10', '10']
+  diceState[K.WEAPON] = [
     { name: '短剑', noAttack: false, attack: '+1d4', damage: '1d6+2', type: '穿刺', note: '' },
   ]
   check('武器命中骰子加值可导出', builder.validateState(diceState).errors.length === 0, JSON.stringify(builder.validateState(diceState).errors))
-  checkEqual('武器命中骰子加值保留', builder.contentFor(diceState, '$武器$'), '短剑+1d4,1d6+2穿刺')
+  checkEqual('武器命中骰子加值保留', builder.contentFor(diceState, K.WEAPON), '短剑+1d4,1d6+2穿刺')
 
   // 空的展示分组要报「不能为空」而不是「无效条目」
   const emptyGroup = builder.parseCardText(
@@ -290,26 +384,26 @@ function main() {
 
   // 非法内容要报错而不是产出废命令
   const badState = builder.createState()
-  badState['$等级$'] = '5'
-  badState['$属性$'] = ['10', '10', '10', '10', '10', '10']
-  badState['$姓名$'] = '带$符号'
+  badState[K.LEVEL] = '5'
+  badState[K.ABILITY] = ['10', '10', '10', '10', '10', '10']
+  badState[K.NAME] = '带$符号'
   const badValidation = builder.validateState(badState)
-  check('姓名含 $ 被拦截', badValidation.errors.some((item) => item.key === '$姓名$'))
-  badState['$姓名$'] = '正常'
-  badState['$武器$'] = [
+  check('姓名含 $ 被拦截', badValidation.errors.some((item) => item.key === K.NAME))
+  badState[K.NAME] = '正常'
+  badState[K.WEAPON] = [
     { name: '长剑', noAttack: false, attack: '+5', damage: '1d8+3', type: '火焰剑', note: '' },
   ]
   const weaponValidation = builder.validateState(badState)
-  check('武器伤害类型写错被拦截', weaponValidation.errors.some((item) => item.key === '$武器$'))
-  badState['$武器$'] = [{ name: '长剑', noAttack: false, attack: '+5', damage: '1d8+3', type: '', note: '' }]
-  badState['$等级$'] = 'abc'
-  check('等级非数字被拦截', builder.validateState(badState).errors.some((item) => item.key === '$等级$'))
+  check('武器伤害类型写错被拦截', weaponValidation.errors.some((item) => item.key === K.WEAPON))
+  badState[K.WEAPON] = [{ name: '长剑', noAttack: false, attack: '+5', damage: '1d8+3', type: '', note: '' }]
+  badState[K.LEVEL] = 'abc'
+  check('等级非数字被拦截', builder.validateState(badState).errors.some((item) => item.key === K.LEVEL))
 
   // 单段命令（首次建卡前后追加）能只导入这一段
   const single = builder.parseCardText(`${CARD_COMMAND} $战斗$ AC:15; 先攻:+2; 速度:30; 被动察觉:13`)
   check('单段命令解析成功', single.errors.length === 0)
   checkEqual('单段命令只识别一段', single.found, 1)
-  checkEqual('单段命令战斗段 AC', single.state['$战斗$'].AC, '15')
+  checkEqual('单段命令战斗段 AC', single.state[K.COMBAT].AC, '15')
 
   // 多条分段命令粘在一起也能导入（每条各占一行）
   const multi = builder.parseCardText(
@@ -321,8 +415,8 @@ function main() {
   )
   check('多条分段命令解析成功', multi.errors.length === 0, JSON.stringify(multi.errors))
   checkEqual('多条分段命令段数', multi.found, 3)
-  checkEqual('多条分段命令姓名', multi.state['$姓名$'], '多段导入')
-  checkEqual('多条分段命令等级', multi.state['$等级$'], '3')
+  checkEqual('多条分段命令姓名', multi.state[K.NAME], '多段导入')
+  checkEqual('多条分段命令等级', multi.state[K.LEVEL], '3')
 
   // ── 汇总 ────────────────────────────────────────────────────────────
   if (failed > 0) {

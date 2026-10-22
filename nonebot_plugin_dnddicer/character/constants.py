@@ -76,8 +76,21 @@ CLASS_LIST = [
 CLASS_SYNONYM_DICT = {
     "盗贼": "游荡者",
 }
+#: 自定义职业名长度上限（扩展职业可原样记录）
+CLASS_NAME_MAX_LEN = 20
 #: 偷袭骰的职业判定名（角色卡职业为此职业时按等级自动计算偷袭骰）
 SNEAK_ATTACK_CLASS = "游荡者"
+#: 子职等级：2024 全部职业 3 级；2014 按职业不同
+SUBCLASS_LEVEL_5R = 3
+SUBCLASS_LEVEL_5E_DICT = {
+    "牧师": 1,
+    "术士": 1,
+    "魔契师": 1,
+    "德鲁伊": 2,
+    "法师": 2,
+}
+#: 自定义职业没有规则表，默认按 3 级获得子职
+DEFAULT_SUBCLASS_LEVEL = 3
 
 #: 伤害类型 13 种（2024/2014 译名一致）
 DAMAGE_TYPE_LIST = [
@@ -99,7 +112,7 @@ WEAPON_NAME_FORBIDDEN_CHARS = ("/", ",", "，", "$", "+", "-")
 #: 伤害命令支持的后缀（写在「伤害」之前、可任意组合）
 WEAPON_DAMAGE_SUFFIX_LIST = ("副手", "重击", "偷袭")
 
-# ── 有使用次数的能力（$能力$ 段，2026-10-20 批②）────────────────────────
+# ── 限定资源（$限定资源$ 段）────────────────────────────────────────
 #: 能力条数上限与名称长度上限
 FEATURE_MAX_COUNT = 20
 FEATURE_NAME_MAX_LEN = 20
@@ -147,6 +160,28 @@ COMBAT_KEY_LIST = ("AC", "先攻", "速度", "被动察觉")
 COMBAT_SPEED_MAX_LEN = 20
 #: ``$熟练$`` 的扩展分组前缀（顺序即卡面展示顺序）
 PROFICIENCY_GROUP_LIST = ("护甲", "武器", "工具", "语言")
+#: 护甲受训分类（网页端复选框）
+ARMOR_CATEGORY_LIST = ("轻甲", "中甲", "重甲", "盾牌")
+#: 武器熟练分类（网页端复选框；个别特性给的特定武器可手填）
+WEAPON_CATEGORY_LIST = ("简易武器", "军用武器")
+#: 工具选项（网页端下拉建议 + 手填）
+TOOL_OPTION_LIST = (
+    "炼金工具", "酿酒工具", "书法工具", "木匠工具", "制图工具", "鞋匠工具",
+    "厨师工具", "玻璃工工具", "珠宝匠工具", "皮匠工具", "石匠工具",
+    "画家工具", "陶匠工具", "铁匠工具", "修补匠工具", "织布工具", "木雕工具",
+    "盗贼工具", "易容工具", "伪造工具", "草药工具", "毒药工具", "领航工具",
+    "载具（陆上）", "载具（水上）",
+    "风笛", "鼓", "扬琴", "笛子", "鲁特琴", "里拉琴", "号角", "排箫", "长笛",
+    "维奥尔琴",
+    "骰子套组", "纸牌套组", "龙棋套组", "三龙棋套组",
+)
+#: 标准语言与稀有语言（网页端多选 + 手填）
+LANGUAGE_STANDARD_LIST = (
+    "通用语", "矮人语", "精灵语", "巨人语", "侏儒语", "地精语", "半身人语", "兽人语",
+)
+LANGUAGE_EXOTIC_LIST = (
+    "深渊语", "天界语", "龙语", "深潜语", "炼狱语", "原初语", "木族语", "地底通用语",
+)
 #: 单个扩展分组最多几项、每项最长字数
 PROFICIENCY_GROUP_ITEM_MAX = 20
 PROFICIENCY_GROUP_ITEM_MAX_LEN = 20
@@ -155,33 +190,49 @@ FEAT_MAX_COUNT = 20
 FEAT_NAME_MAX_LEN = 20
 #: ``$专长$`` 说明文本长度上限（2026-10-21 批②）
 FEAT_TEXT_MAX_LEN = 60
-#: ``$特性$`` 条数与单条长度上限
-TRAIT_MAX_COUNT = 30
-TRAIT_ITEM_MAX_LEN = 40
-#: ``$特性$`` 说明文本长度上限（2026-10-21 批②）
-TRAIT_TEXT_MAX_LEN = 80
+#: ``$种族特性$`` 条数与单条长度上限
+RACE_TRAIT_MAX_COUNT = 20
+RACE_TRAIT_NAME_MAX_LEN = 30
+RACE_TRAIT_TEXT_MAX_LEN = 80
+#: ``$职业特性$`` 条数与单条长度上限
+CLASS_FEATURE_MAX_COUNT = 30
+CLASS_FEATURE_NAME_MAX_LEN = 30
+CLASS_FEATURE_TEXT_MAX_LEN = 80
+#: ``$魔法物品$`` 件数、字段长度与段落数上限
+MAGIC_ITEM_MAX_COUNT = 20
+MAGIC_ITEM_NAME_MAX_LEN = 30
+MAGIC_ITEM_TAG_MAX_LEN = 60
+MAGIC_ITEM_TEXT_MAX_LEN = 500
+MAGIC_ITEM_PARAGRAPH_MAX = 5
 #: ``$物品$`` 条数、名称长度与数量上限
 ITEM_MAX_COUNT = 50
 ITEM_NAME_MAX_LEN = 30
 ITEM_QUANTITY_MAX = 999
-#: ``$背景$`` 条数、键长与值长上限
-BACKGROUND_MAX_COUNT = 12
-BACKGROUND_KEY_MAX_LEN = 10
+#: ``$背景$`` 值长上限
 BACKGROUND_VALUE_MAX_LEN = 100
 #: ``$战斗记录$`` 条数与单条长度上限
 COMBAT_NOTE_MAX_COUNT = 20
 COMBAT_NOTE_MAX_LEN = 60
-#: ``$背景$`` 的常用键（按此顺序展示；未列出的键追加在末尾）
-BACKGROUND_KEY_LIST = (
-    "背景", "阵营", "信仰", "体型", "年龄", "外貌",
-    "个性", "理想", "羁绊", "缺点",
+#: 2024 与 2014 通用的背景键（按此顺序展示）
+BACKGROUND_KEY_LIST_5R = (
+    "背景", "阵营", "信仰", "体型", "年龄", "外貌", "个性",
 )
+#: 2014 追加的背景键（理想 / 羁绊 / 缺点）
+BACKGROUND_KEY_LIST_5E_EXTRA = ("理想", "羁绊", "缺点")
+#: 卡文本接受的背景键（两版并集；网页端再按规则版本过滤）
+BACKGROUND_KEY_LIST = BACKGROUND_KEY_LIST_5R + BACKGROUND_KEY_LIST_5E_EXTRA
 
 # ── 卡面展示扩展段批②（2026-10-21）──────────────────────────────────────
 #: ``$进度$`` 的可用键（顺序即回写顺序）
 PROGRESS_KEY_LIST = ("经验", "激励")
 #: 经验值 / 下一级的数值上限（含 0）
 XP_VALUE_MAX = 9_999_999
+#: 1~20 级累计经验门槛（2014 与 2024 同表；下标 0 = 1 级）
+XP_THRESHOLDS = (
+    0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000,
+    85000, 100000, 120000, 140000, 165000, 195000, 225000, 265000,
+    305000, 355000,
+)
 #: ``$钱币$`` 的五种币值（顺序即展示顺序）
 COIN_KEY_LIST = ("CP", "SP", "EP", "GP", "PP")
 #: 单个币值上限
@@ -190,7 +241,7 @@ COIN_VALUE_MAX = 999_999
 STORY_MAX_LEN = 1000
 #: ``$武器$`` 备注最大字数
 WEAPON_NOTE_MAX_LEN = 30
-#: ``$能力$`` 说明文本最大字数
+#: ``$限定资源$`` 说明文本最大字数
 FEATURE_TEXT_MAX_LEN = 80
 #: ``$法术$`` 的保留头键（施法属性之外的两项）
 SPELL_DC_KEY = "豁免DC"
@@ -216,22 +267,19 @@ CHAR_INFO_KEY_ABILITY = "$属性$"
 CHAR_INFO_KEY_PROF = "$熟练$"
 CHAR_INFO_KEY_EXT = "$额外加值$"
 CHAR_INFO_KEY_WEAPON = "$武器$"
-CHAR_INFO_KEY_FEATURE = "$能力$"
+CHAR_INFO_KEY_RESOURCE = "$限定资源$"
 CHAR_INFO_KEY_SPELL = "$法术$"
 CHAR_INFO_KEY_SPELL_SLOTS = "$法术位$"
-#: 完整卡面扩展段（2026-10-21）
+#: 完整卡面扩展段
 CHAR_INFO_KEY_BACKGROUND = "$背景$"
 CHAR_INFO_KEY_COMBAT = "$战斗$"
-#: 以下三段 2026-10-22 起由骰娘按属性/熟练自动计算：不再出现在卡文本里，
-#: 也不再接受录入；旧卡里若仍有这三段，解析时静默忽略（见 LEGACY_CHAR_INFO_KEY_LIST）。
-CHAR_INFO_KEY_ABILITY_DISPLAY = "$属性值$"
-CHAR_INFO_KEY_SAVES = "$豁免$"
-CHAR_INFO_KEY_SKILLS = "$技能$"
 CHAR_INFO_KEY_FEATS = "$专长$"
-CHAR_INFO_KEY_TRAITS = "$特性$"
+CHAR_INFO_KEY_RACE_TRAITS = "$种族特性$"
+CHAR_INFO_KEY_CLASS_TRAITS = "$职业特性$"
+CHAR_INFO_KEY_MAGIC_ITEMS = "$魔法物品$"
 CHAR_INFO_KEY_ITEMS = "$物品$"
 CHAR_INFO_KEY_COMBAT_NOTES = "$战斗记录$"
-#: 卡面展示扩展段批②（2026-10-21）
+#: 卡面展示扩展段
 CHAR_INFO_KEY_STORY = "$故事$"
 CHAR_INFO_KEY_PROGRESS = "$进度$"
 CHAR_INFO_KEY_COINS = "$钱币$"
@@ -242,29 +290,23 @@ CHAR_INFO_KEY_LIST = [
     CHAR_INFO_KEY_SUBCLASS,
     CHAR_INFO_KEY_BACKGROUND,
     CHAR_INFO_KEY_STORY,
-    CHAR_INFO_KEY_LEVEL,
     CHAR_INFO_KEY_HP,
     CHAR_INFO_KEY_HP_DICE,
     CHAR_INFO_KEY_COMBAT,
     CHAR_INFO_KEY_PROGRESS,
+    CHAR_INFO_KEY_LEVEL,
     CHAR_INFO_KEY_ABILITY,
     CHAR_INFO_KEY_PROF,
     CHAR_INFO_KEY_EXT,
     CHAR_INFO_KEY_FEATS,
-    CHAR_INFO_KEY_TRAITS,
+    CHAR_INFO_KEY_RACE_TRAITS,
+    CHAR_INFO_KEY_CLASS_TRAITS,
     CHAR_INFO_KEY_WEAPON,
     CHAR_INFO_KEY_ITEMS,
     CHAR_INFO_KEY_COINS,
-    CHAR_INFO_KEY_FEATURE,
+    CHAR_INFO_KEY_RESOURCE,
+    CHAR_INFO_KEY_MAGIC_ITEMS,
     CHAR_INFO_KEY_SPELL,
     CHAR_INFO_KEY_SPELL_SLOTS,
     CHAR_INFO_KEY_COMBAT_NOTES,
 ]
-
-#: 仅用于兼容旧卡的段：由骰娘自动计算，不输出、不接受单独录入。
-#: 解析器认识这些键是为了在整卡重录时静默忽略，而不是把它们当成未知段。
-LEGACY_CHAR_INFO_KEY_LIST = (
-    CHAR_INFO_KEY_ABILITY_DISPLAY,
-    CHAR_INFO_KEY_SAVES,
-    CHAR_INFO_KEY_SKILLS,
-)

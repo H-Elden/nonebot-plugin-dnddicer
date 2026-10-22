@@ -9,13 +9,59 @@
     </label>
     <label class="cb-grid__cell">
       <span class="cb-grid__label">豁免 DC</span>
-      <input v-model="state[K.SPELL].dc" class="cb-input" inputmode="numeric" placeholder="15" />
+      <input
+        v-model="state[K.SPELL].dc"
+        class="cb-input"
+        :class="{ 'cb-input--readonly': !state[K.SPELL].dcManual && derived.available }"
+        inputmode="numeric"
+        placeholder="15"
+      />
+      <span class="cb-formula">
+        公式：8 + 熟练 + 施法属性调整值
+        <template v-if="derived.available"> = {{ derived.dc }}</template>
+      </span>
+      <span class="cb-formula">
+        <label class="cb-check">
+          <input v-model="state[K.SPELL].dcManual" type="checkbox" />
+          手动
+        </label>
+        <button
+          v-if="state[K.SPELL].dcManual && derived.available"
+          type="button"
+          class="cb-link"
+          @click="restoreDc"
+        >恢复公式</button>
+      </span>
     </label>
     <label class="cb-grid__cell">
       <span class="cb-grid__label">法术攻击</span>
-      <input v-model="state[K.SPELL].attack" class="cb-input" placeholder="+7" />
+      <input
+        v-model="state[K.SPELL].attack"
+        class="cb-input"
+        :class="{ 'cb-input--readonly': !state[K.SPELL].attackManual && derived.available }"
+        placeholder="+8"
+      />
+      <span class="cb-formula">
+        公式：熟练 + 施法属性调整值
+        <template v-if="derived.available"> = {{ derived.attack }}</template>
+      </span>
+      <span class="cb-formula">
+        <label class="cb-check">
+          <input v-model="state[K.SPELL].attackManual" type="checkbox" />
+          手动
+        </label>
+        <button
+          v-if="state[K.SPELL].attackManual && derived.available"
+          type="button"
+          class="cb-link"
+          @click="restoreAttack"
+        >恢复公式</button>
+      </span>
     </label>
   </div>
+  <p class="cb-hint">
+    两个数值由网页按公式自动填入，可勾选「手动」覆盖（如战法师魔杖的 +1）。骰娘只记录卡文本里的数，不重算。
+  </p>
 
   <div class="cb-subhead">法术清单</div>
   <RepeaterRows
@@ -72,16 +118,41 @@
 </template>
 
 <script setup>
+import { watch } from 'vue'
 import { K } from '../../card-builder/core.mjs'
 import RepeaterRows from './RepeaterRows.vue'
 
-// $法术$：施法属性 / 豁免 DC / 法术攻击三个头键 + 法术清单（环阶、准备标记、卡面详情）。
-defineProps({
+// $法术$：施法属性 + 自动/手动 DC 与攻击 + 法术清单。
+const props = defineProps({
   state: { type: Object, required: true },
   enums: { type: Object, required: true },
   limits: { type: Object, required: true },
   abilities: { type: Array, required: true },
+  derived: { type: Object, default: () => ({ dc: '', attack: '', available: false }) },
 })
+
+watch(
+  () => [props.derived.dc, props.derived.attack, props.derived.available],
+  () => {
+    const spell = props.state[K.SPELL]
+    if (!spell) return
+    if (!spell.dcManual && props.derived.available) spell.dc = props.derived.dc
+    if (!spell.attackManual && props.derived.available) {
+      spell.attack = props.derived.attack
+    }
+  },
+  { immediate: true },
+)
+
+function restoreDc() {
+  props.state[K.SPELL].dcManual = false
+  if (props.derived.available) props.state[K.SPELL].dc = props.derived.dc
+}
+
+function restoreAttack() {
+  props.state[K.SPELL].attackManual = false
+  if (props.derived.available) props.state[K.SPELL].attack = props.derived.attack
+}
 
 function factory() {
   return {

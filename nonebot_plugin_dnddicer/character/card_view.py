@@ -90,11 +90,21 @@ class WeaponView:
 
 @dataclass(frozen=True)
 class FeatureView:
-    """特性 / 专长 / 能力一行：名称 + 次数 + 说明。"""
+    """特性 / 专长 / 限定资源一行：名称 + 次数 + 说明。"""
 
     name: str
     uses: str = ""
     text: str = ""
+    level: int = 0
+
+
+@dataclass(frozen=True)
+class MagicItemView:
+    """魔法物品：名称、标签与说明段落。"""
+
+    name: str
+    tag: str
+    paragraphs: Tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -170,9 +180,11 @@ class CharacterCardView:
     proficiencies: Tuple[str, ...] = ()
     combat_notes: Tuple[str, ...] = ()
     weapons: Tuple[WeaponView, ...] = ()
-    traits: Tuple[FeatureView, ...] = ()
+    race_traits: Tuple[FeatureView, ...] = ()
+    class_traits: Tuple[FeatureView, ...] = ()
     feats: Tuple[FeatureView, ...] = ()
-    class_features: Tuple[FeatureView, ...] = ()
+    resources: Tuple[FeatureView, ...] = ()
+    magic_items: Tuple[MagicItemView, ...] = ()
     items: Tuple[str, ...] = ()
     coins: Tuple[CoinView, ...] = ()
     background_rows: Tuple[BackgroundRow, ...] = ()
@@ -371,8 +383,8 @@ def _weapon_views(character: DNDCharacter) -> Tuple[WeaponView, ...]:
     return tuple(rows)
 
 
-def _class_features(character: DNDCharacter) -> Tuple[FeatureView, ...]:
-    """有次数的能力：名称 + ``当前/上限 恢复档`` + 说明。"""
+def _resource_views(character: DNDCharacter) -> Tuple[FeatureView, ...]:
+    """限定资源：名称 + ``当前/上限 恢复档`` + 说明。"""
     rows = []
     for feature in character.features:
         uses = ""
@@ -387,38 +399,54 @@ def _class_features(character: DNDCharacter) -> Tuple[FeatureView, ...]:
     return tuple(rows)
 
 
+def _class_trait_views(character: DNDCharacter) -> Tuple[FeatureView, ...]:
+    """职业特性：按获得等级升序，名称 + 等级 + 说明。"""
+    rows = [
+        FeatureView(
+            name=item.name,
+            level=item.level,
+            text=item.text,
+        )
+        for item in sorted(character.class_traits, key=lambda item: item.level)
+    ]
+    return tuple(rows)
+
+
+def _magic_item_views(character: DNDCharacter) -> Tuple[MagicItemView, ...]:
+    """魔法物品：名称、标签与说明段落。"""
+    return tuple(
+        MagicItemView(
+            name=item.name,
+            tag=item.tag,
+            paragraphs=tuple(item.get_paragraphs()),
+        )
+        for item in character.magic_items
+    )
+
+
 def _item_lines(character: DNDCharacter) -> Tuple[str, ...]:
-    """背包条目：``名称``、``×N``（N>1）、``[装备]``。"""
+    """背包条目：``名称``、``×N``（N>1）。"""
     lines = []
     for raw in character.items:
-        equipped = raw.endswith("[装备]")
-        body = raw[: -len("[装备]")].strip() if equipped else raw.strip()
-        matched = _ITEM_RE.match(body)
+        matched = _ITEM_RE.match(raw.strip())
         if matched is None:
-            text = body
-        else:
-            text = matched.group("name").strip()
-            quantity = int(matched.group("qty") or "1")
-            if quantity > 1:
-                text += f" ×{quantity}"
-        if equipped:
-            text += " [装备]"
+            lines.append(raw.strip())
+            continue
+        text = matched.group("name").strip()
+        quantity = int(matched.group("qty") or "1")
+        if quantity > 1:
+            text += f" ×{quantity}"
         lines.append(text)
     return tuple(lines)
 
 
 def _background_rows(character: DNDCharacter) -> Tuple[BackgroundRow, ...]:
-    """背景与个性：固定键序，两列一行；未列出的键按录入顺序追加。"""
+    """背景与个性：固定键序，两列一行。"""
     items = [
         (key, character.background[key])
         for key in BACKGROUND_KEY_LIST
         if character.background.get(key)
     ]
-    items.extend(
-        (key, value)
-        for key, value in character.background.items()
-        if key not in BACKGROUND_KEY_LIST and value
-    )
     rows = [
         BackgroundRow(cells=tuple(items[index:index + 2]))
         for index in range(0, len(items), 2)
@@ -491,7 +519,7 @@ def _spell_groups(character: DNDCharacter) -> Tuple[SpellGroupView, ...]:
 
 
 def _named_features(items: Tuple[str, ...]) -> Tuple[FeatureView, ...]:
-    """``$专长$`` / ``$特性$`` 的 ``名称:说明`` 条目拆成两段。"""
+    """``$专长$`` / ``$种族特性$`` 的 ``名称:说明`` 条目拆成两段。"""
     rows = []
     for item in items:
         name, text = _split_name_text(item)
@@ -539,9 +567,11 @@ def build_card_view(
         ),
         combat_notes=tuple(character.combat_notes),
         weapons=_weapon_views(character),
-        traits=_named_features(character.traits),
+        race_traits=_named_features(character.race_traits),
+        class_traits=_class_trait_views(character),
         feats=_named_features(character.feats),
-        class_features=_class_features(character),
+        resources=_resource_views(character),
+        magic_items=_magic_item_views(character),
         items=_item_lines(character),
         coins=_coin_views(character),
         background_rows=_background_rows(character),

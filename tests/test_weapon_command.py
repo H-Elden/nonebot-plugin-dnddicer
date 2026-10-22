@@ -197,9 +197,13 @@ def test_normalize_class_name_multi_fails(value):
         normalize_class_name(value)
 
 
-def test_normalize_class_name_invalid():
-    with pytest.raises(AssertionError, match="职业无效"):
-        normalize_class_name("龙骑士")
+def test_normalize_class_name_custom():
+    """扩展职业可原样记录；只有长度与空值受限。"""
+    assert normalize_class_name("龙骑士") == "龙骑士"
+    with pytest.raises(AssertionError, match="职业名称过长"):
+        normalize_class_name("龙" * 21)
+    with pytest.raises(AssertionError, match="职业名称不能为空"):
+        normalize_class_name("  ")
 
 
 def test_normalize_damage_type():

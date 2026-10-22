@@ -157,17 +157,20 @@ def test_char_card_template_renders_with_production_env() -> None:
     assert 'class="sheet card"' in html
     for title in (
         "武器与伤害",
-        "种族与职业特性",
+        "种族特性",
+        "职业特性",
         "专长",
-        "职业特性与能力",
+        "限定资源",
+        "魔法物品",
         "装备",
         "背景与个性",
         "戏法与已准备法术",
     ):
         assert f'<div class="panel-title">{title}</div>' in html, title
-    assert "sub-col-left" in html and "sub-col-right" in html
     assert "伊瑟兰·晨星" in html
     assert "生命值" in html and "死亡豁免" in html and "英雄激励" in html
+    assert "1级" in html and "5级" in html
+    assert "战法师魔杖 +1" in html and "此外，你在进行法术攻击检定时无视半身掩护。" in html
     assert "http://" not in html and "https://" not in html
     assert "&#34;" not in html
 
@@ -193,20 +196,22 @@ def test_char_card_template_hides_empty_panels() -> None:
     html = _render_char(build_card_view(empty))
     for title in (
         "武器与伤害",
-        "种族与职业特性",
+        "种族特性",
+        "职业特性",
         "专长",
-        "职业特性与能力",
+        "限定资源",
+        "魔法物品",
         "装备",
         "背景与个性",
         "戏法与已准备法术",
     ):
         assert f'<div class="panel-title">{title}</div>' not in html, title
     assert "生命值" in html and "英雄激励" in html
-    assert 'class="sub-two"' not in html
+    assert 'class="weapon-panel"' not in html
 
 
-def test_char_card_sub_block_spans_when_one_side_empty() -> None:
-    """两列子块只有一侧有内容时，该侧占满整行。"""
+def test_char_card_panels_follow_content() -> None:
+    """只有装备时画装备面板；只有种族特性时画种族特性面板。"""
     pytest.importorskip("jinja2", reason="模板渲染需要可选的 [render] 依赖（含 Jinja2）")
     from nonebot_plugin_dnddicer.character.card_view import build_card_view
     from nonebot_plugin_dnddicer.character.models import DNDCharacter
@@ -214,14 +219,12 @@ def test_char_card_sub_block_spans_when_one_side_empty() -> None:
     items_only = DNDCharacter(group_id="g", user_id="u", name="测试", is_init=True)
     items_only.items = ["火把x3"]
     html = _render_char(build_card_view(items_only))
-    assert "装备" in html and "种族与职业特性" not in html
-    assert 'colspan="2"' in html
+    assert "装备" in html and "种族特性" not in html
 
     traits_only = DNDCharacter(group_id="g", user_id="u", name="测试", is_init=True)
-    traits_only.traits = ["黑暗视觉（种族）"]
+    traits_only.race_traits = ["黑暗视觉:60 尺内微光"]
     html = _render_char(build_card_view(traits_only))
-    assert "种族与职业特性" in html and "装备" not in html
-    assert 'colspan="2"' in html
+    assert "种族特性" in html and "装备" not in html
 
 def test_char_card_stylesheet_geometry() -> None:
     """角色卡图样式：940 单页、146 方框、表格布局、字体栈中文优先。"""
@@ -233,6 +236,8 @@ def test_char_card_stylesheet_geometry() -> None:
     assert "table-layout: fixed;" in css
     assert css.index('"Noto Sans CJK SC"') < css.index('"Microsoft YaHei"')
     assert "Georgia" not in css
+    assert ".story-line {" in css and "text-indent: 2em;" in css
+    assert ".magic-panel" in css and ".m-tag" in css
 
 
 def test_budget_leaves_margin_below_content_width() -> None:

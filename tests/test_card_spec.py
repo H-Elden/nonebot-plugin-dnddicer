@@ -89,18 +89,47 @@ def test_spec_examples_build_template_card() -> None:
     assert text == gen_template_char().get_char_info()
 
 
-def test_spec_legacy_segments() -> None:
-    """退役的派生段必须登记为旧段，网页端据此提示忽略而不是报未知段。"""
-    legacy = {item["key"] for item in CARD_SPEC["legacy_segments"]}
-    assert legacy == {"$属性值$", "$豁免$", "$技能$"}
-    assert all(item["message"] for item in CARD_SPEC["legacy_segments"])
+def test_spec_rules_metadata() -> None:
+    """子职等级、经验表与背景固定键供网页端按规则版本使用。"""
+    enums = CARD_SPEC["enums"]
+    assert enums["subclass_level_5r"] == 3
+    assert enums["subclass_level_5e"] == {
+        "牧师": 1,
+        "术士": 1,
+        "魔契师": 1,
+        "德鲁伊": 2,
+        "法师": 2,
+    }
+    assert enums["default_subclass_level"] == 3
+    assert enums["background_keys_5r"] == [
+        "背景", "阵营", "信仰", "体型", "年龄", "外貌", "个性",
+    ]
+    assert enums["background_keys_5e"][-3:] == ["理想", "羁绊", "缺点"]
+    thresholds = enums["xp_thresholds"]
+    assert len(thresholds) == 20
+    assert (thresholds[4], thresholds[5]) == (6500, 14000)
+    assert CARD_SPEC["limits"]["class_name_max_len"] == 20
+
+
+def test_spec_has_no_legacy_segments() -> None:
+    """旧段与旧兼容样例已全部删除。"""
+    assert CARD_SPEC["version"] == 5
+    assert "legacy_segments" not in CARD_SPEC
+    keys = {segment["key"] for segment in CARD_SPEC["segments"]}
+    assert {
+        "$种族特性$",
+        "$职业特性$",
+        "$限定资源$",
+        "$魔法物品$",
+    } <= keys
+    assert not ({"$特性$", "$能力$", "$属性值$", "$豁免$", "$技能$"} & keys)
 
 
 def test_fixtures_are_parseable_and_stable() -> None:
     """网页端往返样例必须是插件真能解析的卡，且回写后再次解析保持稳定。"""
     data = json.loads(_FIXTURES_PATH.read_text(encoding="utf-8"))
     fixtures = {item["name"]: item for item in data["fixtures"]}
-    assert set(fixtures) == {"template", "legacy", "edge"}
+    assert set(fixtures) == {"template", "edge"}
     assert fixtures["template"]["text"] == gen_template_char().get_char_info()
     for name, fixture in fixtures.items():
         character = CharacterService.parse(fixture["text"], "g", "u")
