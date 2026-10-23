@@ -34,7 +34,7 @@ def _clear_character_data():
     _chars._cache = None
     _init._cache = None
     _npc._cache = None
-    for name in ("characters.json", "initiative.json", "npc_health.json"):
+    for name in ("cards.json", "initiative.json", "npc_health.json"):
         path = get_data_file(name)
         if path.exists():
             path.write_text("{}", encoding="utf-8")
@@ -59,6 +59,28 @@ async def _expect(app: App, matcher, event, expected: str):
         bot = ctx.create_bot(base=Bot, adapter=adapter)
         ctx.should_call_send(event, expected)
         ctx.receive_event(bot, event)
+
+
+async def _create_basic_card(
+    app: App,
+    user_id: int,
+    *,
+    group_id: int = _GROUP,
+    name: str = "test",
+) -> None:
+    """HP 用例前置：建一张只有姓名/等级/属性的卡并绑定到群。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+
+    content = (
+        f".角色卡新建 测试卡 $姓名$ {name}\n"
+        "$等级$ 1\n$属性$ 10/10/10/10/10/10"
+    )
+    await _expect(
+        app,
+        char_matcher,
+        _event_in_group(group_id, content, user_id=user_id),
+        "已新建角色卡「测试卡」并绑定到本群。",
+    )
 
 
 async def _set_rules_version(group_id: int, version: str) -> None:
@@ -87,6 +109,7 @@ async def test_hp_view_no_char(app: App):
 async def test_hp_view_after_set(app: App):
     """.hp 20/30 → 设置；.hp → 查看。"""
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+    await _create_basic_card(app, 20002)
 
     await _expect(
         app, hp_matcher, _event(".hp 20/30", user_id=20002),
@@ -107,6 +130,7 @@ async def test_hp_view_after_set(app: App):
 async def test_hp_heal(app: App):
     """.hp +5 → 治疗（20/30 → 25/30）。"""
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+    await _create_basic_card(app, 20003)
 
     await _expect(app, hp_matcher, _event(".hp 20/30", user_id=20003), "test: HP=20/30\n当前HP:20/30")
     await _expect(
@@ -119,6 +143,7 @@ async def test_hp_heal(app: App):
 async def test_hp_damage(app: App):
     """.hp -10 → 伤害（25/30 → 15/30）。"""
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+    await _create_basic_card(app, 20004)
 
     await _expect(app, hp_matcher, _event(".hp 25/30", user_id=20004), "test: HP=25/30\n当前HP:25/30")
     await _expect(
@@ -131,6 +156,7 @@ async def test_hp_damage(app: App):
 async def test_hp_damage_to_unconscious(app: App):
     """.hp -30 → 伤害至 0：昏迷并进入濒死（伤害 ≥ HP 上限则即死，见 30 点用例）。"""
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+    await _create_basic_card(app, 20005)
 
     await _expect(app, hp_matcher, _event(".hp 20/30", user_id=20005), "test: HP=20/30\n当前HP:20/30")
     await _expect(
@@ -144,6 +170,7 @@ async def test_hp_damage_to_unconscious(app: App):
 async def test_hp_recover_from_unconscious(app: App):
     """从昏迷中治疗恢复（20/30 -20 → 0/30 昏迷濒死，+15 → 15/30 状态清空）。"""
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+    await _create_basic_card(app, 20006)
 
     await _expect(app, hp_matcher, _event(".hp 20/30", user_id=20006), "test: HP=20/30\n当前HP:20/30")
     await _expect(
@@ -166,6 +193,7 @@ async def test_hp_recover_from_unconscious(app: App):
 async def test_hp_temp_set(app: App):
     """.hp (10) → 设置临时 HP。"""
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+    await _create_basic_card(app, 20007)
 
     await _expect(app, hp_matcher, _event(".hp 20/30", user_id=20007), "test: HP=20/30\n当前HP:20/30")
     await _expect(
@@ -178,6 +206,7 @@ async def test_hp_temp_set(app: App):
 async def test_hp_temp_absorbs_damage(app: App):
     """临时 HP 先吸收伤害（20/30 (10) - 15 → 临时 0，当前 15/30）。"""
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+    await _create_basic_card(app, 20008)
 
     await _expect(app, hp_matcher, _event(".hp 20/30", user_id=20008), "test: HP=20/30\n当前HP:20/30")
     await _expect(app, hp_matcher, _event(".hp (10)", user_id=20008), "test: 临时HP=10\n当前HP:20/30 (10)")
@@ -196,6 +225,7 @@ async def test_hp_temp_absorbs_damage(app: App):
 async def test_hp_dice_heal(app: App):
     """.hp +2d6 → 掷骰治疗（SequenceRuntime [3,4] → 7）。"""
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+    await _create_basic_card(app, 20009)
 
     await _expect(app, hp_matcher, _event(".hp 20/30", user_id=20009), "test: HP=20/30\n当前HP:20/30")
 
@@ -216,23 +246,18 @@ async def test_hp_dice_heal(app: App):
 
 @pytest.mark.asyncio
 async def test_hp_list(app: App):
-    """.hp list → 列出群内所有 PC HP；无卡名成员走统一名称回退链。"""
+    """.hp list → 列出本群绑定卡的角色 HP。"""
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
 
+    await _create_basic_card(app, 20010, group_id=_LIST_GROUP, name="test")
+    await _create_basic_card(app, 20011, group_id=_LIST_GROUP, name="铁匠铺")
     await _expect(app, hp_matcher, _event_in_group(_LIST_GROUP, ".hp 20/30", user_id=20010), "test: HP=20/30\n当前HP:20/30")
-    await _expect(app, hp_matcher, _event_in_group(_LIST_GROUP, ".hp 15/25", user_id=20011), "test: HP=15/25\n当前HP:15/25")
+    await _expect(app, hp_matcher, _event_in_group(_LIST_GROUP, ".hp 15/25", user_id=20011), "铁匠铺: HP=15/25\n当前HP:15/25")
 
     event = _event_in_group(_LIST_GROUP, ".hp list", user_id=20010)
     async with app.test_matcher(hp_matcher) as ctx:
         adapter = ctx.create_adapter(base=OnebotV11Adapter)
         bot = ctx.create_bot(base=Bot, adapter=adapter)
-        # 本人（20010）取事件自带昵称「test」（零查询）；无卡名的他人（20011）
-        # 走群成员查询：群名片「铁匠铺」优先于昵称「阿花」
-        ctx.should_call_api(
-            "get_group_member_info",
-            data={"group_id": _LIST_GROUP, "user_id": 20011},
-            result={"user_id": 20011, "card": "铁匠铺", "nickname": "阿花"},
-        )
         ctx.should_call_send(event, "test HP:20/30\n铁匠铺 HP:15/25")
         ctx.receive_event(bot, event)
 
@@ -246,47 +271,37 @@ async def test_hp_list_char_name_takes_priority(app: App):
     await _expect(
         app, char_matcher,
         _event_in_group(_LIST_GROUP,
-                        ".角色卡记录 $姓名$ 战士小明\n$等级$ 1\n$属性$ 10/10/10/10/10/10\n$生命值$ 20/30",
+                        ".角色卡新建 测试卡 $姓名$ 战士小明\n$等级$ 1\n$属性$ 10/10/10/10/10/10\n$生命值$ 20/30",
                         user_id=20014),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
+    await _create_basic_card(app, 20015, group_id=_LIST_GROUP, name="阿花")
     await _expect(
         app, hp_matcher, _event_in_group(_LIST_GROUP, ".hp 10/20", user_id=20015),
-        "test: HP=10/20\n当前HP:10/20",
+        "阿花: HP=10/20\n当前HP:10/20",
     )
 
     event = _event_in_group(_LIST_GROUP, ".hp list", user_id=20014)
     async with app.test_matcher(hp_matcher) as ctx:
         adapter = ctx.create_adapter(base=OnebotV11Adapter)
         bot = ctx.create_bot(base=Bot, adapter=adapter)
-        # 20015 无卡名仍需查询（结果昵称「阿花」）
-        ctx.should_call_api(
-            "get_group_member_info",
-            data={"group_id": _LIST_GROUP, "user_id": 20015},
-            result={"user_id": 20015, "card": "", "nickname": "阿花"},
-        )
         ctx.should_call_send(event, "战士小明 HP:20/30\n阿花 HP:10/20")
         ctx.receive_event(bot, event)
 
 
 @pytest.mark.asyncio
-async def test_hp_list_api_failure_falls_back(app: App):
-    """.hp list 群成员 API 失败 → 回退「未知玩家（QQ号）」，列表不受影响。"""
+async def test_hp_list_uses_card_name(app: App):
+    """.hp list 使用本群绑定卡的角色名，不再查询群名片。"""
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
 
-    await _expect(app, hp_matcher, _event_in_group(_LIST_GROUP, ".hp 20/30", user_id=20016), "test: HP=20/30\n当前HP:20/30")
+    await _create_basic_card(app, 20016, group_id=_LIST_GROUP, name="阿花")
+    await _expect(app, hp_matcher, _event_in_group(_LIST_GROUP, ".hp 20/30", user_id=20016), "阿花: HP=20/30\n当前HP:20/30")
 
-    # 由他人（20099）发起列表查询，触发对 20016 的群成员查询并失败
     event = _event_in_group(_LIST_GROUP, ".hp list", user_id=20099)
     async with app.test_matcher(hp_matcher) as ctx:
         adapter = ctx.create_adapter(base=OnebotV11Adapter)
         bot = ctx.create_bot(base=Bot, adapter=adapter)
-        ctx.should_call_api(
-            "get_group_member_info",
-            data={"group_id": _LIST_GROUP, "user_id": 20016},
-            exception=Exception("群成员查询失败"),
-        )
-        ctx.should_call_send(event, "未知玩家（20016） HP:20/30")
+        ctx.should_call_send(event, "阿花 HP:20/30")
         ctx.receive_event(bot, event)
 
 
@@ -305,6 +320,7 @@ async def test_hp_list_empty(app: App):
 async def test_hp_del_no_target_keeps_card(app: App):
     """.hp del（无对象）→ 提示用法；不再删除角色卡（2026-09-21 语义修订）。"""
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+    await _create_basic_card(app, 20013)
 
     await _expect(
         app, hp_matcher, _event(".hp 20/30", user_id=20013),
@@ -326,7 +342,7 @@ async def test_hp_del_pc_target_guides_to_char_clear(app: App):
 
     await _expect(
         app, char_matcher, _event(_record_with_hp("爱丽丝", 22012), user_id=22012),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
     await _expect(
         app, hp_matcher, _event(".hp del 爱丽丝", user_id=22000),
@@ -355,7 +371,7 @@ async def test_hp_target_other(app: App):
         "$姓名$ 爱丽丝\n$等级$ 1\n$生命值$ 20/30\n"
         "$属性$ 10/10/10/10/10/10"
     )
-    await _expect(app, char_matcher, _event(f".角色卡记录 {record}", user_id=20014), "角色卡已设置")
+    await _expect(app, char_matcher, _event(f".角色卡新建 测试卡 {record}", user_id=20014), "已新建角色卡「测试卡」并绑定到本群。")
 
     await _expect(
         app, hp_matcher, _event(".hp 爱丽丝 15/30", user_id=20015),
@@ -376,12 +392,7 @@ async def test_hp_target_not_found(app: App):
 
 @pytest.mark.asyncio
 async def test_hp_target_without_char_uses_member_name(app: App):
-    """无卡玩家经先攻表解析：.hp 目标反馈走名称回退链（群名片），不显示 QQ 号。
-
-    复现场景（2026-09-22 修复）：群成员无角色卡、无 HP 记录，以 .ri 入先攻表
-    后 DM 用 ``.hp 名称+9`` 结算——此前反馈名直接取 QQ 号，与 .hp list 的
-    「角色卡名 → 群名片 → QQ 昵称 → 未知玩家（QQ号）」回退链不一致。
-    """
+    """无卡玩家经先攻表解析：.hp 提示未在本群绑定角色卡，反馈名走群名片。"""
     from nonebot.adapters.onebot.v11.event import Sender
 
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
@@ -398,27 +409,23 @@ async def test_hp_target_without_char_uses_member_name(app: App):
         ),
         "陈莉莉的先攻值是 20",
     )
-    # DM 先记伤害、再治疗：两条反馈的落款均为群名片
-    for text_msg, expected in (
-        (".hp 陈莉莉-9", "陈莉莉: 当前HP减少9\n损失HP:0 -> 损失HP:9"),
-        (".hp 陈莉莉+9", "陈莉莉: 当前HP增加9\n损失HP:9 -> 损失HP:0"),
-    ):
-        event = _event_in_group(g, text_msg, user_id=20099)
-        async with app.test_matcher(hp_matcher) as ctx:
-            adapter = ctx.create_adapter(base=OnebotV11Adapter)
-            bot = ctx.create_bot(base=Bot, adapter=adapter)
-            ctx.should_call_api(
-                "get_group_member_info",
-                data={"group_id": g, "user_id": qq},
-                result={"user_id": qq, "card": "陈莉莉", "nickname": "莉莉"},
-            )
-            ctx.should_call_send(event, expected)
-            ctx.receive_event(bot, event)
+    # DM 结算：无卡玩家不再隐式建卡，提示未绑定（名称取群名片）
+    event = _event_in_group(g, ".hp 陈莉莉-9", user_id=20099)
+    async with app.test_matcher(hp_matcher) as ctx:
+        adapter = ctx.create_adapter(base=OnebotV11Adapter)
+        bot = ctx.create_bot(base=Bot, adapter=adapter)
+        ctx.should_call_api(
+            "get_group_member_info",
+            data={"group_id": g, "user_id": qq},
+            result={"user_id": qq, "card": "陈莉莉", "nickname": "莉莉"},
+        )
+        ctx.should_call_send(event, "「陈莉莉」未在本群绑定角色卡")
+        ctx.receive_event(bot, event)
 
 
 @pytest.mark.asyncio
 async def test_hp_target_without_char_api_failure_falls_back(app: App):
-    """无卡玩家经先攻表解析且群成员查询失败 → 回退「未知玩家（QQ号）」。"""
+    """无卡玩家且群成员查询失败 → 提示未绑定，名称回退「未知玩家（QQ号）」。"""
     from nonebot.adapters.onebot.v11.event import Sender
 
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
@@ -447,7 +454,7 @@ async def test_hp_target_without_char_api_failure_falls_back(app: App):
             exception=Exception("群成员查询失败"),
         )
         ctx.should_call_send(
-            event, "未知玩家（1270859721）: 当前HP减少9\n损失HP:0 -> 损失HP:9"
+            event, "「未知玩家（1270859721）」未在本群绑定角色卡"
         )
         ctx.receive_event(bot, event)
 
@@ -495,7 +502,7 @@ async def test_long_rest(app: App):
         "$姓名$ test\n$等级$ 4\n$生命值$ 20/30(5)\n"
         "$生命骰$ 2/4 D8\n$属性$ 10/10/10/10/10/10"
     )
-    await _expect(app, char_matcher, _event(f".角色卡记录 {record}", user_id=20020), "角色卡已设置")
+    await _expect(app, char_matcher, _event(f".角色卡新建 测试卡 {record}", user_id=20020), "已新建角色卡「测试卡」并绑定到本群。")
 
     # 再设置当前 HP 为 10/30 (5)
     await _expect(app, hp_matcher, _event(".hp 10/30 (5)", user_id=20020), "test: HP=10/30 (5)\n当前HP:10/30 (5)")
@@ -515,7 +522,7 @@ async def test_long_rest(app: App):
 
 @pytest.mark.asyncio
 async def test_long_rest_no_char(app: App):
-    """.长休 无角色卡 → 找不到角色卡信息。"""
+    """.长休 无角色卡 → 你还没有在本群绑定角色卡，可发 .角色卡列表 查看卡库并绑定信息。"""
     from nonebot_plugin_dnddicer.commands.hp import long_rest_matcher
 
     await _expect(
@@ -536,8 +543,8 @@ async def test_long_rest_mention_target(app: App):
     )
     await _expect(
         app, char_matcher,
-        _event(f".角色卡记录 {record}", user_id=23019),
-        "角色卡已设置",
+        _event(f".角色卡新建 测试卡 {record}", user_id=23019),
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
     await _expect(
         app, hp_matcher, _event(".hp 10/30 (5)", user_id=23019),
@@ -554,7 +561,7 @@ async def test_long_rest_mention_target(app: App):
         app, long_rest_matcher,
         _mention_event(".长休 ", MessageSegment.at(39994), user_id=23000),
         Message(MessageSegment.at("39994"))
-        + " 还没有在本群建立角色卡（可用 .角色卡记录 建卡后再试）",
+        + " 未在本群绑定角色卡",
     )
 
 
@@ -572,8 +579,8 @@ async def test_long_rest_restores_all_dice_in_2024_group(app: App):
     )
     await _expect(
         app, char_matcher,
-        _event_in_group(group, f".角色卡记录 {record}", user_id=uid),
-        "角色卡已设置",
+        _event_in_group(group, f".角色卡新建 测试卡 {record}", user_id=uid),
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
     await _expect(
         app, long_rest_matcher, _event_in_group(group, ".长休", user_id=uid),
@@ -597,8 +604,8 @@ async def test_long_rest_restores_half_dice_in_2014_group(app: App):
     )
     await _expect(
         app, char_matcher,
-        _event_in_group(group, f".角色卡记录 {record}", user_id=uid),
-        "角色卡已设置",
+        _event_in_group(group, f".角色卡新建 测试卡 {record}", user_id=uid),
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
     await _expect(
         app, long_rest_matcher, _event_in_group(group, ".长休", user_id=uid),
@@ -736,13 +743,13 @@ def test_hp_info_fresh_set_zero_quirk():
 
 
 def _record_with_hp(name: str, user_id: int, hp: str = "20/30", weapons: str = ""):
-    """返回带 $生命值$（可选 $武器$ 段）的角色卡记录命令文本。
+    """返回带 $生命值$（可选 $武器$ 段）的建卡命令文本。
 
     ``weapons`` 非空时附加 ``$武器$`` 段（「名称+加值,伤害+类型」格式），
     供 .hp 伤害位置的武器写法用例使用；``user_id`` 仅用于调用方辨识卡主。
     """
     segments = [
-        f".角色卡记录 $姓名$ {name}",
+        f".角色卡新建 测试卡 $姓名$ {name}",
         "$等级$ 1",
         f"$生命值$ {hp}",
         "$属性$ 10/10/10/10/10/10",
@@ -760,7 +767,7 @@ async def test_hp_dm_single_target_damage_expr(app: App):
 
     await _expect(
         app, char_matcher, _event(_record_with_hp("爱丽丝", 22001), user_id=22001),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
 
     token = set_runtime(SequenceRuntime([5, 2]))  # d8=5, d6=2 → 5+3+2=10
@@ -781,12 +788,12 @@ async def test_hp_dm_aoe_multi_target(app: App):
 
     await _expect(
         app, char_matcher, _event(_record_with_hp("爱丽丝", 22002), user_id=22002),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
     await _expect(
         app, char_matcher,
         _event(_record_with_hp("莎白", 22003, hp="18/30"), user_id=22003),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
 
     token = set_runtime(SequenceRuntime([7]))  # d12=7 → 7-2=5
@@ -808,12 +815,12 @@ async def test_hp_dm_aoe_semicolon_halfwidth(app: App):
 
     await _expect(
         app, char_matcher, _event(_record_with_hp("爱丽丝", 22004), user_id=22004),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
     await _expect(
         app, char_matcher,
         _event(_record_with_hp("莎白", 22005, hp="18/30"), user_id=22005),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
 
     token = set_runtime(SequenceRuntime([7]))
@@ -835,17 +842,17 @@ async def test_hp_dm_resistance_and_vulnerability(app: App):
 
     await _expect(
         app, char_matcher, _event(_record_with_hp("爱丽丝", 22006), user_id=22006),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
     await _expect(
         app, char_matcher,
         _event(_record_with_hp("莎白", 22007, hp="18/30"), user_id=22007),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
     await _expect(
         app, char_matcher,
         _event(_record_with_hp("布莱克", 22008, hp="15/30"), user_id=22008),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
 
     token = set_runtime(SequenceRuntime([7]))  # 掷出 5 点：抗性→2、易伤→10、全额→5
@@ -869,7 +876,7 @@ async def test_hp_factor_suffix_only_for_damage(app: App):
 
     await _expect(
         app, char_matcher, _event(_record_with_hp("爱丽丝", 22009), user_id=22009),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
     await _expect(
         app, hp_matcher, _event(".hp 爱丽丝抗性 20", user_id=22000),
@@ -881,6 +888,7 @@ async def test_hp_factor_suffix_only_for_damage(app: App):
 async def test_hp_negative_values_clamped(app: App):
     """伤害/治疗不为负：表达式算出负值时按 0 计并标注（2026-09-21 修复）。"""
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+    await _create_basic_card(app, 20017)
 
     await _expect(
         app, hp_matcher, _event(".hp 20/20", user_id=20017),
@@ -929,7 +937,7 @@ async def test_hp_mention_damage_targets_player_card(app: App):
     await _expect(
         app, char_matcher,
         _event(_record_with_hp("布兰克", 23010), user_id=23010),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
     await _expect(
         app, hp_matcher,
@@ -949,7 +957,7 @@ async def test_hp_mention_set_heal_and_view(app: App):
     await _expect(
         app, char_matcher,
         _event(_record_with_hp("布兰克", 23011), user_id=23011),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
     await _expect(
         app, hp_matcher,
@@ -977,12 +985,12 @@ async def test_hp_mention_multi_view(app: App):
     await _expect(
         app, char_matcher,
         _event(_record_with_hp("布兰克", 23012), user_id=23012),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
     await _expect(
         app, char_matcher,
         _event(_record_with_hp("莎白", 23013, hp="18/30"), user_id=23013),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
     await _expect(
         app, hp_matcher,
@@ -1004,7 +1012,7 @@ async def test_hp_mention_suffix_and_aoe_mixed(app: App):
     await _expect(
         app, char_matcher,
         _event(_record_with_hp("布兰克", 23014, hp="30/30"), user_id=23014),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
     await _expect(
         app, initiative_matcher, _event(".ri20 地精", user_id=23000),
@@ -1037,13 +1045,13 @@ async def test_hp_mention_no_char_guides(app: App):
         app, hp_matcher,
         _mention_event(".hp ", MessageSegment.at(29999), " -5", user_id=23000),
         Message(MessageSegment.at("29999"))
-        + " 还没有在本群建立角色卡（可用 .角色卡记录 建卡后再试）",
+        + " 未在本群绑定角色卡",
     )
 
     await _expect(
         app, char_matcher,
         _event(_record_with_hp("布兰克", 23015), user_id=23015),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
     await _expect(
         app, hp_matcher,
@@ -1063,7 +1071,7 @@ async def test_hp_stray_mention_not_executed(app: App):
     await _expect(
         app, char_matcher,
         _event(_record_with_hp("布兰克", 23016), user_id=23016),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
     hint = "未执行：目标请写在目标位置，例如 .hp @小明 -d4"
     # @ 在表达式右侧 / 值表达式右侧 / 命令之前：三类写法均不执行
@@ -1086,6 +1094,7 @@ async def test_hp_stray_mention_not_executed(app: App):
 async def test_hp_bot_mention_keeps_self_semantics(app: App):
     """@机器人自身（to_me 习惯）不视为目标：.hp 仍按发送者自身结算。"""
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+    await _create_basic_card(app, 23017)
 
     await _expect(
         app, hp_matcher,
@@ -1111,7 +1120,7 @@ async def test_hp_weapon_damage_basic(app: App):
             _record_with_hp("爱丽丝", 22011, hp="40/40", weapons="短剑+6,1d4+4穿刺"),
             user_id=22011,
         ),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
 
     token = set_runtime(SequenceRuntime([4]))  # 1d4=4 → 4+4=8
@@ -1141,7 +1150,7 @@ async def test_hp_weapon_damage_fuzzy_match(app: App):
             ),
             user_id=22023,
         ),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
 
     # 子串唯一命中：.精灵伤害 → 卡上「精灵短剑」
@@ -1188,7 +1197,7 @@ async def test_hp_weapon_damage_suffixes(app: App):
             _record_with_hp("爱丽丝", 22014, hp="40/40", weapons="短剑+6,1d4+4穿刺"),
             user_id=22014,
         ),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
 
     # 重击：所有骰数 ×2（1d4+4 → 2d4+4），固定加值只加一次
@@ -1237,12 +1246,12 @@ async def test_hp_weapon_damage_sneak_rogue(app: App):
     await _expect(
         app, char_matcher,
         _event(
-            ".角色卡记录 $姓名$ 爱丽丝\n$职业$ 游荡者\n$等级$ 5\n"
+            ".角色卡新建 测试卡 $姓名$ 爱丽丝\n$职业$ 游荡者\n$等级$ 5\n"
             "$生命值$ 40/40\n$属性$ 10/10/10/10/10/10\n"
             "$武器$ 短剑+6,1d4+4穿刺",
             user_id=22015,
         ),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
 
     token = set_runtime(SequenceRuntime([4, 1, 2, 3]))  # 1d4=4；偷袭 3d6=1+2+3
@@ -1269,7 +1278,7 @@ async def test_hp_weapon_attack_written_as_damage(app: App):
             _record_with_hp("爱丽丝", 22016, hp="40/40", weapons="短剑+6,1d4+4穿刺"),
             user_id=22016,
         ),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
 
     await _expect(
@@ -1291,6 +1300,7 @@ async def test_hp_weapon_attack_written_as_damage(app: App):
 @pytest.mark.asyncio
 async def test_hp_weapon_damage_errors(app: App):
     """武器伤害写法三类引导：发送者无卡 / 卡上无此武器 / 尾部非法 / 偷袭不合规。"""
+    from nonebot_plugin_dnddicer.commands import text
     from nonebot_plugin_dnddicer.commands.character import char_matcher
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
 
@@ -1300,15 +1310,13 @@ async def test_hp_weapon_damage_errors(app: App):
             _record_with_hp("爱丽丝", 22018, hp="40/40", weapons="短剑+6,1d4+4穿刺"),
             user_id=22018,
         ),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
 
     # 发送者本人无卡（无括号时武器项取发自发送者，22099 未建卡）
     await _expect(
         app, hp_matcher, _event(".hp 爱丽丝 -短剑伤害", user_id=22099),
-        "找不到角色卡：武器伤害写法读取发送者本人角色卡上的 $武器$ 项，"
-        "请先 .角色卡记录 建卡（武器可用 .设置武器 登记），"
-        "或改用普通掷骰表达式（如 -1d8+2）",
+        text.TXT_HP_WEAPON_NO_CHAR,
     )
     # 卡上无此武器
     await _expect(
@@ -1340,7 +1348,7 @@ async def test_hp_weapon_damage_factor_header(app: App):
             _record_with_hp("爱丽丝", 22021, hp="40/40", weapons="短剑+6,1d4+4穿刺"),
             user_id=22021,
         ),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
 
     # 易伤：1d4+4=6 → 表头与目标行都报 12
@@ -1380,12 +1388,12 @@ async def test_hp_weapon_damage_aoe_header_raw(app: App):
             _record_with_hp("爱丽丝", 22022, hp="40/40", weapons="短剑+6,1d4+4穿刺"),
             user_id=22022,
         ),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
     await _expect(
         app, char_matcher,
         _event(_record_with_hp("莎白", 22023, hp="30/30"), user_id=22023),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
 
     token = set_runtime(SequenceRuntime([4]))  # 1d4+4=8（原始值）；莎白易伤 → 16
@@ -1404,13 +1412,14 @@ async def test_hp_weapon_damage_aoe_header_raw(app: App):
 @pytest.mark.asyncio
 async def test_hp_weapon_damage_source_parentheses(app: App):
     """括号来源：角色名（模糊匹配）/ @玩家；发送者本人无卡也能代发。"""
+    from nonebot_plugin_dnddicer.commands import text
     from nonebot_plugin_dnddicer.commands.character import char_matcher
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
 
     await _expect(
         app, char_matcher,
         _event(_record_with_hp("爱丽丝", 22024, hp="40/40"), user_id=22024),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
     await _expect(
         app, char_matcher,
@@ -1418,7 +1427,7 @@ async def test_hp_weapon_damage_source_parentheses(app: App):
             _record_with_hp("布鲁姆", 22025, weapons="短剑+6,1d4+4穿刺"),
             user_id=22025,
         ),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
 
     # 角色名来源（DM 22000 无卡）：武器项取来源者卡上
@@ -1464,7 +1473,7 @@ async def test_hp_weapon_damage_source_parentheses(app: App):
     await _expect(
         app, hp_matcher,
         _event(".hp 爱丽丝 -短剑伤害（不存在的人）", user_id=22000),
-        "找不到角色卡「不存在的人」：括号中请填玩家角色名（或直接 @玩家）",
+        text.TXT_HP_WEAPON_SOURCE_MISS.format(name="不存在的人"),
     )
 
     # @ 到无卡成员 → 真 @ 段引导建卡
@@ -1475,7 +1484,7 @@ async def test_hp_weapon_damage_source_parentheses(app: App):
             user_id=22000,
         ),
         Message(MessageSegment.at("39991"))
-        + " 还没有在本群建立角色卡（可用 .角色卡记录 建卡后再试）",
+        + " 未在本群绑定角色卡",
     )
 
 
@@ -1499,7 +1508,7 @@ async def test_hp_multi_weapon_damage(app: App):
             _record_with_hp("爱丽丝", 22031, hp="40/40", weapons=_TWO_WEAPONS),
             user_id=22031,
         ),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
 
     token = set_runtime(SequenceRuntime([3, 4]))
@@ -1532,7 +1541,7 @@ async def test_hp_multi_weapon_mixed_type(app: App):
             _record_with_hp("爱丽丝", 22032, hp="40/40", weapons=_TWO_WEAPONS),
             user_id=22032,
         ),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
 
     # 易伤（单目标）：7+11=18 → 表头报 36、扣血 36；合计行报掷出的原始 18
@@ -1567,12 +1576,12 @@ async def test_hp_multi_weapon_aoe_raw_header(app: App):
             _record_with_hp("爱丽丝", 22033, hp="40/40", weapons=_TWO_WEAPONS),
             user_id=22033,
         ),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
     await _expect(
         app, char_matcher,
         _event(_record_with_hp("莎白", 22034, hp="30/30"), user_id=22034),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
 
     token = set_runtime(SequenceRuntime([3, 4]))
@@ -1606,7 +1615,7 @@ async def test_hp_weapon_multi_vs_fraction_guard(app: App):
             _record_with_hp("爱丽丝", 22035, hp="40/40", weapons=_TWO_WEAPONS),
             user_id=22035,
         ),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
 
     # 末项不是武器写法：判为多武器写法并报错——重要的是**不会**被当成

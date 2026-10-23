@@ -23,7 +23,7 @@ from fake_event import fake_group_message_event_v11
 from nonebot_plugin_dnddicer.engine.roll.karma_runtime import reset_runtime, set_runtime
 from nonebot_plugin_dnddicer.engine.roll.sequence_runtime import SequenceRuntime
 
-_CLEAN_FILES = ("initiative.json", "characters.json", "npc_health.json")
+_CLEAN_FILES = ("initiative.json", "cards.json", "npc_health.json")
 
 
 @pytest.fixture(autouse=True)
@@ -246,10 +246,10 @@ async def test_npc_list_mixed_with_pc(app: App):
 
     g = 110004
     record = (
-        ".角色卡记录 $姓名$ 爱丽丝\n$等级$ 1\n$生命值$ 20/30\n"
+        ".角色卡新建 测试卡 $姓名$ 爱丽丝\n$等级$ 1\n$生命值$ 20/30\n"
         "$属性$ 10/10/10/10/10/10"
     )
-    await _expect(app, char_matcher, _event(g, record, user_id=40001), "角色卡已设置")
+    await _expect(app, char_matcher, _event(g, record, user_id=40001), "已新建角色卡「测试卡」并绑定到本群。")
     await _expect(app, initiative_matcher, _event(g, ".ri20 哥布林"), "哥布林的先攻值是 20")
     await _expect(app, hp_matcher, _event(g, ".hp 哥布林 7/7"), "哥布林: HP=7/7\n当前HP:7/7")
 
@@ -321,10 +321,10 @@ async def test_hp_clr_clears_all_npc(app: App):
 
     g = 110015
     record = (
-        ".角色卡记录 $姓名$ 爱丽丝\n$等级$ 1\n$生命值$ 20/30\n"
+        ".角色卡新建 测试卡 $姓名$ 爱丽丝\n$等级$ 1\n$生命值$ 20/30\n"
         "$属性$ 10/10/10/10/10/10"
     )
-    await _expect(app, char_matcher, _event(g, record, user_id=40001), "角色卡已设置")
+    await _expect(app, char_matcher, _event(g, record, user_id=40001), "已新建角色卡「测试卡」并绑定到本群。")
     await _expect(app, initiative_matcher, _event(g, ".ri20 哥布林"), "哥布林的先攻值是 20")
     await _expect(
         app, hp_matcher, _event(g, ".hp 哥布林 7/7"),
@@ -661,10 +661,10 @@ async def test_npc_command_errors(app: App):
     )
     # PC 角色卡：不适用本命令
     record = (
-        ".角色卡记录 $姓名$ 爱丽丝\n$等级$ 1\n$生命值$ 20/30\n"
+        ".角色卡新建 测试卡 $姓名$ 爱丽丝\n$等级$ 1\n$生命值$ 20/30\n"
         "$属性$ 10/10/10/10/10/10"
     )
-    await _expect(app, char_matcher, _event(g, record, user_id=40001), "角色卡已设置")
+    await _expect(app, char_matcher, _event(g, record, user_id=40001), "已新建角色卡「测试卡」并绑定到本群。")
     await _expect(
         app, npc_matcher, _event(g, ".npc 持久 爱丽丝"),
         "「爱丽丝」是玩家角色卡，不是NPC",
@@ -681,10 +681,10 @@ async def test_npc_mention_target(app: App):
 
     g = 110027
     record = (
-        ".角色卡记录 $姓名$ 爱丽丝\n$等级$ 1\n$生命值$ 20/30\n"
+        ".角色卡新建 测试卡 $姓名$ 爱丽丝\n$等级$ 1\n$生命值$ 20/30\n"
         "$属性$ 10/10/10/10/10/10"
     )
-    await _expect(app, char_matcher, _event(g, record, user_id=40002), "角色卡已设置")
+    await _expect(app, char_matcher, _event(g, record, user_id=40002), "已新建角色卡「测试卡」并绑定到本群。")
 
     event = fake_group_message_event_v11(
         message=Message(".npc 持久 ") + MessageSegment.at(40002),
@@ -704,5 +704,5 @@ async def test_npc_mention_target(app: App):
     await _expect(
         app, npc_matcher, event,
         Message(MessageSegment.at("49999"))
-        + " 还没有在本群建立角色卡（可用 .角色卡记录 建卡后再试）",
+        + " 未在本群绑定角色卡",
     )

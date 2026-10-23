@@ -159,8 +159,8 @@ TXT_BOT_INTRO = (
     "HP 管理、先攻列表、战斗轮、规则查询、群配置。"
 )
 TXT_BOT_STATE_PRIVATE = (
-    "私聊不受群聊服务开关限制：掷骰、属性生成等可直接使用，"
-    "角色卡、HP、先攻等命令仅在群聊中可用。"
+    "私聊不受群聊服务开关限制：掷骰、属性生成、角色卡管理可直接使用，"
+    "HP、先攻等命令仅在群聊中可用。"
 )
 TXT_BOT_STATE_ON = "本群服务已开启，可直接使用本插件的全部命令。"
 TXT_BOT_STATE_OFF = "本群服务未开启，仅 .bot 命令可用。发送 .bot on（需群主或管理员权限）可开启。"
@@ -174,13 +174,50 @@ TXT_BOT_BAD_ARG = (
 )
 
 # ── DND5e 角色卡 .角色卡 / .状态 / 检定 文案 ─────────────────────────────
-TXT_CHAR_SET = "角色卡已设置"
-TXT_CHAR_MISS = "找不到角色卡"
-TXT_CHAR_DEL = "角色卡已删除"
+#: 群内未绑定角色卡（所有依赖角色卡的命令共用）
+TXT_CHAR_MISS = "你还没有在本群绑定角色卡，可发 .角色卡列表 查看卡库并绑定"
+#: 角色卡库（2026-10-23 卡库化）
+TXT_CHAR_NO_CARD_PRIVATE = "你还没有角色卡，可发 .角色卡新建 <卡名> <完整卡内容> 建卡"
+TXT_CHAR_NEED_NAME = "你有 {count} 张角色卡，请带上卡名；可发 .角色卡列表 查看"
+TXT_CHAR_NAME_MISS = "找不到角色卡「{name}」"
+TXT_CHAR_NAME_MULTI = "卡名「{name}」匹配到多张：{names}，请写完整卡名"
+TXT_CHAR_NEW_USAGE = "用法：.角色卡新建 <卡名> <完整卡内容>（卡名最多 20 字，不能包含空格、$、@）"
+TXT_CHAR_MODIFY_USAGE = "用法：.角色卡修改 [卡名] <段条目>（例：.角色卡修改 薇拉 $物品$ 治疗药水x2）"
+TXT_CHAR_NEW_GROUP = "已新建角色卡「{name}」并绑定到本群。"
+TXT_CHAR_NEW_GROUP_REPLACED = "已新建角色卡「{name}」并绑定到本群，原绑定「{old}」已解除。"
+TXT_CHAR_NEW_PRIVATE = "已新建角色卡「{name}」。可发 .角色卡绑定 {name} <群号> 绑定到跑团群。"
+TXT_CHAR_BIND_FAILED_CREATED = "角色卡「{name}」已创建，但绑定本群失败：{error}"
+TXT_CHAR_MODIFY_OK = "角色卡「{name}」已修改"
+TXT_CHAR_RENAME_USAGE = "用法：.角色卡改名 <旧卡名> <新卡名>"
+TXT_CHAR_RENAME_OK = "角色卡「{old}」已改名为「{new}」"
+TXT_CHAR_LIST_TITLE = "你的角色卡："
+TXT_CHAR_LIST_EMPTY = "你还没有角色卡，可发 .角色卡新建 <卡名> <完整卡内容> 建卡"
+TXT_CHAR_LIST_ITEM = "{name}（{character}，{level}级{class_name}）"
+TXT_CHAR_LIST_BOUND = "｜已绑定：{groups}"
+TXT_CHAR_LIST_CURRENT = "｜本群绑定"
+TXT_CHAR_BIND_USAGE_GROUP = "用法：.角色卡绑定 <卡名>"
+TXT_CHAR_BIND_USAGE_PRIVATE = "用法：.角色卡绑定 <卡名> <群号>"
+TXT_CHAR_BIND_OK = "角色卡「{name}」已绑定到群 {group}"
+TXT_CHAR_BIND_REPLACED = "角色卡「{name}」已绑定到群 {group}，原绑定「{old}」已解除"
+TXT_CHAR_BIND_PRIVATE_HINT = "若你不在该群，绑定暂不生效，可在群内发 .角色卡绑定 <卡名> 重新绑定。"
+TXT_CHAR_BIND_GROUP_MISSING = "骰娘不在该群（{group}），请先把骰娘请进群再绑定"
+TXT_CHAR_BIND_GROUP_UNKNOWN = "（未能确认骰娘是否在该群，绑定后请在该群发 .角色卡 验证）"
+TXT_CHAR_UNBIND_OK = "已解除本群的角色卡绑定"
+TXT_CHAR_UNBIND_NONE = "本群没有绑定角色卡"
+TXT_CHAR_UNBIND_PRIVATE_OK = "已解除角色卡在群 {group} 的绑定"
+TXT_CHAR_UNBIND_PRIVATE_NONE = "该群没有绑定你的角色卡"
+TXT_CHAR_UNBIND_USAGE = "用法：.角色卡解绑 <群号>"
+TXT_CHAR_UNBIND_USAGE_GROUP = "用法：.角色卡解绑"
+TXT_CHAR_DELETE_USAGE = "用法：.角色卡清除 <卡名> 确认"
+TXT_CHAR_DELETE_CONFIRM = "确认删除角色卡「{name}」吗？请发送 .角色卡清除 {name} 确认"
+TXT_CHAR_DELETE_BOUND = "角色卡「{name}」已绑定到群 {groups}，请先解绑再删除"
+TXT_CHAR_DELETE_OK = "角色卡「{name}」已删除"
+TXT_CHAR_MODIFY_GROUP_MISMATCH = "本群只能修改当前绑定的卡「{name}」；其他卡请到私聊修改"
+TXT_CHAR_PRIVATE_TARGET_UNSUPPORTED = "私聊只能查看自己的角色卡；@玩家 请在群聊使用"
 #: .角色卡图 渲染不可用/失败时的回退提示（不暴露配置名与安装命令）
 TXT_CARD_IMAGE_FALLBACK = "（图片渲染未就绪，请联系骰主解决）"
 #: .立绘（2026-10-21）
-TXT_PORTRAIT_USAGE = "用法：发送一张图片并附带 .立绘"
+TXT_PORTRAIT_USAGE = "用法：发送一张图片并附带 .立绘 [卡名]（私聊多张卡需带卡名）"
 TXT_PORTRAIT_SET = "立绘已设置"
 TXT_PORTRAIT_MULTI = "（只保留第一张图片）"
 TXT_PORTRAIT_TOO_LARGE = "图片超过 4 MB，请压缩后再试"
@@ -415,6 +452,8 @@ TXT_HP_INFO_MISS = "找不到{name}的生命值信息"
 #: .hp 指定目标未命中：附 NPC 记录方式的引导（NPC 需先入先攻表，见 commands/hp.py）
 TXT_HP_INFO_MISS_HINT = "找不到{name}的生命值信息\n新NPC需要先加入先攻表才可设置HP"
 TXT_HP_INFO_MULTI = "存在多个匹配目标：{name_list}"
+#: .hp 目标玩家未在本群绑定角色卡（卡库化后不再隐式建空白卡）
+TXT_HP_TARGET_NO_CHAR = "「{name}」未在本群绑定角色卡"
 TXT_HP_INFO_NONE = "本群没有任何生命值信息"
 TXT_HP_MOD = "{name}: {hp_mod}"
 TXT_HP_MOD_ERR = "修改生命值时出现错误：{error}"
@@ -440,7 +479,7 @@ TXT_HP_WEAPON_TAIL_BAD = (
 #: 武器伤害写法需要发送者本人有角色卡（武器项取自卡上 $武器$ 段）
 TXT_HP_WEAPON_NO_CHAR = (
     "找不到角色卡：武器伤害写法读取发送者本人角色卡上的 $武器$ 项，"
-    "请先 .角色卡记录 建卡（武器可用 .设置武器 登记），"
+    "请先 .角色卡新建 建卡（武器可用 .设置武器 登记），"
     "或改用普通掷骰表达式（如 -1d8+2）"
 )
 #: 武器伤害写法的表头（与 .X伤害 回复同款，随后接各目标的 HP 结算行）
@@ -456,10 +495,10 @@ TXT_HP_WEAPON_SOURCE_MISS = (
 # 约定：以下「无卡引导」「不在先攻表」等提示统一用真 @ 消息段回复（群里显示
 # 为对方昵称），文案本身不含 @ 字样（见 platform.onebot_v11.at_reply）。
 #: 提及者本群无角色卡（.ri 的引导另附临时 NPC 写法，见下条）
-TXT_MENTION_NO_CHAR = "还没有在本群建立角色卡（可用 .角色卡记录 建卡后再试）"
+TXT_MENTION_NO_CHAR = "未在本群绑定角色卡"
 #: .ri 的 @ 目标无卡：另附「直接写名称」的临时怪物条目写法
 TXT_MENTION_NO_CHAR_RI = (
-    "还没有在本群建立角色卡（可用 .角色卡记录 建卡后再试）；"
+    "未在本群绑定角色卡；"
     "如需临时加同名怪物条目，可直接写名称（.ri+3 名称）"
 )
 #: 游离 @：@ 未落在目标位置时 .hp 的纠正提示（不执行、不结算）

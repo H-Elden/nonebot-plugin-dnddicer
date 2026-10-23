@@ -2,7 +2,7 @@
 
 覆盖：``$武器$`` 单项与多项解析校验、名称限制、职业段（12 职业 + 禁兼职）、
 伤害类型容错、偷袭骰自动计算（游荡者等级表）、旧卡兼容与卡面往返；
-命令层：``.角色卡记录`` 带新段的录入与查看、保留名（插件命令）拦截。
+命令层：``.角色卡新建 测试卡`` 带新段的录入与查看、保留名（插件命令）拦截。
 
 后续步骤（``.X攻击``/``.X伤害`` 与后缀、``.设置武器``）在本文件继续扩充。
 """
@@ -19,6 +19,7 @@ from nonebot_plugin_dnddicer.engine.roll.karma_runtime import reset_runtime, set
 from nonebot_plugin_dnddicer.engine.roll.sequence_runtime import SequenceRuntime
 
 from nonebot_plugin_dnddicer.character.models import DNDCharacter
+from nonebot_plugin_dnddicer.commands.character import char_matcher
 from nonebot_plugin_dnddicer.character.services import (
     CharacterService,
     gen_template_char,
@@ -39,7 +40,7 @@ def _clear_store():
     from nonebot_plugin_dnddicer.data import get_data_file
 
     _chars._cache = None
-    path = get_data_file("characters.json")
+    path = get_data_file("cards.json")
     if path.exists():
         path.write_text("{}", encoding="utf-8")
     yield
@@ -299,11 +300,11 @@ def test_template_char_weapons_recordable():
 
 @pytest.mark.asyncio
 async def test_record_and_view_with_new_fields(app: App):
-    """.角色卡记录 带种族/职业/子职/武器 → 记录成功且卡面完整回显。"""
+    """.角色卡新建 测试卡 带种族/职业/子职/武器 → 记录成功且卡面完整回显。"""
     from nonebot_plugin_dnddicer.commands.character import char_matcher
 
     content = (
-        ".角色卡记录 $姓名$ 伊丽莎白\n"
+        ".角色卡新建 测试卡 $姓名$ 伊丽莎白\n"
         "$种族$ 半精灵\n"
         "$职业$ 游荡者\n"
         "$子职$ 刺客\n"
@@ -311,7 +312,7 @@ async def test_record_and_view_with_new_fields(app: App):
         "$属性$ 15/14/13/12/10/8\n"
         "$武器$ 短剑+6,1d4+4穿刺/长弓+5,1d8+3穿刺"
     )
-    await _expect(app, char_matcher, _event(content), "角色卡已设置")
+    await _expect(app, char_matcher, _event(content), "已新建角色卡「测试卡」并绑定到本群。")
 
     expected = (
         "$姓名$ 伊丽莎白\n"
@@ -330,7 +331,7 @@ async def test_record_weapon_reserved_name_rejected(app: App):
     """命令层传入保留名：武器名与插件命令同名 → 报错、不落库。"""
     from nonebot_plugin_dnddicer.commands.character import char_matcher
 
-    content = ".角色卡记录 $等级$ 1\n$属性$ 15/14/13/12/10/8\n$武器$ r+5,1d4"
+    content = ".角色卡新建 测试卡 $姓名$ 测试角色\n$等级$ 1\n$属性$ 15/14/13/12/10/8\n$武器$ r+5,1d4"
     await _expect(app, char_matcher, _event(content), "武器名称不能与插件命令重名: r")
 
 
@@ -339,7 +340,7 @@ async def test_record_weapon_invalid_rejected(app: App):
     """非法武器项（名称含禁词）→ 报错文案面向用户。"""
     from nonebot_plugin_dnddicer.commands.character import char_matcher
 
-    content = ".角色卡记录 $等级$ 1\n$属性$ 15/14/13/12/10/8\n$武器$ 猛虎攻击+5,1d6"
+    content = ".角色卡新建 测试卡 $姓名$ 测试角色\n$等级$ 1\n$属性$ 15/14/13/12/10/8\n$武器$ 猛虎攻击+5,1d6"
     await _expect(
         app, char_matcher, _event(content), "武器名称不能包含「攻击」字样: 猛虎攻击"
     )
@@ -348,7 +349,7 @@ async def test_record_weapon_invalid_rejected(app: App):
 # ── 命令层：攻击检定（.X攻击 / .X命中）──────────────────────────────────
 
 _CARD = (
-    ".角色卡记录 $姓名$ 伊丽莎白\n"
+    ".角色卡新建 测试卡 $姓名$ 伊丽莎白\n"
     "$职业$ 游荡者\n"  # 5 级游荡者 → 偷袭 3d6
     "$等级$ 5\n"
     "$属性$ 15/14/13/12/10/8\n"
@@ -369,7 +370,7 @@ def _mention_event(*parts, user_id: int = 20010):
 async def _record(app: App, card: str = _CARD, user_id: int = 20001):
     from nonebot_plugin_dnddicer.commands.character import char_matcher
 
-    await _expect(app, char_matcher, _event(card, user_id=user_id), "角色卡已设置")
+    await _expect(app, char_matcher, _event(card, user_id=user_id), "已新建角色卡「测试卡」并绑定到本群。")
 
 
 @pytest.mark.asyncio
@@ -511,7 +512,7 @@ async def test_weapon_attack_no_bonus_weapon(app: App):
 
 @pytest.mark.asyncio
 async def test_weapon_attack_not_found_and_no_char(app: App):
-    """未设置该武器 → 引导提示；无卡 → 找不到角色卡。"""
+    """未设置该武器 → 引导提示；无卡 → 你还没有在本群绑定角色卡，可发 .角色卡列表 查看卡库并绑定。"""
     from nonebot_plugin_dnddicer.commands.weapon import weapon_matcher
 
     await _record(app)
@@ -521,7 +522,7 @@ async def test_weapon_attack_not_found_and_no_char(app: App):
     )
 
     await _expect(
-        app, weapon_matcher, _event(".短剑攻击", user_id=20099), "找不到角色卡"
+        app, weapon_matcher, _event(".短剑攻击", user_id=20099), "你还没有在本群绑定角色卡，可发 .角色卡列表 查看卡库并绑定"
     )
 
 
@@ -551,7 +552,7 @@ async def test_weapon_attack_mention_target(app: App):
         app, weapon_matcher,
         _mention_event(".短剑攻击 ", MessageSegment.at(39993), user_id=20001),
         Message(MessageSegment.at("39993"))
-        + " 还没有在本群建立角色卡（可用 .角色卡记录 建卡后再试）",
+        + " 未在本群绑定角色卡",
     )
 
 
@@ -586,7 +587,7 @@ def test_attribute_attack_commands_retired():
 
 @pytest.mark.asyncio
 async def test_attribute_attack_retired_falls_back(app: App):
-    """退役后 .敏捷攻击 走武器命令：有卡无该武器 → 默认未找到提示；无卡 → 找不到角色卡。"""
+    """退役后 .敏捷攻击 走武器命令：有卡无该武器 → 默认未找到提示；无卡 → 你还没有在本群绑定角色卡，可发 .角色卡列表 查看卡库并绑定。"""
     from nonebot_plugin_dnddicer.commands.weapon import weapon_matcher
 
     await _record(app)
@@ -595,7 +596,7 @@ async def test_attribute_attack_retired_falls_back(app: App):
         "未找到武器「敏捷」。可用 .设置武器 查看已有武器或添加新武器。",
     )
     await _expect(
-        app, weapon_matcher, _event(".2#力量攻击", user_id=20099), "找不到角色卡"
+        app, weapon_matcher, _event(".2#力量攻击", user_id=20099), "你还没有在本群绑定角色卡，可发 .角色卡列表 查看卡库并绑定"
     )
 
 
@@ -629,9 +630,10 @@ async def test_weapon_damage_basic_and_type(app: App):
         reset_runtime(token)
 
     # 无类型武器（木棍 1d6）
-    await _record(
-        app,
-        card=".角色卡记录 $姓名$ 薇拉\n$等级$ 3\n$属性$ 15/14/13/12/10/8\n$武器$ 木棍+4,1d6",
+    await _expect(
+        app, char_matcher,
+        _event(".角色卡修改 测试卡 $姓名$ 薇拉\n$武器$ 木棍+4,1d6"),
+        "角色卡「测试卡」已修改",
     )
     token = set_runtime(SequenceRuntime([5]))
     try:
@@ -708,19 +710,17 @@ async def test_weapon_damage_sneak_rejects(app: App):
 
     await _record(
         app,
-        card=".角色卡记录 $姓名$ 薇拉\n$等级$ 3\n$属性$ 15/14/13/12/10/8\n$武器$ 短剑+4,1d6",
+        card=".角色卡新建 测试卡 $姓名$ 薇拉\n$等级$ 3\n$属性$ 15/14/13/12/10/8\n$武器$ 短剑+4,1d6",
     )
     await _expect(
         app, weapon_matcher, _event(".短剑偷袭伤害"),
         "「短剑」的偷袭后缀需要职业为游荡者：请先在角色卡设置职业（12 职业名之一）",
     )
 
-    await _record(
-        app,
-        card=(
-            ".角色卡记录 $姓名$ 薇拉\n$职业$ 战士\n$等级$ 3\n"
-            "$属性$ 15/14/13/12/10/8\n$武器$ 短剑+4,1d6"
-        ),
+    await _expect(
+        app, char_matcher,
+        _event(".角色卡修改 测试卡 $职业$ 战士"),
+        "角色卡「测试卡」已修改",
     )
     await _expect(
         app, weapon_matcher, _event(".短剑偷袭伤害"),
@@ -735,7 +735,7 @@ async def test_weapon_damage_offhand_no_dice(app: App):
 
     await _record(
         app,
-        card=".角色卡记录 $姓名$ 薇拉\n$等级$ 3\n$属性$ 15/14/13/12/10/8\n$武器$ 吹箭筒,1",
+        card=".角色卡新建 测试卡 $姓名$ 薇拉\n$等级$ 3\n$属性$ 15/14/13/12/10/8\n$武器$ 吹箭筒,1",
     )
     await _expect(
         app, weapon_matcher, _event(".吹箭筒副手伤害"),
@@ -926,19 +926,26 @@ async def test_set_weapon_list_and_empty(app: App):
     from nonebot_plugin_dnddicer.commands.weapon import set_weapon_matcher
 
     await _expect(
-        app, set_weapon_matcher, _event(".设置武器", user_id=20098), "找不到角色卡"
+        app, set_weapon_matcher, _event(".设置武器", user_id=20098), "你还没有在本群绑定角色卡，可发 .角色卡列表 查看卡库并绑定"
     )
 
     await _record(
         app,
-        card=".角色卡记录 $姓名$ 薇拉\n$等级$ 3\n$属性$ 15/14/13/12/10/8",
+        card=".角色卡新建 测试卡 $姓名$ 薇拉\n$等级$ 3\n$属性$ 15/14/13/12/10/8",
     )
     await _expect(
         app, set_weapon_matcher, _event(".设置武器"),
         "还没有设置武器。用法：.设置武器 短剑+6,1d4+4穿刺（多项用 / 分隔）",
     )
 
-    await _record(app)  # _CARD：短剑 + 火焰箭
+    await _expect(
+        app, char_matcher,
+        _event(
+            ".角色卡修改 测试卡 $姓名$ 伊丽莎白\n"
+            "$武器$ 短剑+6,1d4+4穿刺/火焰箭,2d10火焰"
+        ),
+        "角色卡「测试卡」已修改",
+    )
     await _expect(
         app, set_weapon_matcher, _event(".设置武器"),
         "当前武器（2 件）：\n1. 短剑+6,1d4+4穿刺\n2. 火焰箭,2d10火焰\n"
@@ -999,7 +1006,7 @@ async def test_weapon_manage_private_denied(app: App):
 
 #: 含互为子串的名称（短剑 / 精灵短剑）与英文名（大小写不敏感）
 _FUZZY_CARD = (
-    ".角色卡记录 $姓名$ 伊丽莎白\n"
+    ".角色卡新建 测试卡 $姓名$ 伊丽莎白\n"
     "$职业$ 游荡者\n"
     "$等级$ 5\n"
     "$属性$ 15/14/13/12/10/8\n"
@@ -1145,7 +1152,7 @@ async def test_set_weapon_not_fuzzy(app: App):
 
 #: 双武器卡：短剑（主手）+ 匕首（副手），另带火焰箭用于「不同伤害类型」用例
 _TWO_WEAPON_CARD = (
-    ".角色卡记录 $姓名$ 伊丽莎白\n"
+    ".角色卡新建 测试卡 $姓名$ 伊丽莎白\n"
     "$职业$ 游荡者\n"
     "$等级$ 5\n"
     "$属性$ 15/14/13/12/10/8\n"

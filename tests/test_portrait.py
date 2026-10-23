@@ -21,7 +21,8 @@ from nonebot_plugin_dnddicer.commands import card_image as card_image_cmd
 from nonebot_plugin_dnddicer.commands import text
 from nonebot_plugin_dnddicer.commands.character import char_matcher
 from nonebot_plugin_dnddicer.data import portraits
-from nonebot_plugin_dnddicer.data.characters import get_character, save_character
+from nonebot_plugin_dnddicer.data.characters import get_character, save_card
+from card_test_utils import create_bound_card
 
 _GROUP = 87654321
 _USER = 10001
@@ -48,7 +49,7 @@ def _clear_characters():
     from nonebot_plugin_dnddicer.data import get_data_file
 
     _chars._cache = None
-    path = get_data_file("characters.json")
+    path = get_data_file("cards.json")
     if path.exists():
         path.write_text("{}", encoding="utf-8")
     yield
@@ -63,8 +64,8 @@ def test_detect_image_types() -> None:
 
 @pytest.mark.asyncio
 async def test_save_load_delete_and_raw_bytes(tmp_path: Path) -> None:
-    name = await portraits.save_portrait("g1", "u1", _PNG_1PX)
-    assert name == "portraits/g1_u1.png"
+    name = await portraits.save_portrait("card1", _PNG_1PX)
+    assert name == "portraits/card1.png"
     path = tmp_path / name
     assert path.read_bytes() == _PNG_1PX  # 原图逐字节保存，零后处理
 
@@ -76,20 +77,20 @@ async def test_save_load_delete_and_raw_bytes(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_save_replaces_old_extension(tmp_path: Path) -> None:
-    await portraits.save_portrait("g1", "u1", _PNG_1PX)
-    jpg_name = await portraits.save_portrait("g1", "u1", _JPEG_MIN)
-    assert jpg_name == "portraits/g1_u1.jpg"
-    assert not (tmp_path / "portraits/g1_u1.png").exists()
-    assert (tmp_path / "portraits/g1_u1.jpg").exists()
+    await portraits.save_portrait("card1", _PNG_1PX)
+    jpg_name = await portraits.save_portrait("card1", _JPEG_MIN)
+    assert jpg_name == "portraits/card1.jpg"
+    assert not (tmp_path / "portraits/card1.png").exists()
+    assert (tmp_path / "portraits/card1.jpg").exists()
 
 
 @pytest.mark.asyncio
 async def test_save_rejects_bad_format_and_size() -> None:
     with pytest.raises(portraits.PortraitBadFormat):
-        await portraits.save_portrait("g", "u", b"plain text")
+        await portraits.save_portrait("card1", b"plain text")
     too_large = _PNG_1PX + b"\x00" * (portraits.MAX_PORTRAIT_BYTES + 1)
     with pytest.raises(portraits.PortraitTooLarge):
-        await portraits.save_portrait("g", "u", too_large)
+        await portraits.save_portrait("card1", too_large)
 
 
 @pytest.mark.asyncio
@@ -176,7 +177,7 @@ async def _expect(app: App, matcher, event, expected: str) -> None:
 @pytest.mark.asyncio
 async def test_portrait_command_sets_and_persists(app: App, tmp_path: Path) -> None:
     char = gen_template_char(str(_GROUP), str(_USER))
-    await save_character(char)
+    await create_bound_card(_GROUP, _USER, char)
     image = tmp_path / "in.png"
     image.write_bytes(_PNG_1PX)
 
@@ -185,13 +186,13 @@ async def test_portrait_command_sets_and_persists(app: App, tmp_path: Path) -> N
         _event_with_image(".立绘", image), text.TXT_PORTRAIT_SET,
     )
     saved = await get_character(_GROUP, _USER)
-    assert saved is not None and saved.portrait == "portraits/87654321_10001.png"
+    assert saved is not None and saved.portrait == f"portraits/{saved.card_id}.png"
     assert (tmp_path / saved.portrait).read_bytes() == _PNG_1PX
 
 
 @pytest.mark.asyncio
 async def test_portrait_command_multi_image_hint(app: App, tmp_path: Path) -> None:
-    await save_character(gen_template_char(str(_GROUP), str(_USER)))
+    await create_bound_card(_GROUP, _USER, gen_template_char(str(_GROUP), str(_USER)))
     image = tmp_path / "in.png"
     image.write_bytes(_PNG_1PX)
     message = Message(".立绘") + MessageSegment.image(str(image)) + MessageSegment.image(str(image))
@@ -214,7 +215,7 @@ async def test_portrait_command_errors(app: App, tmp_path: Path) -> None:
         _event_with_image(".立绘", image, user_id=19999), text.TXT_CHAR_MISS,
     )
     # 无图
-    await save_character(gen_template_char(str(_GROUP), str(_USER)))
+    await create_bound_card(_GROUP, _USER, gen_template_char(str(_GROUP), str(_USER)))
     await _expect(
         app, card_image_cmd.portrait_matcher,
         fake_group_message_event_v11(
@@ -235,19 +236,20 @@ async def test_portrait_command_errors(app: App, tmp_path: Path) -> None:
 async def test_full_record_keeps_portrait(app: App, tmp_path: Path) -> None:
     """整卡重录（多段覆盖）不丢立绘。"""
     char = gen_template_char(str(_GROUP), str(_USER))
-    char.portrait = await portraits.save_portrait(str(_GROUP), str(_USER), _PNG_1PX)
-    await save_character(char)
+    card_id = await create_bound_card(_GROUP, _USER, char)
+    char.portrait = await portraits.save_portrait(card_id, _PNG_1PX)
+    await save_card(card_id, char)
     await _expect(
         app,
         char_matcher,
         fake_group_message_event_v11(
             message=Message(
-                ".角色卡记录 $姓名$ 新名字\n$等级$ 5\n$属性$ 10/10/10/10/10/10"
+                ".角色卡修改 测试卡 $姓名$ 新名字\n$等级$ 5\n$属性$ 10/10/10/10/10/10"
             ),
             group_id=_GROUP,
             user_id=_USER,
         ),
-        text.TXT_CHAR_SET,
+        text.TXT_CHAR_MODIFY_OK.format(name="测试卡"),
     )
     saved = await get_character(_GROUP, _USER)
     assert saved is not None and saved.name == "新名字"
@@ -258,16 +260,25 @@ async def test_full_record_keeps_portrait(app: App, tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_card_delete_removes_portrait(app: App, tmp_path: Path) -> None:
     char = gen_template_char(str(_GROUP), str(_USER))
-    char.portrait = await portraits.save_portrait(str(_GROUP), str(_USER), _PNG_1PX)
-    await save_character(char)
+    card_id = await create_bound_card(_GROUP, _USER, char)
+    char.portrait = await portraits.save_portrait(card_id, _PNG_1PX)
+    await save_card(card_id, char)
     path = tmp_path / char.portrait
     assert path.exists()
     await _expect(
         app,
         char_matcher,
         fake_group_message_event_v11(
-            message=Message(".角色卡清除"), group_id=_GROUP, user_id=_USER
+            message=Message(".角色卡解绑"), group_id=_GROUP, user_id=_USER
         ),
-        text.TXT_CHAR_DEL,
+        text.TXT_CHAR_UNBIND_OK,
+    )
+    await _expect(
+        app,
+        char_matcher,
+        fake_group_message_event_v11(
+            message=Message(".角色卡清除 测试卡 确认"), group_id=_GROUP, user_id=_USER
+        ),
+        text.TXT_CHAR_DELETE_OK.format(name="测试卡"),
     )
     assert not path.exists()

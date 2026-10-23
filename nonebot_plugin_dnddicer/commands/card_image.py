@@ -1,11 +1,9 @@
-"""角色卡图命令：``.角色卡图 [@玩家|角色名]``（2026-10-21）。
+"""角色卡图命令：``.角色卡图 [@玩家|卡名]`` 与 ``.立绘 [卡名]``（2026-10-23）。
 
-- 群聊限定（卡库化之前，私聊没有「本群角色卡」上下文）；
-- 自己 / 他人与 ``.角色卡`` 同口径：@ 直连，角色名走「PC → NPC → 先攻表」
-  三层搜索；查看开放、修改仍限本人；
+- 群聊：只看本群绑定卡；``@玩家`` / 角色名查看他人绑定卡；
+- 私聊：按卡名选本人卡，卡库仅一张时可省略卡名；
 - 渲染不可用或渲染异常时回退文字卡，并在末尾附一行「请联系骰主解决」；
-- 渲染走 ``render.char_card_available()`` 与 ``render.render_char_card``，
-  测试可注入假渲染器，CI 不需要 htmlkit。
+- 立绘按 ``card_id`` 落盘；旧路径若存在继续可读，不做文件迁移。
 """
 
 from __future__ import annotations
@@ -24,26 +22,26 @@ from nonebot.matcher import Matcher
 from ..character.card_view import build_card_view
 from ..character.models import DNDCharacter
 from ..data import portraits
-from ..data.characters import get_character, save_character
+from ..data.characters import get_character, save_card
 from ..platform import onebot_v11
 from ..render import char_card_available, render_char_card
-from . import base, text
+from . import base, card_helpers, text
 
 _HELP = (
-    ".角色卡图 [@玩家|角色名]\n"
-    "  将本群角色卡渲染为图片\n"
-    "  支持查看他人；需骰主开启图片渲染\n"
-    "  示例：.角色卡图 ｜ .角色卡图 @阿茶"
+    ".角色卡图 [@玩家|卡名]\n"
+    "  将角色卡渲染为图片\n"
+    "  群聊看本群绑定卡或他人；私聊看本人卡\n"
+    "  私聊多张卡需带卡名；需骰主开启图片渲染"
 )
 character_image_matcher = base.on_dnd_command(
     "角色卡图", _HELP, doc="guide/card-image"
 )
 
 _HELP_PORTRAIT = (
-    ".立绘\n"
+    ".立绘 [卡名]\n"
     "  发送图片并附带本命令，设置当前卡立绘\n"
-    "  原图保存，建议方形；仅支持 PNG/JPG/WebP，≤4 MB\n"
-    "  示例：发图后输入 .立绘"
+    "  私聊多张卡需带卡名；群聊设置本群绑定卡\n"
+    "  原图保存，建议方形；仅支持 PNG/JPG/WebP，≤4 MB"
 )
 portrait_matcher = base.on_dnd_command(
     "立绘", _HELP_PORTRAIT, doc="guide/card-image"
@@ -60,18 +58,23 @@ def _fallback_text(character: DNDCharacter, target_name: str = "") -> str:
 
 async def _resolve_target(
     bot: Bot,
-    event: GroupMessageEvent,
+    event: MessageEvent,
     matcher: Matcher,
     rest: str,
 ) -> Optional[tuple[DNDCharacter, str]]:
-    """解析查看目标，返回 (角色卡, 展示名)；无法查看时已回复并返回 None。
+    """解析查看目标，返回 (角色卡, 展示名)；无法查看时已回复并返回 None。"""
+    if not isinstance(event, GroupMessageEvent):
+        if rest.startswith("@"):
+            await matcher.finish(text.TXT_CHAR_PRIVATE_TARGET_UNSUPPORTED)
+        _card_id, _card_name, character = await card_helpers.resolve_private_current(
+            event.user_id, rest, matcher
+        )
+        return character, ""
 
-    无参数 = 自己；有参数走与 ``.角色卡`` 相同的目标搜索与文案。
-    """
     if not rest:
-        character = await get_character(event.group_id, event.user_id)
-        if character is None or not character.is_init:
-            await matcher.finish(text.TXT_CHAR_MISS)
+        _card_id, _card_name, character = await card_helpers.resolve_group_bound(
+            event.group_id, event.user_id, matcher
+        )
         return character, ""
 
     # 延迟导入：保持 commands 包的导入顺序（同 commands/character.py）
@@ -90,7 +93,7 @@ async def _resolve_target(
         await matcher.finish(text.TXT_CHAR_NPC_NO_CARD.format(name=target_id))
     if source_key == "pc":
         character = await get_character(event.group_id, target_id)
-        if character is None or not character.is_init:
+        if character is None:
             await matcher.finish(
                 onebot_v11.at_reply(target_id, text.TXT_MENTION_NO_CHAR)
             )
@@ -105,10 +108,7 @@ async def _resolve_target(
 
 @character_image_matcher.handle()
 async def handle_character_image(bot: Bot, event: MessageEvent) -> None:
-    """``.角色卡图``：渲染本群角色卡为图片，失败回退文字卡。"""
-    if not isinstance(event, GroupMessageEvent):
-        await character_image_matcher.finish(text.TXT_GROUP_ONLY)
-
+    """``.角色卡图``：渲染角色卡为图片，失败回退文字卡。"""
     rest = (base.get_command_rest_with_mentions(event) or "").strip()
     resolved = await _resolve_target(bot, event, character_image_matcher, rest)
     if resolved is None:  # 理论不可达：_resolve_target 内已 finish
@@ -137,16 +137,19 @@ async def handle_character_image(bot: Bot, event: MessageEvent) -> None:
 @portrait_matcher.handle()
 async def handle_portrait(bot: Bot, event: MessageEvent) -> None:
     """``.立绘``：取本条消息第一张图片，原图保存为当前卡立绘。"""
-    if not isinstance(event, GroupMessageEvent):
-        await portrait_matcher.finish(text.TXT_GROUP_ONLY)
-
     rest = (base.get_command_rest(event) or "").strip()
-    if rest:
-        await portrait_matcher.finish(text.TXT_PORTRAIT_USAGE)
-
-    character = await get_character(event.group_id, event.user_id)
-    if character is None or not character.is_init:
-        await portrait_matcher.finish(text.TXT_CHAR_MISS)
+    if isinstance(event, GroupMessageEvent):
+        if rest:
+            await portrait_matcher.finish(text.TXT_PORTRAIT_USAGE)
+        _card_id, _card_name, character = await card_helpers.resolve_group_bound(
+            event.group_id, event.user_id, portrait_matcher
+        )
+    else:
+        if rest.startswith("@"):
+            await portrait_matcher.finish(text.TXT_CHAR_PRIVATE_TARGET_UNSUPPORTED)
+        _card_id, _card_name, character = await card_helpers.resolve_private_current(
+            event.user_id, rest, portrait_matcher
+        )
 
     images = onebot_v11.image_segments(event)
     if not images:
@@ -155,7 +158,7 @@ async def handle_portrait(bot: Bot, event: MessageEvent) -> None:
     try:
         data = await portraits.fetch_image_bytes(bot, images[0])
         name = await portraits.save_portrait(
-            str(event.group_id), str(event.user_id), data
+            character.card_id, data, character.portrait
         )
     except portraits.PortraitTooLarge:
         await portrait_matcher.finish(text.TXT_PORTRAIT_TOO_LARGE)
@@ -165,7 +168,7 @@ async def handle_portrait(bot: Bot, event: MessageEvent) -> None:
         await portrait_matcher.finish(text.TXT_PORTRAIT_FETCH_FAILED)
 
     character.portrait = name
-    await save_character(character)
+    await save_card(character.card_id, character)
     feedback = text.TXT_PORTRAIT_SET
     if len(images) > 1:
         feedback += text.TXT_PORTRAIT_MULTI

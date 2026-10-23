@@ -23,7 +23,8 @@ from nonebot_plugin_dnddicer.character.services import (
 )
 from nonebot_plugin_dnddicer.commands import card_image as card_image_cmd
 from nonebot_plugin_dnddicer.commands import text
-from nonebot_plugin_dnddicer.data.characters import get_character, save_character
+from nonebot_plugin_dnddicer.data.characters import get_character, save_card
+from card_test_utils import create_bound_card
 
 _GROUP = 87654321
 _USER = 10001
@@ -43,7 +44,7 @@ def _clear_store():
     from nonebot_plugin_dnddicer.data import get_data_file
 
     _chars._cache = None
-    path = get_data_file("characters.json")
+    path = get_data_file("cards.json")
     if path.exists():
         path.write_text("{}", encoding="utf-8")
     yield
@@ -80,7 +81,7 @@ async def _expect_image(app: App, event, png: bytes) -> None:
 async def _save_card(user_id: int = _USER, name: str = "伊瑟兰·晨星") -> None:
     char = gen_template_char(str(_GROUP), str(user_id))
     char.name = name
-    await save_character(char)
+    await create_bound_card(_GROUP, user_id, char)
 
 
 @pytest.mark.asyncio
@@ -147,8 +148,9 @@ async def test_card_image_embeds_saved_portrait(app: App, tmp_path, monkeypatch)
 
     monkeypatch.setattr(portraits, "get_data_dir", lambda: tmp_path)
     char = gen_template_char(str(_GROUP), str(_USER))
-    char.portrait = await portraits.save_portrait(str(_GROUP), str(_USER), _PNG_1PX)
-    await save_character(char)
+    card_id = await create_bound_card(_GROUP, _USER, char)
+    char.portrait = await portraits.save_portrait(card_id, _PNG_1PX)
+    await save_card(card_id, char)
     calls = []
 
     async def fake_renderer(view):
@@ -167,8 +169,22 @@ async def test_card_image_no_card(app: App):
 
 
 @pytest.mark.asyncio
-async def test_card_image_private_rejected(app: App):
+async def test_card_image_private_single_card(app: App):
+    await _save_card()
+
+    async def fake_renderer(view):
+        return _PNG_1PX
+
+    render.set_char_renderer(fake_renderer)
     event = fake_private_message_event_v11(
         message=Message(".角色卡图"), user_id=_USER
     )
-    await _expect_text(app, event, text.TXT_GROUP_ONLY)
+    await _expect_image(app, event, _PNG_1PX)
+
+
+@pytest.mark.asyncio
+async def test_card_image_private_no_card(app: App):
+    event = fake_private_message_event_v11(
+        message=Message(".角色卡图"), user_id=_USER
+    )
+    await _expect_text(app, event, text.TXT_CHAR_NO_CARD_PRIVATE)

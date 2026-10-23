@@ -42,7 +42,7 @@ def _clear_store():
 
     _chars._cache = None
     _spell_settings._cache = None
-    for name in ("characters.json", "spell_settings.json"):
+    for name in ("cards.json", "spell_settings.json"):
         path = get_data_file(name)
         if path.exists():
             path.write_text("{}", encoding="utf-8")
@@ -66,8 +66,11 @@ async def _expect(app: App, matcher, event, expected: str):
 async def _record(app: App, user_id: int = 23001, card: str = _CARD):
     from nonebot_plugin_dnddicer.commands.character import char_matcher
 
+    content = card
+    if "$姓名$" not in content:
+        content = "$姓名$ 测试角色\n" + content
     await _expect(
-        app, char_matcher, _event(f".角色卡记录\n{card}", user_id), "角色卡已设置"
+        app, char_matcher, _event(f".角色卡新建 测试卡\n{content}", user_id), "已新建角色卡「测试卡」并绑定到本群。"
     )
 
 
@@ -191,7 +194,7 @@ async def test_set_and_delete_ability(app: App):
 async def test_ability_requires_character(app: App):
     from nonebot_plugin_dnddicer.commands.feature import ability_matcher
 
-    await _expect(app, ability_matcher, _event(".能力"), "找不到角色卡")
+    await _expect(app, ability_matcher, _event(".能力"), "你还没有在本群绑定角色卡，可发 .角色卡列表 查看卡库并绑定")
 
 
 # =========================================================================
@@ -428,7 +431,7 @@ async def test_spell_slots_empty_and_no_card(app: App):
     from nonebot_plugin_dnddicer.commands.spell import spell_slots_matcher
 
     await _expect(
-        app, spell_slots_matcher, _event(".法术位"), "找不到角色卡"
+        app, spell_slots_matcher, _event(".法术位"), "你还没有在本群绑定角色卡，可发 .角色卡列表 查看卡库并绑定"
     )
     card = "$等级$ 1\n$属性$ 10/10/10/10/10/10"
     await _record(app, card=card)

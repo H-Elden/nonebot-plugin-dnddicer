@@ -894,7 +894,12 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
 
         character = await get_character(event.group_id, target_id)
         if character is None:
-            character = DNDCharacter(group_id=str(event.group_id), user_id=target_id)
+            # 卡库化后 HP 随卡走：未绑定卡的玩家不再隐式创建空白卡
+            if str(target_id) == str(event.user_id) and len(target_list) == 1:
+                await hp_matcher.finish(text.TXT_CHAR_MISS)
+            target_name = await base.resolve_display_name(bot, event, target_id)
+            feedback += text.TXT_HP_TARGET_NO_CHAR.format(name=target_name) + "\n"
+            continue
 
         # 击晕（留活口）：近战把目标打到 0 HP 时可改为不杀。两版都有这条规则，
         # 差别在结果（2026-10-01 修订，此前误按「仅 2024 可用」实现）：

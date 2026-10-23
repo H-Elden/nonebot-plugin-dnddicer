@@ -1,9 +1,9 @@
-""".角色卡 / .状态 / 检定点命令 nonebug 测试。
+""".角色卡 / .状态 / 检定点命令 nonebug 测试（2026-10-23 卡库化）。
 
-存储隔离：每个用例使用独立 user_id（角色卡主键 = 群+QQ），互不干扰。
+覆盖：群内新建自动绑定、绑定卡修改、私聊按卡名选中、无默认卡、改名 /
+列表 / 绑定 / 解绑 / 清除、旧 .角色卡记录 退役，以及检定点与 @ 目标。
 """
 
-import nonebot
 import pytest
 from nonebug import App
 from nonebot.adapters.onebot.v11 import Adapter as OnebotV11Adapter
@@ -11,18 +11,29 @@ from nonebot.adapters.onebot.v11 import Bot, Message, MessageSegment
 
 from fake_event import fake_group_message_event_v11, fake_private_message_event_v11
 
+from nonebot_plugin_dnddicer.commands import text
 from nonebot_plugin_dnddicer.engine.roll.karma_runtime import reset_runtime, set_runtime
 from nonebot_plugin_dnddicer.engine.roll.sequence_runtime import SequenceRuntime
 
 _GROUP = 87654321
+_OTHER_GROUP = 87654322
+
+_RECORD = (
+    "$姓名$ 伊丽莎白\n"
+    "$等级$ 5\n"
+    "$生命值$ 20/30(5)\n"
+    "$生命骰$ 3/4 D8\n"
+    "$属性$ 15/14/13/12/10/8\n"
+    "$熟练$ 力量/隐匿\n"
+    "$额外加值$ 隐匿:优势"
+)
+_NEW_OK = text.TXT_CHAR_NEW_GROUP.format(name="测试卡")
+_MOD_OK = text.TXT_CHAR_MODIFY_OK.format(name="测试卡")
 
 
 @pytest.fixture(autouse=True)
 def _clear_store():
-    """每个用例前清空角色卡/先攻表数据（缓存 + JSON）。
-
-    查看他人整卡与名称搜索是群级查询，清空可避免历史残留带来的多匹配。
-    """
+    """每个用例前清空角色卡/先攻表数据（缓存 + JSON）。"""
     from nonebot_plugin_dnddicer.data import characters as _chars
     from nonebot_plugin_dnddicer.data import get_data_file
     from nonebot_plugin_dnddicer.data import initiative as _init
@@ -31,16 +42,24 @@ def _clear_store():
     _chars._cache = None
     _init._cache = None
     _npc._cache = None
-    for name in ("characters.json", "initiative.json", "npc_health.json"):
+    for name in ("cards.json", "initiative.json", "npc_health.json"):
         path = get_data_file(name)
         if path.exists():
             path.write_text("{}", encoding="utf-8")
     yield
 
 
-def _event(text: str, user_id: int = 10001):
+def _event(
+    text_value: str, user_id: int = 10001, group_id: int = _GROUP
+):
     return fake_group_message_event_v11(
-        message=Message(text), group_id=_GROUP, user_id=user_id
+        message=Message(text_value), group_id=group_id, user_id=user_id
+    )
+
+
+def _private(text_value: str, user_id: int = 10001):
+    return fake_private_message_event_v11(
+        message=Message(text_value), user_id=user_id
     )
 
 
@@ -52,195 +71,579 @@ async def _expect(app: App, matcher, event, expected: str):
         ctx.receive_event(bot, event)
 
 
-_RECORD = (
-    ".角色卡记录 $姓名$ 伊丽莎白\n"
-    "$等级$ 5\n"
-    "$生命值$ 20/30(5)\n"
-    "$生命骰$ 3/4 D8\n"
-    "$属性$ 15/14/13/12/10/8\n"
-    "$熟练$ 力量/隐匿\n"
-    "$额外加值$ 隐匿:优势"
-)
+async def _create(
+    app: App,
+    user_id: int,
+    *,
+    group_id: int = _GROUP,
+    card_name: str = "测试卡",
+    content: str = _RECORD,
+    expected: str = _NEW_OK,
+):
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+
+    await _expect(
+        app,
+        char_matcher,
+        _event(f".角色卡新建 {card_name}\n{content}", user_id, group_id),
+        expected,
+    )
+
+
+async def _create_private(
+    app: App,
+    user_id: int,
+    *,
+    card_name: str,
+    content: str,
+):
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+
+    await _expect(
+        app,
+        char_matcher,
+        _private(f".角色卡新建 {card_name}\n{content}", user_id),
+        text.TXT_CHAR_NEW_PRIVATE.format(name=card_name),
+    )
+
+
+# =========================================================================
+# 模板 / 查看 / 状态 / 删除
+# =========================================================================
 
 
 @pytest.mark.asyncio
 async def test_char_template(app: App):
-    """.角色卡模板 → 示例角色卡文本 + 段落填写提示（含熟练段与先攻写法）。"""
+    """.角色卡模板 → 示例卡 + 新命令提示（提示不含 $）。"""
     from nonebot_plugin_dnddicer.character.services import gen_template_char
-    from nonebot_plugin_dnddicer.commands.character import _gen_template_feedback, char_matcher
+    from nonebot_plugin_dnddicer.commands.character import (
+        _gen_template_feedback,
+        char_matcher,
+    )
 
     expected = _gen_template_feedback()
-    assert "$" not in expected.split("——提示")[1], "提示说明文字不得含 $ 字符"
-    assert "熟练段 = 技能/豁免/先攻条目（2*为专精），可加护甲/武器/工具/语言分组\n" in expected
-    assert "属性调整值、豁免与技能加值由骰娘按等级与熟练自动计算，无需另填\n" in expected
-    assert expected.endswith(
-        "额外加值段键 = 六属性/技能/豁免条目/豁免（作用于全部豁免）\n"
-        "额外加值取值 = 可选 优势/劣势 ±掷骰表达式, 如: 隐匿:优势+2\n"
-        "武器段格式 = 名称+命中加值,伤害表达式+类型[,备注]（多项用 / 分隔）\n"
-        "限定资源段格式 = 名称:当前/上限恢复方式[|说明]（短休/长休/两者/手动，可加 +N 或 满）\n"
-        "法术段格式 = 施法属性:属性; 豁免DC:15; 法术攻击:+8; 法术名:环阶[*][|时间=…,距离=…,专注=是,仪式=否,材料=是,备注=…]\n"
-        "法术位段格式 = 环阶:当前/上限（契约魔法写 契约3:2/2），多项用 ; 分隔\n"
-        "战斗段格式 = AC:18; 速度:30（先攻、被动察觉由骰娘按属性、熟练与额外加值自动计算，不需要写）\n"
-        "进度段格式 = 经验:6500; 激励:有（下一级经验由骰娘按等级计算）\n"
-        "专长 / 种族特性段多项用 / 分隔，可写 名称:说明；职业特性写 等级|名称:说明\n"
-        "物品段格式 = 名称x数量，多项用 ; 分隔；魔法物品段格式 = 名称|标签|说明（说明用 // 分段）\n"
-        "钱币段格式 = CP:0; SP:8; EP:0; GP:18; PP:0\n"
-        "背景段为固定键:值（5e 另有理想/羁绊/缺点），多项用 ; 分隔；故事段可多行/多段（最多 1000 字，换行不计）；战斗记录段每项用 ; 分隔"
-    )
+    assert "$" not in expected.split("——提示")[1]
+    assert ".角色卡新建 <卡名> <完整卡内容>" in expected
+    assert ".角色卡修改 <卡名> <段条目>" in expected
     assert gen_template_char().get_char_info() in expected
 
-    event = _event(".角色卡模板")
-    await _expect(app, char_matcher, event, expected)
+    await _expect(app, char_matcher, _event(".角色卡模板"), expected)
 
 
 @pytest.mark.asyncio
 async def test_char_miss(app: App):
-    """无卡时查看 → 找不到角色卡。"""
+    """群内未绑定 → 统一的未绑定提示。"""
     from nonebot_plugin_dnddicer.commands.character import char_matcher
 
-    event = _event(".角色卡", user_id=10002)
-    await _expect(app, char_matcher, event, "找不到角色卡")
+    await _expect(app, char_matcher, _event(".角色卡", 10002), text.TXT_CHAR_MISS)
 
 
 @pytest.mark.asyncio
 async def test_char_set_and_view(app: App):
-    """记录 → 成功；再查看 → 输出与存储一致的卡文本。"""
+    """群内新建自动绑定；.角色卡 输出可复制卡文本。"""
     from nonebot_plugin_dnddicer.commands.character import char_matcher
     from nonebot_plugin_dnddicer.data.characters import get_character
 
-    await _expect(app, char_matcher, _event(_RECORD, user_id=10003), "角色卡已设置")
-
+    await _create(app, 10003)
     char = await get_character(_GROUP, 10003)
     assert char is not None and char.name == "伊丽莎白"
     expected = char.get_char_info()
     assert "$姓名$ 伊丽莎白" in expected
-    assert "$属性$ 15/14/13/12/10/8" in expected
-
-    event = _event(".角色卡", user_id=10003)
-    await _expect(app, char_matcher, event, expected)
+    await _expect(app, char_matcher, _event(".角色卡", 10003), expected)
 
 
 @pytest.mark.asyncio
 async def test_char_state(app: App):
-    """.状态 → HP 摘要（记录中含生命值/生命骰）。"""
+    """.状态 → HP 摘要；私聊多卡需带卡名。"""
     from nonebot_plugin_dnddicer.commands.character import char_matcher, state_matcher
 
-    await _expect(app, char_matcher, _event(_RECORD, user_id=10008), "角色卡已设置")
-
-    event = _event(".状态", user_id=10008)
+    await _create(app, 10008)
     await _expect(
-        app,
-        state_matcher,
-        event,
+        app, state_matcher, _event(".状态", 10008),
         "HP:20/30 (5)\n生命骰:3/4 D8",
+    )
+    await _create_private(app, 10008, card_name="私卡", content=_RECORD)
+    await _expect(
+        app, state_matcher, _private(".状态", 10008),
+        text.TXT_CHAR_NEED_NAME.format(count=2),
+    )
+    await _expect(
+        app, state_matcher, _private(".状态 私卡", 10008),
+        "私卡: HP:20/30 (5)\n生命骰:3/4 D8",
     )
 
 
 @pytest.mark.asyncio
-async def test_char_delete(app: App):
-    """清除后 → 找不到角色卡。"""
+async def test_char_delete_requires_unbind_and_confirm(app: App):
+    """删除已绑定卡拒绝；解绑后仍需确认。"""
     from nonebot_plugin_dnddicer.commands.character import char_matcher
 
-    await _expect(app, char_matcher, _event(_RECORD, user_id=10005), "角色卡已设置")
-    await _expect(app, char_matcher, _event(".角色卡清除", user_id=10005), "角色卡已删除")
-    await _expect(app, char_matcher, _event(".角色卡", user_id=10005), "找不到角色卡")
+    await _create(app, 10005)
+    await _expect(
+        app, char_matcher, _event(".角色卡清除 测试卡 确认", 10005),
+        text.TXT_CHAR_DELETE_BOUND.format(
+            name="测试卡", groups=str(_GROUP)
+        ),
+    )
+    await _expect(
+        app, char_matcher, _event(".角色卡解绑", 10005),
+        text.TXT_CHAR_UNBIND_OK,
+    )
+    await _expect(
+        app, char_matcher, _event(".角色卡清除 测试卡", 10005),
+        text.TXT_CHAR_DELETE_CONFIRM.format(name="测试卡"),
+    )
+    await _expect(
+        app, char_matcher, _event(".角色卡清除 测试卡 确认", 10005),
+        text.TXT_CHAR_DELETE_OK.format(name="测试卡"),
+    )
+    await _expect(app, char_matcher, _event(".角色卡", 10005), text.TXT_CHAR_MISS)
+
+
+# =========================================================================
+# 新建 / 修改 / 改名 / 列表
+# =========================================================================
+
+
+@pytest.mark.asyncio
+async def test_char_new_requires_full_card(app: App):
+    """新建必须含姓名、等级与属性；失败不落库。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+
+    await _expect(
+        app, char_matcher,
+        _event(".角色卡新建 测试卡 $姓名$ 甲", 10020),
+        "必须设定等级与属性",
+    )
+    await _expect(
+        app, char_matcher,
+        _event(".角色卡新建 测试卡 $等级$ 1\n$属性$ 10/10/10/10/10/10", 10020),
+        "必须设定姓名",
+    )
+    await _expect(app, char_matcher, _event(".角色卡", 10020), text.TXT_CHAR_MISS)
+
+
+@pytest.mark.asyncio
+async def test_char_card_name_rules(app: App):
+    """卡名长度/字符/保留词/重名校验。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+
+    long_name = "卡" * 21
+    await _expect(
+        app, char_matcher,
+        _event(f".角色卡新建 {long_name}\n{_RECORD}", 10021),
+        "卡名最多 20 个字符",
+    )
+    await _expect(
+        app, char_matcher,
+        _event(f".角色卡新建 卡$名\n{_RECORD}", 10021),
+        "卡名不能包含 $ 或 @",
+    )
+    await _expect(
+        app, char_matcher,
+        _event(f".角色卡新建 列表\n{_RECORD}", 10021),
+        "卡名「列表」是保留词，请换一个",
+    )
+    await _create(app, 10021)
+    await _expect(
+        app, char_matcher,
+        _event(f".角色卡新建 测试卡\n{_RECORD}", 10021),
+        "卡名「测试卡」已存在，请换一个",
+    )
+
+
+@pytest.mark.asyncio
+async def test_char_modify_segments_and_clear(app: App):
+    """修改只覆盖提到的段；空段清空；含等级/属性的多段不整卡覆盖。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.data.characters import get_character
+
+    content = _RECORD + "\n$物品$ 治疗药水x2"
+    await _create(app, 10030, content=content)
+    await _expect(
+        app, char_matcher,
+        _event(".角色卡修改 测试卡 $姓名$ 新名字\n$物品$ 解毒药x1", 10030),
+        _MOD_OK,
+    )
+    char = await get_character(_GROUP, 10030)
+    assert char is not None
+    assert char.name == "新名字"
+    assert char.items == ["解毒药x1"]
+    assert char.ability_info.level == 5
+
+    await _expect(
+        app, char_matcher,
+        _event(".角色卡修改 测试卡 $物品$", 10030),
+        _MOD_OK,
+    )
+    char = await get_character(_GROUP, 10030)
+    assert char is not None and char.items == []
+
+    await _expect(
+        app, char_matcher,
+        _event(
+            ".角色卡修改 测试卡 $等级$ 6\n$属性$ 16/14/13/12/10/8",
+            10030,
+        ),
+        _MOD_OK,
+    )
+    char = await get_character(_GROUP, 10030)
+    assert char is not None and char.ability_info.level == 6
+    assert char.name == "新名字"
+
+
+@pytest.mark.asyncio
+async def test_char_modify_atomic_and_required_clear(app: App):
+    """未知段/空必填段整条拒绝，卡不变。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.data.characters import get_character
+
+    await _create(app, 10031)
+    await _expect(
+        app, char_matcher,
+        _event(".角色卡修改 测试卡 $不存在$ 1", 10031),
+        "未知段: $不存在$（可用段见 .角色卡模板）",
+    )
+    await _expect(
+        app, char_matcher,
+        _event(".角色卡修改 测试卡 $等级$", 10031),
+        "等级不能清空",
+    )
+    char = await get_character(_GROUP, 10031)
+    assert char is not None and char.name == "伊丽莎白"
+    assert char.ability_info.level == 5
+
+
+@pytest.mark.asyncio
+async def test_char_rename(app: App):
+    """群内改名只改绑定卡；新名重复拒绝。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+
+    await _create(app, 10032)
+    await _expect(
+        app, char_matcher, _event(".角色卡改名 测试卡 新卡名", 10032),
+        text.TXT_CHAR_RENAME_OK.format(old="测试卡", new="新卡名"),
+    )
+    await _expect(
+        app, char_matcher, _event(".角色卡列表", 10032),
+        text.TXT_CHAR_LIST_TITLE
+        + "\n新卡名（伊丽莎白，5级）"
+        + text.TXT_CHAR_LIST_BOUND.format(groups=str(_GROUP))
+        + text.TXT_CHAR_LIST_CURRENT,
+    )
+    await _create_private(
+        app, 10032, card_name="重复卡",
+        content="$姓名$ 丙\n$等级$ 1\n$属性$ 10/10/10/10/10/10",
+    )
+    await _expect(
+        app, char_matcher, _event(".角色卡改名 新卡名 重复卡", 10032),
+        "卡名「重复卡」已存在，请换一个",
+    )
+
+
+@pytest.mark.asyncio
+async def test_char_list_group_and_private(app: App):
+    """列表：群内标本群绑定；私聊列出全部卡与绑定群。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+
+    await _create(app, 10033)
+    await _create_private(
+        app, 10033, card_name="私卡甲",
+        content="$姓名$ 甲\n$等级$ 1\n$属性$ 10/10/10/10/10/10",
+    )
+    await _expect(
+        app, char_matcher, _event(".角色卡列表", 10033),
+        text.TXT_CHAR_LIST_TITLE
+        + "\n测试卡（伊丽莎白，5级）"
+        + text.TXT_CHAR_LIST_BOUND.format(groups=str(_GROUP))
+        + text.TXT_CHAR_LIST_CURRENT
+        + "\n私卡甲（甲，1级）",
+    )
+    await _expect(
+        app, char_matcher, _private(".角色卡列表", 10033),
+        text.TXT_CHAR_LIST_TITLE
+        + "\n测试卡（伊丽莎白，5级）"
+        + text.TXT_CHAR_LIST_BOUND.format(groups=str(_GROUP))
+        + "\n私卡甲（甲，1级）",
+    )
+
+
+# =========================================================================
+# 私聊多卡 / 绑定 / 解绑
+# =========================================================================
+
+
+@pytest.mark.asyncio
+async def test_char_private_multi_selection(app: App):
+    """私聊多张卡：不带卡名报错；带卡名查看/修改。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+
+    await _create_private(
+        app, 10040, card_name="卡A",
+        content="$姓名$ 甲\n$等级$ 1\n$属性$ 10/10/10/10/10/10",
+    )
+    await _create_private(
+        app, 10040, card_name="卡B",
+        content="$姓名$ 乙\n$等级$ 2\n$属性$ 10/10/10/10/10/10",
+    )
+    await _expect(
+        app, char_matcher, _private(".角色卡", 10040),
+        text.TXT_CHAR_NEED_NAME.format(count=2),
+    )
+    await _expect(
+        app, char_matcher, _private(".角色卡修改 $等级$ 3", 10040),
+        text.TXT_CHAR_NEED_NAME.format(count=2),
+    )
+    await _expect(
+        app, char_matcher, _private(".角色卡 卡A", 10040),
+        "$姓名$ 甲\n$等级$ 1\n$属性$ 10/10/10/10/10/10",
+    )
+    await _expect(
+        app, char_matcher, _private(".角色卡修改 卡A $等级$ 3", 10040),
+        text.TXT_CHAR_MODIFY_OK.format(name="卡A"),
+    )
+    await _expect(
+        app, char_matcher, _private(".角色卡 卡A", 10040),
+        "$姓名$ 甲\n$等级$ 3\n$属性$ 10/10/10/10/10/10",
+    )
+    await _expect(
+        app, char_matcher, _private(".角色卡 @123", 10040),
+        text.TXT_CHAR_PRIVATE_TARGET_UNSUPPORTED,
+    )
+
+
+@pytest.mark.asyncio
+async def test_char_private_single_omits_name(app: App):
+    """私聊只有一张卡时可省略卡名。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+
+    await _create_private(app, 10041, card_name="唯一卡", content=_RECORD)
+    await _expect(
+        app, char_matcher, _private(".角色卡", 10041),
+        "$姓名$ 伊丽莎白\n$生命值$ 20/30 (5)\n$生命骰$ 3/4 D8\n"
+        "$等级$ 5\n$属性$ 15/14/13/12/10/8\n"
+        "$熟练$ 力量/隐匿\n$额外加值$ 隐匿:优势",
+    )
+    await _expect(
+        app, char_matcher, _private(".角色卡修改 $物品$ 治疗药水x2", 10041),
+        text.TXT_CHAR_MODIFY_OK.format(name="唯一卡"),
+    )
+
+
+@pytest.mark.asyncio
+async def test_char_private_bind_and_unbind(app: App):
+    """私聊按群号绑定/解绑；骰娘不在群时拒绝。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+
+    await _create_private(app, 10042, card_name="私卡", content=_RECORD)
+    bind_event = _private(f".角色卡绑定 私卡 {_GROUP}", 10042)
+    async with app.test_matcher(char_matcher) as ctx:
+        adapter = ctx.create_adapter(base=OnebotV11Adapter)
+        bot = ctx.create_bot(base=Bot, adapter=adapter)
+        ctx.should_call_api(
+            "get_group_list", data={}, result=[{"group_id": _GROUP}]
+        )
+        ctx.should_call_send(
+            bind_event,
+            text.TXT_CHAR_BIND_OK.format(name="私卡", group=_GROUP)
+            + text.TXT_CHAR_BIND_PRIVATE_HINT,
+        )
+        ctx.receive_event(bot, bind_event)
+
+    await _expect(
+        app, char_matcher, _event(".角色卡", 10042),
+        "$姓名$ 伊丽莎白\n$生命值$ 20/30 (5)\n$生命骰$ 3/4 D8\n"
+        "$等级$ 5\n$属性$ 15/14/13/12/10/8\n"
+        "$熟练$ 力量/隐匿\n$额外加值$ 隐匿:优势",
+    )
+
+    await _expect(
+        app, char_matcher, _private(f".角色卡解绑 {_GROUP}", 10042),
+        text.TXT_CHAR_UNBIND_PRIVATE_OK.format(group=_GROUP),
+    )
+    await _expect(app, char_matcher, _event(".角色卡", 10042), text.TXT_CHAR_MISS)
+
+    await _create_private(
+        app, 10043, card_name="私卡2",
+        content="$姓名$ 丙\n$等级$ 1\n$属性$ 10/10/10/10/10/10",
+    )
+    bad_event = _private(f".角色卡绑定 私卡2 {_OTHER_GROUP}", 10043)
+    async with app.test_matcher(char_matcher) as ctx:
+        adapter = ctx.create_adapter(base=OnebotV11Adapter)
+        bot = ctx.create_bot(base=Bot, adapter=adapter)
+        ctx.should_call_api("get_group_list", data={}, result=[{"group_id": _GROUP}])
+        ctx.should_call_send(
+            bad_event,
+            text.TXT_CHAR_BIND_GROUP_MISSING.format(group=_OTHER_GROUP),
+        )
+        ctx.receive_event(bot, bad_event)
+
+
+@pytest.mark.asyncio
+async def test_char_group_modify_only_bound(app: App):
+    """群内只能修改本群绑定卡；私聊卡不参与。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+
+    await _create(app, 10044)
+    await _create_private(
+        app, 10044, card_name="私卡",
+        content="$姓名$ 甲\n$等级$ 1\n$属性$ 10/10/10/10/10/10",
+    )
+    await _expect(
+        app, char_matcher,
+        _event(".角色卡修改 私卡 $等级$ 2", 10044),
+        text.TXT_CHAR_MODIFY_GROUP_MISMATCH.format(name="测试卡"),
+    )
+    await _expect(
+        app, char_matcher,
+        _event(".角色卡修改 $等级$ 6", 10044),
+        _MOD_OK,
+    )
+
+
+@pytest.mark.asyncio
+async def test_char_group_new_and_bind_replace(app: App):
+    """群内新建会替换本群绑定；群内也可绑定私聊建好的卡。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.data.characters import get_character
+
+    await _create(app, 10050)
+    await _create_private(
+        app, 10050, card_name="卡B",
+        content="$姓名$ 乙\n$等级$ 2\n$属性$ 10/10/10/10/10/10",
+    )
+    await _expect(
+        app, char_matcher,
+        _event(
+            ".角色卡新建 卡C\n$姓名$ 丙\n$等级$ 3\n$属性$ 10/10/10/10/10/10",
+            10050,
+        ),
+        text.TXT_CHAR_NEW_GROUP_REPLACED.format(name="卡C", old="测试卡"),
+    )
+    loaded = await get_character(_GROUP, 10050)
+    assert loaded is not None and loaded.name == "丙"
+
+    await _expect(
+        app, char_matcher, _event(".角色卡绑定 卡B", 10050),
+        text.TXT_CHAR_BIND_REPLACED.format(
+            name="卡B", group=_GROUP, old="卡C"
+        ),
+    )
+    loaded = await get_character(_GROUP, 10050)
+    assert loaded is not None and loaded.name == "乙"
+
+
+@pytest.mark.asyncio
+async def test_char_record_retired_default_error(app: App):
+    """.角色卡记录 不再特殊处理：按普通未匹配走默认错误，卡不变。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.data.characters import get_character
+
+    await _create(app, 10045)
+    await _expect(
+        app, char_matcher,
+        _event(".角色卡记录 $等级$ 1", 10045),
+        text.TXT_CHAR_TARGET_MISS.format(name="记录 $等级$ 1"),
+    )
+    char = await get_character(_GROUP, 10045)
+    assert char is not None and char.ability_info.level == 5
+
+    await _create_private(app, 10046, card_name="单卡", content=_RECORD)
+    await _expect(
+        app, char_matcher,
+        _private(".角色卡记录 $等级$ 1", 10046),
+        text.TXT_CHAR_NAME_MISS.format(name="记录 $等级$ 1"),
+    )
+
+
+# =========================================================================
+# 检定类点命令
+# =========================================================================
 
 
 @pytest.mark.asyncio
 async def test_check_strength_full_feedback(app: App):
-    """.力量检定 → 完整检定反馈（属性检定展示名=力量检定；骰 10，力量 15 → 15）。"""
+    """.力量检定 → 完整检定反馈（力量 15 + 力量熟练 3，骰 10 → 15）。"""
     from nonebot_plugin_dnddicer.commands.character import char_matcher, check_matcher
 
-    await _expect(app, char_matcher, _event(_RECORD, user_id=10006), "角色卡已设置")
-
+    await _create(app, 10006)
     token = set_runtime(SequenceRuntime([10]))
     try:
-        event = _event(".力量检定", user_id=10006)
-        # 伊丽莎白 5级 力量15：熟练(力量熟练)加值 3 + 力量调整 2，骰 10 → 15
         expected = (
             "伊丽莎白进行【力量检定】：\n"
             "熟练加值:3 力量调整值:2\n"
             "1D20+2+3=[10]+2+3=15"
         )
-        await _expect(app, check_matcher, event, expected)
+        await _expect(app, check_matcher, _event(".力量检定", 10006), expected)
     finally:
         reset_runtime(token)
 
 
 @pytest.mark.asyncio
 async def test_check_saving_display_name(app: App):
-    """.体质豁免 → 展示名用原名（不含「检定」后缀）。"""
+    """.体质豁免 → 展示名用原名。"""
     from nonebot_plugin_dnddicer.commands.character import char_matcher, check_matcher
 
-    await _expect(app, char_matcher, _event(_RECORD, user_id=10009), "角色卡已设置")
-
-    # 伊丽莎白 体质13 → 调整+1，未熟练（默认全不熟练）
+    await _create(app, 10009)
     token = set_runtime(SequenceRuntime([9]))
     try:
-        event = _event(".体质豁免", user_id=10009)
         expected = (
             "伊丽莎白进行【体质豁免】：\n"
             "无熟练加值 体质调整值:1\n"
             "1D20+1=[9]+1=10"
         )
-        await _expect(app, check_matcher, event, expected)
+        await _expect(app, check_matcher, _event(".体质豁免", 10009), expected)
     finally:
         reset_runtime(token)
 
 
 @pytest.mark.asyncio
 async def test_check_miss_without_char(app: App):
-    """无卡时检定 → 找不到角色卡。"""
+    """无卡时检定 → 统一未绑定提示。"""
     from nonebot_plugin_dnddicer.commands.character import check_matcher
 
-    event = _event(".力量检定", user_id=10007)
-    await _expect(app, check_matcher, event, "找不到角色卡")
+    await _expect(app, check_matcher, _event(".力量检定", 10007), text.TXT_CHAR_MISS)
 
 
 @pytest.mark.asyncio
 async def test_check_critical_success_and_failure(app: App):
-    """.力量检定 掷 20/1 → 播报大成功/大失败（单独成行，与 .r 同文案）。"""
+    """.力量检定 掷 20/1 → 大成功/大失败播报。"""
     from nonebot_plugin_dnddicer.commands.character import char_matcher, check_matcher
 
-    await _expect(app, char_matcher, _event(_RECORD, user_id=10010), "角色卡已设置")
-
+    await _create(app, 10010)
     token = set_runtime(SequenceRuntime([20]))
     try:
-        event = _event(".力量检定", user_id=10010)
         expected = (
             "伊丽莎白进行【力量检定】：\n"
             "熟练加值:3 力量调整值:2\n"
             "1D20+2+3=[20]+2+3=25\n"
             "好耶！大成功!"
         )
-        await _expect(app, check_matcher, event, expected)
+        await _expect(app, check_matcher, _event(".力量检定", 10010), expected)
     finally:
         reset_runtime(token)
 
     token = set_runtime(SequenceRuntime([1]))
     try:
-        event = _event(".力量检定", user_id=10010)
         expected = (
             "伊丽莎白进行【力量检定】：\n"
             "熟练加值:3 力量调整值:2\n"
             "1D20+2+3=[1]+2+3=6\n"
             "哇哦！大失败!"
         )
-        await _expect(app, check_matcher, event, expected)
+        await _expect(app, check_matcher, _event(".力量检定", 10010), expected)
     finally:
         reset_runtime(token)
 
 
 @pytest.mark.asyncio
 async def test_check_multi_critical_summary(app: App):
-    """.2#力量检定 连掷出大成功/大失败 → 汇总另起一行（与 .r 连掷同规则）。"""
+    """.2#力量检定 连掷 → 汇总另起一行。"""
     from nonebot_plugin_dnddicer.commands.character import char_matcher, check_matcher
 
-    await _expect(app, char_matcher, _event(_RECORD, user_id=10010), "角色卡已设置")
-
+    await _create(app, 10011)
     token = set_runtime(SequenceRuntime([20, 1]))
     try:
-        event = _event(".2#力量检定", user_id=10010)
         expected = (
             "伊丽莎白进行【2次力量检定】：\n"
             "熟练加值:3 力量调整值:2\n"
@@ -248,48 +651,48 @@ async def test_check_multi_critical_summary(app: App):
             "1D20+2+3=[1]+2+3=6\n"
             "1次 大成功 1次 大失败"
         )
-        await _expect(app, check_matcher, event, expected)
+        await _expect(app, check_matcher, _event(".2#力量检定", 10011), expected)
     finally:
         reset_runtime(token)
 
 
 # =========================================================================
-# @ 提及目标（2026-09-22：查看他人整卡 / .状态 / 代掷）
+# @ 目标
 # =========================================================================
 
 
-def _mention_event(*parts, user_id: int = 31000):
-    """构造带 @ 段的群消息事件（parts 依次拼接，可为文本或消息段）。"""
+def _mention_event(*parts, user_id: int = 31000, group_id: int = _GROUP):
     message = Message()
     for part in parts:
         message += part
     return fake_group_message_event_v11(
-        message=message, group_id=_GROUP, user_id=user_id
+        message=message, group_id=group_id, user_id=user_id
     )
 
 
 @pytest.mark.asyncio
 async def test_char_view_other_by_mention_and_name(app: App):
-    """.角色卡 @玩家 与 .角色卡 名称 → 查看他人整卡（含标题行，两种写法等价）。"""
+    """.角色卡 @玩家 与 .角色卡 角色名 → 查看他人本群绑定卡。"""
     from nonebot_plugin_dnddicer.commands.character import char_matcher
     from nonebot_plugin_dnddicer.data.characters import get_character
 
-    await _expect(app, char_matcher, _event(_RECORD, user_id=31010), "角色卡已设置")
+    await _create(app, 31010)
     target = await get_character(_GROUP, 31010)
     assert target is not None
     expected = "伊丽莎白 的角色卡：\n" + target.get_char_info()
-
     await _expect(
         app, char_matcher,
         _mention_event(".角色卡 ", MessageSegment.at(31010)),
         expected,
     )
-    await _expect(app, char_matcher, _event(".角色卡 伊丽莎白"), expected)
+    await _expect(
+        app, char_matcher, _event(".角色卡 伊丽莎白", 31000), expected
+    )
 
 
 @pytest.mark.asyncio
 async def test_char_view_other_misses(app: App):
-    """查看他人未命中：@ 无卡引导 / 名称命中NPC条目 / 名称查无此卡。"""
+    """@ 无卡 / NPC 条目 / 查无此卡。"""
     from nonebot_plugin_dnddicer.commands.character import char_matcher
     from nonebot_plugin_dnddicer.commands.initiative import initiative_matcher
 
@@ -308,38 +711,33 @@ async def test_char_view_other_misses(app: App):
     await _expect(
         app, char_matcher,
         _mention_event(".角色卡 ", MessageSegment.at(39990)),
-        Message(MessageSegment.at("39990"))
-        + " 还没有在本群建立角色卡（可用 .角色卡记录 建卡后再试）",
+        Message(MessageSegment.at("39990")) + " 未在本群绑定角色卡",
     )
 
 
 @pytest.mark.asyncio
 async def test_char_record_and_clear_write_self_only(app: App):
-    """记录/清除恒为发送者本人：带 @他人 不改变他人卡（查看开放、修改仅本人）。"""
+    """新建/清除恒为本人；他人的卡不受影响。"""
     from nonebot_plugin_dnddicer.commands.character import char_matcher
     from nonebot_plugin_dnddicer.data.characters import get_character
 
-    await _expect(app, char_matcher, _event(_RECORD, user_id=31011), "角色卡已设置")
-    # 发送者 31000 带 @31011 记录 → 只写自己的卡
-    await _expect(
-        app, char_matcher,
-        _mention_event(
-            ".角色卡记录 ",
-            MessageSegment.at(31011),
-            " $姓名$ 自己的卡\n$等级$ 1\n$属性$ 10/10/10/10/10/10",
-        ),
-        "角色卡已设置",
+    await _create(app, 31011)
+    await _create(
+        app, 31000, card_name="自己的卡",
+        content="$姓名$ 自己的卡\n$等级$ 1\n$属性$ 10/10/10/10/10/10",
+        expected=text.TXT_CHAR_NEW_GROUP.format(name="自己的卡"),
     )
     sender = await get_character(_GROUP, 31000)
     target = await get_character(_GROUP, 31011)
     assert sender is not None and sender.name == "自己的卡"
     assert target is not None and target.name == "伊丽莎白"
 
-    # 发送者带 @31011 清除 → 只删自己的卡
     await _expect(
-        app, char_matcher,
-        _mention_event(".角色卡清除 ", MessageSegment.at(31011)),
-        "角色卡已删除",
+        app, char_matcher, _event(".角色卡解绑", 31000), text.TXT_CHAR_UNBIND_OK
+    )
+    await _expect(
+        app, char_matcher, _event(".角色卡清除 自己的卡 确认", 31000),
+        text.TXT_CHAR_DELETE_OK.format(name="自己的卡"),
     )
     assert await get_character(_GROUP, 31000) is None
     assert await get_character(_GROUP, 31011) is not None
@@ -347,10 +745,10 @@ async def test_char_record_and_clear_write_self_only(app: App):
 
 @pytest.mark.asyncio
 async def test_state_mention_target(app: App):
-    """.状态 @玩家 → 带角色名前缀的他人状态；无卡 → 真 @ 段引导。"""
+    """.状态 @玩家 → 他人本群绑定卡；无卡 → @ 引导。"""
     from nonebot_plugin_dnddicer.commands.character import char_matcher, state_matcher
 
-    await _expect(app, char_matcher, _event(_RECORD, user_id=31012), "角色卡已设置")
+    await _create(app, 31012)
     await _expect(
         app, state_matcher,
         _mention_event(".状态 ", MessageSegment.at(31012)),
@@ -359,18 +757,16 @@ async def test_state_mention_target(app: App):
     await _expect(
         app, state_matcher,
         _mention_event(".状态 ", MessageSegment.at(39992)),
-        Message(MessageSegment.at("39992"))
-        + " 还没有在本群建立角色卡（可用 .角色卡记录 建卡后再试）",
+        Message(MessageSegment.at("39992")) + " 未在本群绑定角色卡",
     )
 
 
 @pytest.mark.asyncio
 async def test_check_mention_target(app: App):
-    """.力量豁免 @玩家 / .敏捷豁免优势 @玩家 → 用目标角色卡代掷。"""
+    """.力量豁免 @玩家 / .敏捷豁免优势 @玩家 → 用目标卡代掷。"""
     from nonebot_plugin_dnddicer.commands.character import char_matcher, check_matcher
 
-    await _expect(app, char_matcher, _event(_RECORD, user_id=31013), "角色卡已设置")
-
+    await _create(app, 31013)
     token = set_runtime(SequenceRuntime([9]))
     try:
         await _expect(
@@ -393,7 +789,6 @@ async def test_check_mention_target(app: App):
     finally:
         reset_runtime(token)
 
-    # 连掷：.2#敏捷豁免 @玩家 → 两次代掷
     token = set_runtime(SequenceRuntime([3, 4]))
     try:
         await _expect(
@@ -408,38 +803,29 @@ async def test_check_mention_target(app: App):
 
 @pytest.mark.asyncio
 async def test_check_mention_no_char(app: App):
-    """检定点命令的 @ 目标无卡 → 真 @ 段引导建卡。"""
+    """检定点 @ 目标无卡 → 真 @ 段引导。"""
     from nonebot_plugin_dnddicer.commands.character import check_matcher
 
     await _expect(
         app, check_matcher,
         _mention_event(".力量豁免 ", MessageSegment.at(39993)),
-        Message(MessageSegment.at("39993"))
-        + " 还没有在本群建立角色卡（可用 .角色卡记录 建卡后再试）",
+        Message(MessageSegment.at("39993")) + " 未在本群绑定角色卡",
     )
 
 
 @pytest.mark.asyncio
 async def test_check_initiative_mention_binds_owner(app: App):
-    """.先攻检定 @玩家 → 以该玩家为 owner 入先攻表（与 .ri @玩家 同源）。"""
+    """.先攻检定 @玩家 → 以该玩家为 owner 入先攻表。"""
     from nonebot_plugin_dnddicer.commands.character import char_matcher, check_matcher
     from nonebot_plugin_dnddicer.commands.initiative import initiative_matcher
     from nonebot_plugin_dnddicer.data.initiative import get_init_list
 
     g = 100050
-    await _expect(
-        app, char_matcher,
-        fake_group_message_event_v11(
-            message=Message(f".角色卡记录 {_RECORD}"), group_id=g, user_id=31015
-        ),
-        "角色卡已设置",
-    )
+    await _create(app, 31015, group_id=g)
     token = set_runtime(SequenceRuntime([5]))
     try:
-        event = fake_group_message_event_v11(
-            message=Message(".先攻检定 ") + MessageSegment.at(31015),
-            group_id=g,
-            user_id=31000,
+        event = _mention_event(
+            ".先攻检定 ", MessageSegment.at(31015), user_id=31000, group_id=g
         )
         await _expect(
             app, check_matcher, event,
@@ -455,35 +841,16 @@ async def test_check_initiative_mention_binds_owner(app: App):
         ("伊丽莎白", "31015", 7)
     ]
     await _expect(
-        app, initiative_matcher,
-        fake_group_message_event_v11(
-            message=Message(".init"), group_id=g, user_id=31000
-        ),
+        app, initiative_matcher, _event(".init", 31000, g),
         "先攻列表如下: \n当前是第1轮,伊丽莎白的回合\n1.伊丽莎白 先攻:7 HP:20/30 (5)",
     )
 
 
-# ── 私聊（仅群聊可用的命令在私聊要给出提示，而不是静默）────────────────────
-
-
-@pytest.mark.asyncio
-async def test_char_private_denied(app: App):
-    """私聊使用 .角色卡 → 提示仅群聊可用。
-
-    角色卡按「群」存放，私聊没有本群上下文；提示必须真的发得出去——
-    处理器事件参数若注成 GroupMessageEvent，私聊事件在参数注入阶段就被滤掉、
-    整个处理器不执行（表现为静默），与其他命令族的提示口径不一致。
-    """
-    from nonebot_plugin_dnddicer.commands.character import char_matcher
-
-    event = fake_private_message_event_v11(message=Message(".角色卡"))
-    await _expect(app, char_matcher, event, "该指令仅在群聊中可用。")
-
-
 @pytest.mark.asyncio
 async def test_check_private_denied(app: App):
-    """私聊使用检定点命令 → 提示仅群聊可用（检定读的是本群角色卡，同上）。"""
+    """检定点仍在私聊提示仅群聊可用。"""
     from nonebot_plugin_dnddicer.commands.character import check_matcher
 
-    event = fake_private_message_event_v11(message=Message(".力量检定"))
-    await _expect(app, check_matcher, event, "该指令仅在群聊中可用。")
+    await _expect(
+        app, check_matcher, _private(".力量检定"), text.TXT_GROUP_ONLY
+    )

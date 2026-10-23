@@ -27,7 +27,7 @@ def _clear_store():
 
     _chars._cache = None
     _group_config._cache = None
-    for name in ("characters.json", "group_config.json"):
+    for name in ("cards.json", "group_config.json"):
         path = get_data_file(name)
         if path.exists():
             path.write_text("{}", encoding="utf-8")
@@ -70,8 +70,8 @@ async def _record(app: App, card: str, user_id: int = 24001, group_id: int = _GR
 
     await _expect(
         app, char_matcher,
-        _event(f".角色卡记录\n{card}", user_id=user_id, group_id=group_id),
-        "角色卡已设置",
+        _event(f".角色卡新建 测试卡\n{card}", user_id=user_id, group_id=group_id),
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
 
 

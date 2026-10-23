@@ -41,7 +41,7 @@ def _clear_data():
 
     for module in (_chars, _group_config, _init, _npc):
         module._cache = None
-    for name in ("characters.json", "group_config.json", "initiative.json",
+    for name in ("cards.json", "group_config.json", "initiative.json",
                  "npc_health.json"):
         path = get_data_file(name)
         if path.exists():
@@ -75,8 +75,27 @@ def _roll(seq):
     return set_runtime(SequenceRuntime(seq))
 
 
+async def _create_card(
+    app: App, uid: int, *, group_id: int = _GROUP, name: str = "test"
+) -> None:
+    """建一张只有姓名/等级/属性的卡并绑定到群。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+
+    content = (
+        f".角色卡新建 测试卡 $姓名$ {name}\n"
+        "$等级$ 1\n$属性$ 10/10/10/10/10/10"
+    )
+    await _expect(
+        app,
+        char_matcher,
+        _event(content, uid, group_id),
+        "已新建角色卡「测试卡」并绑定到本群。",
+    )
+
+
 async def _die(app: App, hp_matcher, uid: int, *, hp: str = "10/30", damage: int = 10):
-    """把角色打到 0 HP 进入濒死（先记录 HP 再受一次伤害）。"""
+    """把角色打到 0 HP 进入濒死（先建卡、记录 HP，再受一次伤害）。"""
+    await _create_card(app, uid)
     await _expect(app, hp_matcher, _event(f".hp {hp}", uid), f"test: HP={hp}\n当前HP:{hp}")
     max_hp = hp.split("/")[1]
     await _expect(
@@ -120,6 +139,7 @@ async def test_hp_damage_over_max_is_instant_death(app: App):
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
 
     uid = 21003
+    await _create_card(app, 21003)
     await _expect(app, hp_matcher, _event(".hp 30/30", uid), "test: HP=30/30\n当前HP:30/30")
     await _expect(
         app, hp_matcher, _event(".hp -30", uid),
@@ -147,6 +167,7 @@ async def test_hp_dead_character_not_revived_by_heal(app: App):
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
 
     uid = 21005
+    await _create_card(app, 21005)
     await _expect(app, hp_matcher, _event(".hp 20/20", uid), "test: HP=20/20\n当前HP:20/20")
     await _expect(
         app, hp_matcher, _event(".hp -20", uid),
@@ -168,9 +189,9 @@ async def test_hp_weapon_critical_records_two_failures(app: App):
     uid = 21006
     await _expect(
         app, char_matcher,
-        _event(".角色卡记录 $姓名$ 甲 $等级$ 1 $生命值$ 10/30 "
+        _event(".角色卡新建 测试卡 $姓名$ 甲 $等级$ 1 $生命值$ 10/30 "
                "$属性$ 10/10/10/10/10/10 $武器$ 短剑+5,1d8+3穿刺", uid),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
     await _expect(
         app, hp_matcher, _event(".hp -10", uid),
@@ -244,6 +265,7 @@ async def test_hp_stun_to_one_hp_in_2024_group(app: App):
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
 
     uid = 23001
+    await _create_card(app, 23001)
     await _expect(app, hp_matcher, _event(".hp 20/30", uid), "test: HP=20/30\n当前HP:20/30")
     await _expect(
         app, hp_matcher, _event(".hp -25 击晕", uid),
@@ -258,6 +280,7 @@ async def test_hp_stun_to_zero_stable_in_2014_group(app: App):
     from nonebot_plugin_dnddicer.commands.hp import ds_matcher, hp_matcher
 
     group, uid = 23002, 23003
+    await _create_card(app, 23003, group_id=23002)
     await _set_rules_version(group, "2014")
     await _expect(app, hp_matcher, _event(".hp 20/30", uid, group),
                   "test: HP=20/30\n当前HP:20/30")
@@ -296,7 +319,7 @@ async def test_ds_no_character_card(app: App):
     """.ds 无角色卡 → 提示建卡。"""
     from nonebot_plugin_dnddicer.commands.hp import ds_matcher
 
-    await _expect(app, ds_matcher, _event(".ds", 22001), "找不到角色卡")
+    await _expect(app, ds_matcher, _event(".ds", 22001), "你还没有在本群绑定角色卡，可发 .角色卡列表 查看卡库并绑定")
 
 
 @pytest.mark.asyncio
@@ -305,6 +328,7 @@ async def test_ds_hp_above_zero(app: App):
     from nonebot_plugin_dnddicer.commands.hp import ds_matcher, hp_matcher
 
     uid = 22002
+    await _create_card(app, 22002)
     await _expect(app, hp_matcher, _event(".hp 20/30", uid), "test: HP=20/30\n当前HP:20/30")
     await _expect(app, ds_matcher, _event(".ds", uid), "HP 大于 0，无需死亡豁免。")
 

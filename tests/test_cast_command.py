@@ -38,7 +38,7 @@ def _clear_store():
     _chars._cache = None
     _group_config._cache = None
     _spell_settings._cache = None
-    for name in ("characters.json", "group_config.json", "spell_settings.json"):
+    for name in ("cards.json", "group_config.json", "spell_settings.json"):
         path = get_data_file(name)
         if path.exists():
             path.write_text("{}", encoding="utf-8")
@@ -64,8 +64,8 @@ async def _record(app: App, card: str, user_id: int = 25001, group_id: int = _GR
 
     await _expect(
         app, char_matcher,
-        _event(f".角色卡记录\n{card}", user_id=user_id, group_id=group_id),
-        "角色卡已设置",
+        _event(f".角色卡新建 测试卡\n{card}", user_id=user_id, group_id=group_id),
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
 
 
@@ -319,7 +319,7 @@ async def test_cast_errors(app: App):
 async def test_cast_requires_character(app: App):
     from nonebot_plugin_dnddicer.commands.spell import cast_matcher
 
-    await _expect(app, cast_matcher, _event(".施法 火球术"), "找不到角色卡")
+    await _expect(app, cast_matcher, _event(".施法 火球术"), "你还没有在本群绑定角色卡，可发 .角色卡列表 查看卡库并绑定")
 
 
 @pytest.mark.asyncio

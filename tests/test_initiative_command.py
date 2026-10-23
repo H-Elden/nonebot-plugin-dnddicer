@@ -1,6 +1,6 @@
 """.init/.ri/.先攻 nonebug 测试 + InitList 模型单元测试。
 
-存储隔离：每个用例独立群号（先攻表按群隔离）；清理 characters.json 防止
+存储隔离：每个用例独立群号（先攻表按群隔离）；清理 cards.json 防止
 角色卡名解析（resolve_self_name）受历史数据影响。掷骰用 SequenceRuntime。
 """
 
@@ -14,7 +14,7 @@ from fake_event import fake_group_message_event_v11
 from nonebot_plugin_dnddicer.engine.roll.karma_runtime import reset_runtime, set_runtime
 from nonebot_plugin_dnddicer.engine.roll.sequence_runtime import SequenceRuntime
 
-_CLEAN_FILES = ("initiative.json", "characters.json")
+_CLEAN_FILES = ("initiative.json", "cards.json")
 
 
 @pytest.fixture(autouse=True)
@@ -169,7 +169,7 @@ async def test_init_inspect_shows_pc_hp(app: App):
         "$姓名$ 伊丽莎白\n$等级$ 1\n$生命值$ 20/30\n"
         "$属性$ 10/10/10/10/10/10"
     )
-    await _expect(app, char_matcher, _event(100003, f".角色卡记录 {record}", user_id=20001), "角色卡已设置")
+    await _expect(app, char_matcher, _event(100003, f".角色卡新建 测试卡 {record}", user_id=20001), "已新建角色卡「测试卡」并绑定到本群。")
 
     token = set_runtime(SequenceRuntime([7]))
     try:
@@ -406,8 +406,8 @@ async def test_check_initiative_linkage(app: App):
 
     await _expect(
         app, char_matcher,
-        _event(100020, f".角色卡记录 {_RECORD_SIMPLE}", user_id=30001),
-        "角色卡已设置",
+        _event(100020, f".角色卡新建 测试卡 {_RECORD_SIMPLE}", user_id=30001),
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
     token = set_runtime(SequenceRuntime([5]))
     try:
@@ -433,8 +433,8 @@ async def test_check_initiative_reroll_replaces(app: App):
 
     await _expect(
         app, char_matcher,
-        _event(100021, f".角色卡记录 {_RECORD_SIMPLE}", user_id=30002),
-        "角色卡已设置",
+        _event(100021, f".角色卡新建 测试卡 {_RECORD_SIMPLE}", user_id=30002),
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
     token = set_runtime(SequenceRuntime([5]))
     try:
@@ -470,8 +470,8 @@ async def test_check_initiative_20_no_critical(app: App):
 
     await _expect(
         app, char_matcher,
-        _event(100022, f".角色卡记录 {_RECORD_SIMPLE}", user_id=30003),
-        "角色卡已设置",
+        _event(100022, f".角色卡新建 测试卡 {_RECORD_SIMPLE}", user_id=30003),
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
     token = set_runtime(SequenceRuntime([20]))
     try:
@@ -509,8 +509,8 @@ async def test_ri_mention_binds_owner(app: App):
     g = 100030
     await _expect(
         app, char_matcher,
-        _event(g, f".角色卡记录 {_RECORD_SIMPLE}", user_id=30010),
-        "角色卡已设置",
+        _event(g, f".角色卡新建 测试卡 {_RECORD_SIMPLE}", user_id=30010),
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
     token = set_runtime(SequenceRuntime([10]))
     try:
@@ -543,8 +543,8 @@ async def test_ri_mention_fixed_value_and_suffix(app: App):
     g = 100031
     await _expect(
         app, char_matcher,
-        _event(g, f".角色卡记录 {_RECORD_SIMPLE}", user_id=30011),
-        "角色卡已设置",
+        _event(g, f".角色卡新建 测试卡 {_RECORD_SIMPLE}", user_id=30011),
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
     await _expect(
         app, initiative_matcher,
@@ -571,8 +571,8 @@ async def test_ri_mention_advantage_suffix(app: App):
     g = 100032
     await _expect(
         app, char_matcher,
-        _event(g, f".角色卡记录 {_RECORD_SIMPLE}", user_id=30012),
-        "角色卡已设置",
+        _event(g, f".角色卡新建 测试卡 {_RECORD_SIMPLE}", user_id=30012),
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
     token = set_runtime(SequenceRuntime([9, 7]))
     try:
@@ -595,8 +595,8 @@ async def test_ri_mention_mixed_with_npc(app: App):
     g = 100033
     await _expect(
         app, char_matcher,
-        _event(g, f".角色卡记录 {_RECORD_SIMPLE}", user_id=30013),
-        "角色卡已设置",
+        _event(g, f".角色卡新建 测试卡 {_RECORD_SIMPLE}", user_id=30013),
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
     token = set_runtime(SequenceRuntime([3, 4]))
     try:
@@ -626,7 +626,7 @@ async def test_ri_mention_no_char_and_batch_guard(app: App):
         app, initiative_matcher,
         _mention_event(g, ".ri+3 ", MessageSegment.at(39999), user_id=30000),
         Message(MessageSegment.at("39999"))
-        + " 还没有在本群建立角色卡（可用 .角色卡记录 建卡后再试）；"
+        + " 未在本群绑定角色卡；"
         "如需临时加同名怪物条目，可直接写名称（.ri+3 名称）",
     )
     await _expect(
@@ -671,8 +671,8 @@ async def test_init_delete_mention_survives_rename(app: App):
     g = 100040
     await _expect(
         app, char_matcher,
-        _event(g, f".角色卡记录 {_RECORD_SIMPLE}", user_id=30020),
-        "角色卡已设置",
+        _event(g, f".角色卡新建 测试卡 {_RECORD_SIMPLE}", user_id=30020),
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
     await _expect(
         app, initiative_matcher,
@@ -684,10 +684,10 @@ async def test_init_delete_mention_survives_rename(app: App):
         app, char_matcher,
         _event(
             g,
-            ".角色卡记录 $姓名$ 白伊丽莎\n$等级$ 1\n$属性$ 10/10/10/10/10/10",
+            ".角色卡修改 测试卡 $姓名$ 白伊丽莎\n$等级$ 1\n$属性$ 10/10/10/10/10/10",
             user_id=30020,
         ),
-        "角色卡已设置",
+        "角色卡「测试卡」已修改",
     )
     await _expect(
         app, initiative_matcher,
@@ -706,8 +706,8 @@ async def test_init_first_mention(app: App):
     g = 100041
     await _expect(
         app, char_matcher,
-        _event(g, f".角色卡记录 {_RECORD_SIMPLE}", user_id=30021),
-        "角色卡已设置",
+        _event(g, f".角色卡新建 测试卡 {_RECORD_SIMPLE}", user_id=30021),
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
     await _expect(app, initiative_matcher, _event(g, ".ri10 地精"), "地精的先攻值是 10")
     await _expect(
@@ -738,8 +738,8 @@ async def test_init_swap_mention_and_not_in_list(app: App):
     g = 100042
     await _expect(
         app, char_matcher,
-        _event(g, f".角色卡记录 {_RECORD_SIMPLE}", user_id=30022),
-        "角色卡已设置",
+        _event(g, f".角色卡新建 测试卡 {_RECORD_SIMPLE}", user_id=30022),
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
     await _expect(app, initiative_matcher, _event(g, ".ri20 兽人"), "兽人的先攻值是 20")
     await _expect(

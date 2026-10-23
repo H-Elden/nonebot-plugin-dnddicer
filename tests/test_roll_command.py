@@ -366,7 +366,7 @@ async def test_roll_uses_char_name(app: App, roll_matcher):
     from nonebot_plugin_dnddicer.data import get_data_file
 
     _chars._cache = None
-    path = get_data_file("characters.json")
+    path = get_data_file("cards.json")
     if path.exists():
         path.write_text("{}", encoding="utf-8")
 
@@ -375,12 +375,12 @@ async def test_roll_uses_char_name(app: App, roll_matcher):
         app, char_matcher,
         fake_group_message_event_v11(
             message=Message(
-                ".角色卡记录 $姓名$ 伊丽莎白\n$等级$ 1\n$属性$ 10/10/10/10/10/10"
+                ".角色卡新建 测试卡 $姓名$ 伊丽莎白\n$等级$ 1\n$属性$ 10/10/10/10/10/10"
             ),
             group_id=group_id,
             user_id=user_id,
         ),
-        "角色卡已设置",
+        "已新建角色卡「测试卡」并绑定到本群。",
     )
     token = set_runtime(SequenceRuntime([5, 2]))
     try:
