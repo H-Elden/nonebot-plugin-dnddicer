@@ -20,25 +20,41 @@ export const skills = enums.skills || []
 export const state = reactive(builder.createState())
 export const rulesVersion = ref('5r')
 export const portraitDataUrl = ref('')
+/** 玩家填写的卡名（卡库内的标识，不写进卡文本）。 */
+export const cardName = ref('')
+
+export const CARD_NAME_RESERVED = [
+  '新建', '修改', '改名', '列表', '绑定', '解绑', '清除', '模板', '记录',
+]
+export const cardNameError = computed(() => {
+  const name = cardName.value.trim()
+  if (!name) return '请先填写卡名（最多 20 字，不能含空格、$、@）'
+  if (Array.from(name).length > 20) return '卡名最多 20 个字符'
+  if (/\s/.test(name)) return '卡名不能包含空白'
+  if (/[$@]/.test(name)) return '卡名不能包含 $ 或 @'
+  if (CARD_NAME_RESERVED.includes(name)) return '卡名不能使用保留词'
+  return ''
+})
 
 export const queryOptions = computed(() => ({ rulesVersion: rulesVersion.value }))
 export const validation = computed(() =>
-  builder.validateState(state, queryOptions.value),
+  builder.validateState(state, queryOptions.value, cardName.value),
 )
 export const segmentCommands = computed(() =>
-  builder.buildSegmentCommands(state, queryOptions.value),
+  builder.buildSegmentCommands(state, queryOptions.value, cardName.value),
 )
 export const segmentCommandsByKey = computed(() =>
   Object.fromEntries(segmentCommands.value.map((item) => [item.key, item])),
 )
 export const cardParts = computed(() =>
-  builder.buildCardParts(state, queryOptions.value),
+  builder.buildCardParts(state, queryOptions.value, undefined, cardName.value),
 )
 export const wholeCommand = computed(() =>
-  builder.buildWholeCommand(state, queryOptions.value),
+  builder.buildWholeCommand(state, queryOptions.value, cardName.value),
 )
 export const canCopy = computed(
   () =>
+    !cardNameError.value &&
     validation.value.errors.length === 0 &&
     validation.value.text.length > 0,
 )
@@ -88,6 +104,7 @@ export function resetState() {
   Object.assign(state, builder.createState())
   rulesVersion.value = '5r'
   portraitDataUrl.value = ''
+  cardName.value = ''
 }
 
 export function setPortrait(dataUrl) {

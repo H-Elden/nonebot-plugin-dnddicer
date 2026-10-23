@@ -1104,6 +1104,29 @@
   margin: 0;
 }
 
+.cb-export__name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.cb-export__name-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vp-c-text-2);
+}
+
+.cb-export__name .cb-input {
+  width: 180px;
+}
+
+.cb-export__name-error {
+  color: var(--vp-c-danger-1);
+  font-size: 13px;
+}
+
 .cb-export__split {
   margin: 0 0 10px;
   color: var(--vp-c-text-2);

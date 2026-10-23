@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url'
 
 import {
   CARD_COMMAND,
+  CARD_MODIFY_COMMAND,
   K,
   SEGMENT_KINDS,
   createCardBuilder,
@@ -27,6 +28,7 @@ import {
   renderPreviewHtml,
 } from '../theme/card-builder/preview.mjs'
 
+const TEST_CARD_NAME = 'TestCard'
 const here = path.dirname(fileURLToPath(import.meta.url))
 const builderDir = path.join(here, '..', 'theme', 'card-builder')
 
@@ -128,12 +130,12 @@ function main() {
       }
     }
     // 每个非空段都能生成一条可单独导入的分段命令
-    const commands = builder.buildSegmentCommands(parsed.state, options)
+    const commands = builder.buildSegmentCommands(parsed.state, options, TEST_CARD_NAME)
     check(`${name}: 分段命令非空`, commands.length > 0)
     for (const item of commands) {
       check(
         `${name}: 命令格式 ${item.key}`,
-        item.command.startsWith(`${CARD_COMMAND} ${item.key} `),
+        item.command.startsWith(`${CARD_MODIFY_COMMAND} ${TEST_CARD_NAME} ${item.key} `),
       )
       const single = builder.parseCardText(item.command)
       check(`${name}: 单段命令可导入 ${item.key}`, single.errors.length === 0)
@@ -149,11 +151,11 @@ function main() {
       )
     }
     // 整卡命令可导入
-    const whole = `${CARD_COMMAND}\n${serialized}`
+    const whole = `${CARD_COMMAND} ${TEST_CARD_NAME}\n${serialized}`
     const wholeParsed = builder.parseCardText(whole)
     check(`${name}: 整卡命令可导入`, wholeParsed.errors.length === 0)
     checkEqual(`${name}: 整卡命令内容不变`, builder.serializeCard(wholeParsed.state, options), serialized)
-    const wholeCommand = builder.buildWholeCommand(parsed.state, options)
+    const wholeCommand = builder.buildWholeCommand(parsed.state, options, TEST_CARD_NAME)
     checkEqual(`${name}: 整卡命令文本`, wholeCommand.text, whole)
     checkEqual(`${name}: 整卡命令长度按整条消息`, wholeCommand.length, whole.length)
   }
@@ -422,7 +424,7 @@ function main() {
   check('等级非数字被拦截', builder.validateState(badState).errors.some((item) => item.key === K.LEVEL))
 
   // 单段命令（首次建卡前后追加）能只导入这一段
-  const single = builder.parseCardText(`${CARD_COMMAND} $战斗$ AC:15; 先攻:+2; 速度:30; 被动察觉:13`)
+  const single = builder.parseCardText(`${CARD_MODIFY_COMMAND} ${TEST_CARD_NAME} $战斗$ AC:15; 先攻:+2; 速度:30; 被动察觉:13`)
   check('单段命令解析成功', single.errors.length === 0)
   checkEqual('单段命令只识别一段', single.found, 1)
   checkEqual('单段命令战斗段 AC', single.state[K.COMBAT].AC, '15')
@@ -435,9 +437,9 @@ function main() {
   // 多条分段命令粘在一起也能导入（每条各占一行）
   const multi = builder.parseCardText(
     [
-      `${CARD_COMMAND} $姓名$ 多段导入`,
-      `${CARD_COMMAND} $等级$ 3`,
-      `${CARD_COMMAND} $属性$ 10/11/12/13/14/15`,
+      `${CARD_MODIFY_COMMAND} ${TEST_CARD_NAME} $姓名$ 多段导入`,
+      `${CARD_MODIFY_COMMAND} ${TEST_CARD_NAME} $等级$ 3`,
+      `${CARD_MODIFY_COMMAND} ${TEST_CARD_NAME} $属性$ 10/11/12/13/14/15`,
     ].join('\n'),
   )
   check('多条分段命令解析成功', multi.errors.length === 0, JSON.stringify(multi.errors))
@@ -447,13 +449,13 @@ function main() {
 
   // ── 4500 字整卡拆分 ──────────────────────────────────────────────────
   const templateState = builder.parseCardText(templateFixture.text).state
-  const whole = builder.buildWholeCommand(templateState)
+  const whole = builder.buildWholeCommand(templateState, {}, TEST_CARD_NAME)
   checkEqual('整卡命令长度按整条消息', whole.length, whole.text.length)
   check(
     '恰好等于上限仍是一块',
-    builder.buildCardParts(templateState, {}, whole.length).parts.length === 1,
+    builder.buildCardParts(templateState, {}, whole.length, TEST_CARD_NAME).parts.length === 1,
   )
-  const split = builder.buildCardParts(templateState, {}, 900)
+  const split = builder.buildCardParts(templateState, {}, 900, TEST_CARD_NAME)
   check('小上限会拆成多块', split.parts.length > 1, String(split.parts.length))
   check(
     '每块都不超过上限',
@@ -472,7 +474,7 @@ function main() {
   )
   checkEqual('拆分不丢段', [...partKeys].sort().join('|'), [...allBlocks].sort().join('|'))
   checkEqual('拆分不重复段', new Set(partKeys).size, partKeys.length)
-  const oversized = builder.buildCardParts(templateState, {}, 800)
+  const oversized = builder.buildCardParts(templateState, {}, 800, TEST_CARD_NAME)
   check('单段超过上限时会报 tooLarge', oversized.parts.length === 0 && oversized.tooLarge.length > 0)
   check(
     'tooLarge 标出段名',

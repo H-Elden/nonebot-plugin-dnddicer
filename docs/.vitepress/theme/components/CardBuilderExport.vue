@@ -2,8 +2,22 @@
   <section id="cb-export" class="cb-export">
     <div class="cb-export__head">
       <h3 class="cb-export__title">导出命令</h3>
-      <HintDot text="整卡内容较长时会自动拆成多段，请按顺序逐个复制；第一次建卡先发第 1 部分（含等级与属性）。" />
+      <HintDot text="整卡内容较长时会自动拆成多段：第 1 部分用 .角色卡新建，后续部分用 .角色卡修改；请按顺序逐个复制。" />
       <span class="cb-export__status" :class="statusClass">{{ statusText }}</span>
+    </div>
+
+    <div class="cb-export__name">
+      <label for="cb-card-name" class="cb-export__name-label">卡名</label>
+      <input
+        id="cb-card-name"
+        v-model="cardName"
+        class="cb-input"
+        maxlength="20"
+        placeholder="例如：薇拉"
+        autocomplete="off"
+      />
+      <HintDot text="卡名是卡库里的标识，最多 20 字，不能包含空格、$、@；重名会被骰娘拒绝。" />
+      <span v-if="cardNameError" class="cb-export__name-error">{{ cardNameError }}</span>
     </div>
 
     <ul v-if="validation.errors.length" class="cb-errors cb-errors--list">
@@ -45,7 +59,7 @@
         />
       </div>
       <p class="cb-inline-note">
-        第 1 部分含等级与属性，先发它；后面的部分会自动合并进同一张卡。
+        第 1 部分含姓名、等级与属性，先发它；后面的部分用 .角色卡修改 依次补充到同一张卡。
       </p>
     </div>
 
@@ -72,6 +86,8 @@
 import { computed } from 'vue'
 import {
   canCopy,
+  cardName,
+  cardNameError,
   cardParts,
   validation,
   wholeCommand,
@@ -87,12 +103,15 @@ const isSingle = computed(
 const singlePart = computed(() => parts.value[0] || { text: '', length: 0 })
 
 const statusClass = computed(() => {
-  if (validation.value.errors.length > 0) return 'cb-status--error'
+  if (cardNameError.value || validation.value.errors.length > 0) {
+    return 'cb-status--error'
+  }
   if (validation.value.warnings.length > 0) return 'cb-status--warn'
   return 'cb-status--ok'
 })
 const statusText = computed(() => {
   const { errors, warnings } = validation.value
+  if (cardNameError.value) return '请填写卡名'
   if (errors.length > 0) return `${errors.length} 处待修正`
   if (parts.value.length > 1) return `可以导出（拆成 ${parts.value.length} 部分）`
   if (warnings.length > 0) return `可以导出（${warnings.length} 条提醒）`

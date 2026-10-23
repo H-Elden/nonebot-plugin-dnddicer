@@ -9,7 +9,7 @@
       :required="segment.required"
       :errors="errorsByKey[segment.key]"
       :copy-command="segmentCommandsByKey[segment.key]?.command || ''"
-      :copy-disabled="!segmentCommandsByKey[segment.key]"
+      :copy-disabled="!segmentCommandsByKey[segment.key] || !!cardNameError"
     >
       <input
         v-if="kindOf(segment.key) === 'text'"
@@ -333,6 +333,7 @@ import {
   abilities,
   backgroundFields,
   builder,
+  cardNameError,
   checkValues,
   enums,
   errorsByKey,

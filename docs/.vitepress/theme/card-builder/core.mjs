@@ -70,8 +70,12 @@ export const SEGMENT_KINDS = Object.freeze({
   [K.COMBAT_NOTES]: 'notes',
 })
 
-/** 骰娘的记录命令（整卡与分段都以它开头）。 */
-export const CARD_COMMAND = '.角色卡记录'
+/** 骰娘的建卡命令（新建整卡）。 */
+export const CARD_COMMAND = '.角色卡新建'
+/** 修改已有卡的命令（分段与后续部分）。 */
+export const CARD_MODIFY_COMMAND = '.角色卡修改'
+/** 旧记录命令：仅用于导入时剥离前缀。 */
+export const CARD_LEGACY_COMMAND = '.角色卡记录'
 
 //: QQ 单条消息上限（用户 2026-10-22 实测群聊与私聊均为 4500 字）。
 export const MESSAGE_LIMIT = 4500
@@ -90,6 +94,13 @@ function textOf(value) {
 
 function trimOf(value) {
   return textOf(value).trim()
+}
+
+/** 命令里的卡名：优先玩家填写的卡名，其次角色姓名，最后兜底。 */
+function cardNameFor(state, cardName) {
+  const explicit = trimOf(cardName)
+  if (explicit) return explicit
+  return trimOf(state?.[K.NAME]) || '角色卡'
 }
 
 function isBlank(value) {
@@ -1758,9 +1769,12 @@ export function createCardBuilder(spec) {
     let text = normalizeNewlines(textOf(input)).replace(/^\uFEFF/, '')
     const tipIndex = text.search(/\n[ \t]*——提示/)
     if (tipIndex >= 0) text = text.slice(0, tipIndex)
-    // 每条记录命令（整段复制或多条分段命令粘在一起）都去掉命令前缀，
-    // 只留 `$段名$ 内容`；行首与全文开头都处理。
-    text = text.replace(/(^|\n)[ \t]*[.。]角色卡记录[ \t]*/g, '$1')
+    // 每条命令（整段复制或多条分段命令粘在一起）都去掉命令前缀与卡名，
+    // 只留 `$段名$ 内容`；兼容旧的 .角色卡记录。
+    text = text.replace(
+      /(^|\n)[ \t]*[.。]角色卡(?:新建|修改|记录)(?:[ \t]+[^\s$]+)?[ \t]*/g,
+      '$1',
+    )
     return text.trim()
   }
 
@@ -1875,10 +1889,11 @@ export function createCardBuilder(spec) {
       .join('\n')
   }
 
-  /** 整条 `.角色卡记录` 命令（含命令前缀与换行）及其消息长度。 */
-  function buildWholeCommand(state, options = {}) {
-    const text = `${CARD_COMMAND}\n${serializeCard(state, options)}`
-    return { text, length: messageLength(text) }
+  /** 整条 `.角色卡新建` 命令（含卡名、换行与卡面）及其消息长度。 */
+  function buildWholeCommand(state, options = {}, cardName = '') {
+    const name = cardNameFor(state, cardName)
+    const text = `${CARD_COMMAND} ${name}\n${serializeCard(state, options)}`
+    return { text, length: messageLength(text), cardName: name }
   }
 
   /**
@@ -1889,14 +1904,27 @@ export function createCardBuilder(spec) {
    *   贪心装块；后续部分缺等级/属性，由插件按多段合并追加；
    * - 单个段本身就超过 limit：不拆，返回 tooLarge，让 UI 提示精简该段。
    */
-  function buildCardParts(state, options = {}, limit = MESSAGE_LIMIT) {
+  function buildCardParts(
+    state,
+    options = {},
+    limit = MESSAGE_LIMIT,
+    cardName = '',
+  ) {
+    const name = cardNameFor(state, cardName)
+    const firstPrefix = `${CARD_COMMAND} ${name}\n`
+    const nextPrefix = `${CARD_MODIFY_COMMAND} ${name}\n`
+    const firstPrefixLength = messageLength(firstPrefix)
+    const nextPrefixLength = messageLength(nextPrefix)
+    const requiredKeys = [K.LEVEL, K.ABILITY]
+    const prefixFor = (index) => (index === 0 ? firstPrefix : nextPrefix)
+    const prefixLengthFor = (index) =>
+      index === 0 ? firstPrefixLength : nextPrefixLength
+
     const blocks = buildCardBlocks(state, options)
-    const prefix = `${CARD_COMMAND}\n`
-    const prefixLength = messageLength(prefix)
     if (blocks.length === 0) {
-      return { parts: [], tooLarge: [], limit }
+      return { parts: [], tooLarge: [], limit, cardName: name }
     }
-    const wholeText = prefix + blocks.map((item) => item.block).join('\n')
+    const wholeText = firstPrefix + blocks.map((item) => item.block).join('\n')
     const wholeLength = messageLength(wholeText)
     if (wholeLength <= limit) {
       return {
@@ -1905,29 +1933,35 @@ export function createCardBuilder(spec) {
         ],
         tooLarge: [],
         limit,
+        cardName: name,
       }
     }
 
     const tooLarge = blocks
-      .filter((item) => messageLength(prefix + item.block) > limit)
-      .map((item) => ({
-        key: item.key,
-        label: item.label,
-        length: messageLength(prefix + item.block),
-      }))
+      .filter((item) => {
+        const prefix = requiredKeys.includes(item.key) ? firstPrefix : nextPrefix
+        return messageLength(prefix + item.block) > limit
+      })
+      .map((item) => {
+        const prefix = requiredKeys.includes(item.key) ? firstPrefix : nextPrefix
+        return {
+          key: item.key,
+          label: item.label,
+          length: messageLength(prefix + item.block),
+        }
+      })
     if (tooLarge.length > 0) {
-      return { parts: [], tooLarge, limit }
+      return { parts: [], tooLarge, limit, cardName: name }
     }
 
-    const requiredKeys = [K.LEVEL, K.ABILITY]
     const required = requiredKeys
       .map((key) => blocks.find((item) => item.key === key))
       .filter(Boolean)
     if (required.length !== requiredKeys.length) {
-      return { parts: [], tooLarge: [], limit }
+      return { parts: [], tooLarge: [], limit, cardName: name }
     }
     const requiredText =
-      prefix + required.map((item) => item.block).join('\n')
+      firstPrefix + required.map((item) => item.block).join('\n')
     if (messageLength(requiredText) > limit) {
       return {
         parts: [],
@@ -1939,6 +1973,7 @@ export function createCardBuilder(spec) {
           },
         ],
         limit,
+        cardName: name,
       }
     }
 
@@ -1948,15 +1983,17 @@ export function createCardBuilder(spec) {
     let currentLength = messageLength(requiredText)
     const flush = () => {
       if (current.length === 0) return
+      const index = parts.length
+      const prefix = prefixFor(index)
       const text = prefix + current.map((item) => item.block).join('\n')
       parts.push({
-        index: parts.length + 1,
-        label: `第 ${parts.length + 1} 部分`,
+        index: index + 1,
+        label: `第 ${index + 1} 部分`,
         text,
         length: messageLength(text),
       })
       current = []
-      currentLength = prefixLength
+      currentLength = prefixLengthFor(parts.length)
     }
     const add = (block) => {
       const separator = current.length > 0 ? 1 : 0
@@ -1969,10 +2006,11 @@ export function createCardBuilder(spec) {
     }
     for (const block of rest) add(block)
     flush()
-    return { parts, tooLarge: [], limit }
+    return { parts, tooLarge: [], limit, cardName: name }
   }
 
-  function buildSegmentCommands(state, options = {}) {
+  function buildSegmentCommands(state, options = {}, cardName = '') {
+    const name = cardNameFor(state, cardName)
     const commands = []
     for (const key of order) {
       let content = ''
@@ -1982,7 +2020,7 @@ export function createCardBuilder(spec) {
         content = ''
       }
       if (!content) continue
-      const command = `${CARD_COMMAND} ${key} ${content}`
+      const command = `${CARD_MODIFY_COMMAND} ${name} ${key} ${content}`
       commands.push({
         key,
         label: labelOf(key),
@@ -2004,7 +2042,8 @@ export function createCardBuilder(spec) {
 
   // ── 校验 ──────────────────────────────────────────────────────────────
 
-  function validateState(state, options = {}) {
+  function validateState(state, options = {}, cardName = '') {
+    const name = cardNameFor(state, cardName)
     const errors = []
     const warnings = []
     const errorKeys = new Set()
@@ -2039,7 +2078,9 @@ export function createCardBuilder(spec) {
       } catch (error) {
         pushError(key, error instanceof Error ? error.message : String(error))
       }
-      const commandLength = messageLength(`${CARD_COMMAND} ${key} ${content}`)
+      const commandLength = messageLength(
+        `${CARD_MODIFY_COMMAND} ${name} ${key} ${content}`,
+      )
       if (commandLength > MESSAGE_LIMIT) {
         pushError(
           key,
@@ -2079,7 +2120,7 @@ export function createCardBuilder(spec) {
 
     const cardText = serializeCard(state, options)
     const cardLength = charLength(cardText)
-    const commandLength = messageLength(`${CARD_COMMAND}\n${cardText}`)
+    const commandLength = messageLength(`${CARD_COMMAND} ${name}\n${cardText}`)
     if (cardLength === 0) {
       pushWarning('', '还没有填写任何内容')
     } else if (commandLength > MESSAGE_LIMIT) {
@@ -2094,6 +2135,7 @@ export function createCardBuilder(spec) {
       text: cardText,
       length: commandLength,
       cardLength,
+      cardName: name,
       limit: MESSAGE_LIMIT,
     }
   }

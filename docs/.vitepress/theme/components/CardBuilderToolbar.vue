@@ -20,6 +20,17 @@
     </div>
 
     <div class="cb-toolbar">
+      <label class="cb-inline">
+        <span class="cb-rules__label">卡名</span>
+        <input
+          v-model="cardName"
+          class="cb-input cb-input--short"
+          maxlength="20"
+          placeholder="例如：薇拉"
+          autocomplete="off"
+        />
+      </label>
+      <HintDot text="卡名是卡库里的标识，最多 20 字，不能包含空格、$、@；群聊新建会自动绑定本群。" />
       <button type="button" class="cb-btn cb-btn--ghost" @click="loadExample">载入示例卡</button>
       <button type="button" class="cb-btn cb-btn--ghost" @click="importOpen = !importOpen">
         导入卡文本
@@ -40,13 +51,13 @@
     <section v-if="importOpen" class="cb-panel">
       <h3 class="cb-panel__title">
         导入卡文本
-        <HintDot text="把骰娘发来的角色卡或角色卡记录整段粘贴进来；末尾提示会自动忽略，解析失败会指出是哪一段。导入会覆盖当前表单。" />
+        <HintDot text="把骰娘发来的角色卡或 .角色卡新建 / .角色卡修改 命令整段粘贴进来；末尾提示会自动忽略，解析失败会指出是哪一段。导入会覆盖当前表单。" />
       </h3>
       <textarea
         v-model="importText"
         class="cb-textarea"
         rows="8"
-        placeholder=".角色卡记录&#10;$姓名$ 伊瑟兰·晨星&#10;$等级$ 5&#10;$属性$ 8/14/16/18/11/8"
+        placeholder=".角色卡新建 伊瑟兰&#10;$姓名$ 伊瑟兰·晨星&#10;$等级$ 5&#10;$属性$ 8/14/16/18/11/8"
       ></textarea>
       <div class="cb-inline cb-inline--top">
         <button type="button" class="cb-btn cb-btn--primary" @click="doImport">解析并填入</button>
@@ -73,7 +84,17 @@
 
 <script setup>
 import { computed, onBeforeUnmount, ref } from 'vue'
-import { builder, enums, resetState, rulesVersion, state, validation } from '../card-builder/store.mjs'
+import { K } from '../card-builder/core.mjs'
+import {
+  builder,
+  cardName,
+  cardNameError,
+  enums,
+  resetState,
+  rulesVersion,
+  state,
+  validation,
+} from '../card-builder/store.mjs'
 import HintDot from './card-builder/HintDot.vue'
 
 const anchors = [
@@ -98,12 +119,15 @@ const noticeKind = ref('ok')
 let noticeTimer = null
 
 const statusClass = computed(() => {
-  if (validation.value.errors.length > 0) return 'cb-status--error'
+  if (cardNameError.value || validation.value.errors.length > 0) {
+    return 'cb-status--error'
+  }
   if (validation.value.warnings.length > 0) return 'cb-status--warn'
   return 'cb-status--ok'
 })
 const statusText = computed(() => {
   const { errors, warnings } = validation.value
+  if (cardNameError.value) return '请填写卡名'
   if (errors.length > 0) return `${errors.length} 处待修正`
   if (warnings.length > 0) return `可以导出（${warnings.length} 条提醒）`
   return '可以导出'
@@ -124,16 +148,21 @@ onBeforeUnmount(() => {
 
 function loadExample() {
   rulesVersion.value = '5r'
+  const previousName = state[K.NAME]
+  const autoName = !cardName.value.trim() || cardName.value === previousName
   const parsed = builder.parseCardText(builder.buildExampleCard())
   if (parsed.errors.length > 0) {
     showNotice('示例卡载入失败，请反馈这个问题', 'error')
     return
   }
   Object.assign(state, parsed.state)
+  if (autoName) cardName.value = parsed.state[K.NAME] || '示例卡'
   showNotice('已载入示例卡（5 级高等精灵法师），可以直接改；也可以从「导入卡文本」粘自己的卡。')
 }
 
 function doImport() {
+  const previousName = state[K.NAME]
+  const autoName = !cardName.value.trim() || cardName.value === previousName
   const result = builder.parseCardText(importText.value)
   importErrors.value = result.errors
   importWarnings.value = result.warnings
@@ -143,6 +172,7 @@ function doImport() {
   }
   Object.assign(state, result.state)
   rulesVersion.value = result.rulesVersion || '5r'
+  if (autoName) cardName.value = result.state[K.NAME] || ''
   importOpen.value = false
   showNotice(`已导入 ${result.found} 个段`)
 }
