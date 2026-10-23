@@ -328,6 +328,32 @@ async def test_ds_no_character_card(app: App):
 
 
 @pytest.mark.asyncio
+async def test_hp_set_zero_enters_dying(app: App):
+    """.hp 0/30 直接设 0：按昏迷/濒死渲染，.ds 状态行与判定一致。"""
+    from nonebot_plugin_dnddicer.commands.hp import ds_matcher, hp_matcher
+
+    uid = 23006
+    await _expect(
+        app, hp_matcher, _event(".hp 20/30", uid),
+        "test: HP=20/30\n当前HP:20/30",
+    )
+    await _expect(
+        app, hp_matcher, _event(".hp 0/30", uid),
+        "test: HP=0/30\n当前HP:0/30 昏迷 濒死(成功0 失败0)",
+    )
+    token = set_runtime(SequenceRuntime([15]))
+    try:
+        await _expect(
+            app, ds_matcher, _event(".ds", uid),
+            "test的死亡豁免：\n1D20=[15]=15\n"
+            "死亡豁免成功 +1（成功1 失败0）\n"
+            "HP:0/30 昏迷 濒死(成功1 失败0)",
+        )
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
 async def test_ds_hp_above_zero(app: App):
     """HP 大于 0 → 无需死亡豁免。"""
     from nonebot_plugin_dnddicer.commands.hp import ds_matcher, hp_matcher

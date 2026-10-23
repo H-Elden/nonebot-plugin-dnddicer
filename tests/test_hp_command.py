@@ -144,6 +144,38 @@ async def test_hp_without_card_set_view_and_damage(app: App):
 
 
 @pytest.mark.asyncio
+async def test_hp_loss_only_record_visible(app: App):
+    """只记过伤害（未设上限）：.hp 查看与 .hp list 也显示损失值。"""
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    uid = 20037
+    group = _LIST_GROUP
+    await _expect(
+        app, hp_matcher, _event_in_group(group, ".hp -9", user_id=uid),
+        "test: 当前HP减少9\n损失HP:0 -> 损失HP:9",
+    )
+    await _expect(
+        app, hp_matcher, _event_in_group(group, ".hp", user_id=uid),
+        "test: 损失HP:9",
+    )
+    await _expect(
+        app, hp_matcher, _event_in_group(group, ".hp list", user_id=uid),
+        "test 损失HP:9",
+    )
+
+
+@pytest.mark.asyncio
+async def test_hp_set_zero_marks_unconscious(app: App):
+    """直接设 0（不写上限）按昏迷/濒死显示，不再落入损失记录模式。"""
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    await _expect(
+        app, hp_matcher, _event(".hp 0", user_id=20038),
+        "test: HP=0\n当前HP:0 昏迷 濒死(成功0 失败0)",
+    )
+
+
+@pytest.mark.asyncio
 async def test_hp_list_includes_cardless_record(app: App):
     """.hp list：无卡 HP 记录排在角色卡之后、NPC 之前。"""
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
@@ -881,9 +913,12 @@ def test_hp_info_long_rest():
     assert "4/4个D8生命骰" in info
 
 
-def test_hp_info_fresh_set_zero_quirk():
-    """边界：全新 HPInfo（hp_cur=0, is_alive=True）不处于正常记录模式，
-    直接设置 0/max 后 get_info 仍落入受损记录模式显示 损失HP:0。"""
+def test_hp_info_zero_with_alive_flag_renders_loss():
+    """模型层边界：hp_cur=0 但 is_alive=True（标志不一致）按损失渲染。
+
+    命令层设置 0 时已同步 is_alive（见 ``test_hp_set_zero_marks_unconscious``），
+    这里只锁定模型在手工构造不一致状态时的渲染口径。
+    """
     from nonebot_plugin_dnddicer.character.models import HPInfo
 
     hp = HPInfo()

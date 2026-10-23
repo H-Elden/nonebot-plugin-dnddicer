@@ -676,6 +676,15 @@ async def _save_player_hp(
     await save_hp_record(group_id, user_id, hp_info)
 
 
+def _has_hp_display(hp_info: Optional[HPInfo]) -> bool:
+    """是否有可展示的 HP 信息：初始化过，或只记过损失（is_init=False）。
+
+    无卡记录可能只经历过 ``.hp -N``（未记上限、``is_init=False``），这类
+    损失记录同样要能被 ``.hp`` 查看与 ``.hp list`` 看到（2026-10-23 修订）。
+    """
+    return hp_info is not None and (hp_info.is_init or hp_info.hp_cur != 0)
+
+
 @hp_matcher.handle()
 async def handle_hp(bot: Bot, event: MessageEvent) -> None:
     """处理 .hp 命令。"""
@@ -697,7 +706,7 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
         name = await base.resolve_display_name(
             bot, event, char_name=character.name if character else ""
         )
-        if hp_info is not None and hp_info.is_init:
+        if _has_hp_display(hp_info):
             feedback = text.TXT_HP_INFO.format(name=name, hp_info=hp_info.get_info())
         else:
             feedback = text.TXT_HP_INFO_MISS.format(name=name)
@@ -720,7 +729,7 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
                 feedback += f"{name} {char.hp_info.get_info()}\n"
         # 无绑定卡、但有群级 HP 记录的玩家（PC 在前、NPC 在后）
         for user_id, hp_info in await list_hp_records(event.group_id):
-            if str(user_id) in bound_users or not hp_info.is_init:
+            if str(user_id) in bound_users or not _has_hp_display(hp_info):
                 continue
             name = await base.resolve_display_name(bot, event, user_id)
             feedback += f"{name} {hp_info.get_info()}\n"
@@ -797,7 +806,7 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
             name = await base.resolve_display_name(
                 bot, event, qq, char_name=character.name if character else ""
             )
-            if hp_info is not None and hp_info.is_init:
+            if _has_hp_display(hp_info):
                 view_lines.append(text.TXT_HP_INFO.format(
                     name=name, hp_info=hp_info.get_info()
                 ))

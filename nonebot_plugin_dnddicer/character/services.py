@@ -2151,8 +2151,10 @@ class HPService:
         if cmd_type == "=":
             hp_info.is_init = True
             if hp_cur_mod_result:
-                if hp_info.is_record_normal():
-                    hp_info.is_alive = hp_cur_mod_result.get_val() > 0
+                # 直接设置当前 HP：按新值同步昏迷标记。旧写法只在「原本处于正常
+                # 记录」时才同步，导致全新/损失记录设成 0 仍按「损失HP:0」渲染，
+                # 而濒死判断只看当前值，显示与判定不一致（2026-10-23 修订）。
+                hp_info.is_alive = hp_cur_mod_result.get_val() > 0
                 hp_info.hp_cur = hp_cur_mod_result.get_val()
                 mod_info = f"HP={hp_cur_mod_result.get_result()}"
             if hp_max_mod_result:
