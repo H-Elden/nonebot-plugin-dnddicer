@@ -26,7 +26,7 @@ features:
     link: /guide/character-card
     linkText: 角色卡与属性
   - title: 网页建卡器
-    details: 在浏览器里填表生成 .角色卡记录 命令，纯本地不上传；内置立绘裁切与角色卡预览，整卡超过 4500 字会自动拆块
+    details: 在浏览器里填表生成 .角色卡新建 / .角色卡修改 命令，纯本地不上传；内置立绘裁切与角色卡预览，整卡超过 4500 字会自动拆块
     link: /guide/card-builder
     linkText: 网页建卡器
   - title: 检定与豁免

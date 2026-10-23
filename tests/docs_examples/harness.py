@@ -203,7 +203,10 @@ class TimelineRunner:
 
         await service_state.set_service_enabled(cast.GROUP_ID, False)
         for persona in cast.PERSONAS:
-            await characters.delete_character(cast.GROUP_ID, persona.qq)
+            for card_id, _card_name, _character in await characters.list_cards_by_owner(
+                persona.qq
+            ):
+                await characters.delete_card(card_id)
         await npc_health.clear_npc_health(cast.GROUP_ID)
         await initiative.clear_init_list(cast.GROUP_ID)
         await group_config.set_group_config_field(cast.GROUP_ID, "default_dice", "D20")
