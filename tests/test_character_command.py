@@ -36,13 +36,15 @@ def _clear_store():
     """每个用例前清空角色卡/先攻表数据（缓存 + JSON）。"""
     from nonebot_plugin_dnddicer.data import characters as _chars
     from nonebot_plugin_dnddicer.data import get_data_file
+    from nonebot_plugin_dnddicer.data import hp_records as _hp_records
     from nonebot_plugin_dnddicer.data import initiative as _init
     from nonebot_plugin_dnddicer.data import npc_health as _npc
 
     _chars._cache = None
+    _hp_records._cache = None
     _init._cache = None
     _npc._cache = None
-    for name in ("cards.json", "initiative.json", "npc_health.json"):
+    for name in ("cards.json", "hp_records.json", "initiative.json", "npc_health.json"):
         path = get_data_file(name)
         if path.exists():
             path.write_text("{}", encoding="utf-8")
@@ -712,6 +714,32 @@ async def test_char_view_other_misses(app: App):
         app, char_matcher,
         _mention_event(".角色卡 ", MessageSegment.at(39990)),
         Message(MessageSegment.at("39990")) + " 未在本群绑定角色卡",
+    )
+
+
+@pytest.mark.asyncio
+async def test_char_and_state_ignore_cardless_hp_record(app: App):
+    """只有无卡 HP 记录的玩家：.角色卡 / .状态 仍按未绑定角色卡处理。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher, state_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    uid = 39991
+    await _expect(
+        app, hp_matcher, _event(".hp 10/10", uid),
+        "test: HP=10/10\n当前HP:10/10",
+    )
+    expected = (
+        Message(MessageSegment.at(str(uid))) + " 未在本群绑定角色卡"
+    )
+    await _expect(
+        app, char_matcher,
+        _mention_event(".角色卡 ", MessageSegment.at(uid)),
+        expected,
+    )
+    await _expect(
+        app, state_matcher,
+        _mention_event(".状态 ", MessageSegment.at(uid)),
+        expected,
     )
 
 

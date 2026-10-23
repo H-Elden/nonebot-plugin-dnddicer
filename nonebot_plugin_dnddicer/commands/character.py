@@ -445,6 +445,15 @@ async def _handle_view(bot: Bot, event: MessageEvent, rest: str) -> None:
         await char_matcher.finish(
             onebot_v11.at_reply(target_id, text.TXT_MENTION_NO_CHAR)
         )
+    if source_key == "pc_hp":
+        # 只有无卡 HP 记录的玩家：角色卡相关命令仍按「未绑定」处理
+        if onebot_v11.parse_mention_token(rest) is not None:
+            await char_matcher.finish(
+                onebot_v11.at_reply(target_id, text.TXT_MENTION_NO_CHAR)
+            )
+        await char_matcher.finish(
+            text.TXT_CHAR_TARGET_MISS.format(name=rest)
+        )
     if source_key == "multiple":
         await char_matcher.finish(
             text.TXT_HP_INFO_MULTI.format(name_list=target_id.split("/"))
@@ -532,6 +541,15 @@ async def handle_state(bot: Bot, event: MessageEvent) -> None:
         if source_key == "at_miss":
             await state_matcher.finish(
                 onebot_v11.at_reply(target_id, text.TXT_MENTION_NO_CHAR)
+            )
+        if source_key == "pc_hp":
+            # 只有无卡 HP 记录的玩家：.状态 仍以角色卡为准
+            if onebot_v11.parse_mention_token(rest) is not None:
+                await state_matcher.finish(
+                    onebot_v11.at_reply(target_id, text.TXT_MENTION_NO_CHAR)
+                )
+            await state_matcher.finish(
+                text.TXT_CHAR_TARGET_MISS.format(name=rest)
             )
         if source_key == "multiple":
             await state_matcher.finish(

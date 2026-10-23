@@ -28,13 +28,15 @@ def _clear_character_data():
     """每个用例前清空角色卡/先攻表/NPC 血量数据（缓存 + JSON），避免残留干扰。"""
     from nonebot_plugin_dnddicer.data import characters as _chars
     from nonebot_plugin_dnddicer.data import get_data_file
+    from nonebot_plugin_dnddicer.data import hp_records as _hp_records
     from nonebot_plugin_dnddicer.data import initiative as _init
     from nonebot_plugin_dnddicer.data import npc_health as _npc
 
     _chars._cache = None
+    _hp_records._cache = None
     _init._cache = None
     _npc._cache = None
-    for name in ("cards.json", "initiative.json", "npc_health.json"):
+    for name in ("cards.json", "hp_records.json", "initiative.json", "npc_health.json"):
         path = get_data_file(name)
         if path.exists():
             path.write_text("{}", encoding="utf-8")
@@ -119,6 +121,158 @@ async def test_hp_view_after_set(app: App):
         app, hp_matcher, _event(".hp", user_id=20002),
         "test: HP:20/30",
     )
+
+
+@pytest.mark.asyncio
+async def test_hp_without_card_set_view_and_damage(app: App):
+    """无绑定卡也能记录 HP：设置 / 查看 / 伤害直接落在群级 HP 记录。"""
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    uid = 20031
+    await _expect(
+        app, hp_matcher, _event(".hp 20/30", user_id=uid),
+        "test: HP=20/30\n当前HP:20/30",
+    )
+    await _expect(
+        app, hp_matcher, _event(".hp", user_id=uid),
+        "test: HP:20/30",
+    )
+    await _expect(
+        app, hp_matcher, _event(".hp -5", user_id=uid),
+        "test: 当前HP减少5\nHP:20/30 -> HP:15/30",
+    )
+
+
+@pytest.mark.asyncio
+async def test_hp_list_includes_cardless_record(app: App):
+    """.hp list：无卡 HP 记录排在角色卡之后、NPC 之前。"""
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    uid = 20032
+    await _expect(
+        app, hp_matcher, _event_in_group(_LIST_GROUP, ".hp 12/20", user_id=uid),
+        "test: HP=12/20\n当前HP:12/20",
+    )
+    await _expect(
+        app, hp_matcher, _event_in_group(_LIST_GROUP, ".hp list", user_id=uid),
+        "test HP:12/20",
+    )
+
+
+@pytest.mark.asyncio
+async def test_hp_bind_card_discards_cardless_record(app: App):
+    """绑定角色卡后丢弃无卡 HP 记录，之后完全以卡面 $生命值$ 为准。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+    from nonebot_plugin_dnddicer.data.hp_records import get_hp_record
+
+    uid = 20033
+    await _expect(
+        app, hp_matcher, _event(".hp 20/30", user_id=uid),
+        "test: HP=20/30\n当前HP:20/30",
+    )
+    await _expect(
+        app, char_matcher,
+        _event(
+            ".角色卡新建 测试卡 $姓名$ 卡牌 $等级$ 1 "
+            "$生命值$ 30/30 $属性$ 10/10/10/10/10/10",
+            user_id=uid,
+        ),
+        "已新建角色卡「测试卡」并绑定到本群。",
+    )
+    assert await get_hp_record(_GROUP, uid) is None
+
+    await _expect(
+        app, hp_matcher, _event(".hp", user_id=uid),
+        "卡牌: HP:30/30",
+    )
+
+
+@pytest.mark.asyncio
+async def test_hp_mention_reads_cardless_record(app: App):
+    """DM 用 @ 查看 / 结算无卡玩家的 HP 记录。"""
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    uid = 20034
+    await _expect(
+        app, hp_matcher, _event(".hp 24/30", user_id=uid),
+        "test: HP=24/30\n当前HP:24/30",
+    )
+
+    view_event = _mention_event(".hp ", MessageSegment.at(uid), user_id=20000)
+    async with app.test_matcher(hp_matcher) as ctx:
+        adapter = ctx.create_adapter(base=OnebotV11Adapter)
+        bot = ctx.create_bot(base=Bot, adapter=adapter)
+        ctx.should_call_api(
+            "get_group_member_info",
+            data={"group_id": _GROUP, "user_id": uid},
+            result={"user_id": uid, "card": "小鹿", "nickname": "鹿角"},
+        )
+        ctx.should_call_send(view_event, "小鹿: HP:24/30")
+        ctx.receive_event(bot, view_event)
+
+    damage_event = _mention_event(".hp ", MessageSegment.at(uid), " -4", user_id=20000)
+    async with app.test_matcher(hp_matcher) as ctx:
+        adapter = ctx.create_adapter(base=OnebotV11Adapter)
+        bot = ctx.create_bot(base=Bot, adapter=adapter)
+        ctx.should_call_api(
+            "get_group_member_info",
+            data={"group_id": _GROUP, "user_id": uid},
+            result={"user_id": uid, "card": "小鹿", "nickname": "鹿角"},
+        )
+        ctx.should_call_send(
+            damage_event, "小鹿: 当前HP减少4\nHP:24/30 -> HP:20/30"
+        )
+        ctx.receive_event(bot, damage_event)
+
+
+@pytest.mark.asyncio
+async def test_hp_del_does_not_delete_cardless_record(app: App):
+    """.hp del 仍只删 NPC：@ 到无卡玩家时提示，记录保留。"""
+    from nonebot_plugin_dnddicer.commands.hp import hp_matcher
+
+    uid = 20035
+    await _expect(
+        app, hp_matcher, _event(".hp 20/30", user_id=uid),
+        "test: HP=20/30\n当前HP:20/30",
+    )
+    await _expect(
+        app, hp_matcher,
+        _mention_event(".hp del ", MessageSegment.at(uid), user_id=20000),
+        Message(MessageSegment.at(str(uid)))
+        + " 是玩家的生命值记录，.hp del/clr 仅用于删除NPC血量记录",
+    )
+    await _expect(
+        app, hp_matcher, _event(".hp", user_id=uid),
+        "test: HP:20/30",
+    )
+
+
+@pytest.mark.asyncio
+async def test_hp_no_card_death_save(app: App):
+    """无卡 HP 记录归 0 同样进入濒死，.ds 可正常掷。"""
+    from nonebot_plugin_dnddicer.commands import text as cmd_text
+    from nonebot_plugin_dnddicer.commands.hp import ds_matcher, hp_matcher
+
+    uid = 20036
+    await _expect(
+        app, hp_matcher, _event(".hp 10/30", user_id=uid),
+        "test: HP=10/30\n当前HP:10/30",
+    )
+    await _expect(
+        app, hp_matcher, _event(".hp -10", user_id=uid),
+        "test: 当前HP减少10\nHP:10/30 -> HP:0/30 昏迷 濒死(成功0 失败0)\n"
+        + cmd_text.TXT_DS_ENTER,
+    )
+    token = set_runtime(SequenceRuntime([15]))
+    try:
+        await _expect(
+            app, ds_matcher, _event(".ds", user_id=uid),
+            "test的死亡豁免：\n1D20=[15]=15\n"
+            "死亡豁免成功 +1（成功1 失败0）\nHP:0/30 昏迷 濒死(成功1 失败0)",
+        )
+    finally:
+        reset_runtime(token)
 
 
 # =========================================================================
@@ -391,8 +545,8 @@ async def test_hp_target_not_found(app: App):
 
 
 @pytest.mark.asyncio
-async def test_hp_target_without_char_uses_member_name(app: App):
-    """无卡玩家经先攻表解析：.hp 提示未在本群绑定角色卡，反馈名走群名片。"""
+async def test_hp_target_without_char_creates_record(app: App):
+    """无卡玩家经先攻表解析：按需建立无卡 HP 记录，名称走群名片。"""
     from nonebot.adapters.onebot.v11.event import Sender
 
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
@@ -409,7 +563,7 @@ async def test_hp_target_without_char_uses_member_name(app: App):
         ),
         "陈莉莉的先攻值是 20",
     )
-    # DM 结算：无卡玩家不再隐式建卡，提示未绑定（名称取群名片）
+    # DM 结算：HP 与角色卡解耦，无卡玩家直接记入群级 HP 记录（名称取群名片）
     event = _event_in_group(g, ".hp 陈莉莉-9", user_id=20099)
     async with app.test_matcher(hp_matcher) as ctx:
         adapter = ctx.create_adapter(base=OnebotV11Adapter)
@@ -419,13 +573,15 @@ async def test_hp_target_without_char_uses_member_name(app: App):
             data={"group_id": g, "user_id": qq},
             result={"user_id": qq, "card": "陈莉莉", "nickname": "莉莉"},
         )
-        ctx.should_call_send(event, "「陈莉莉」未在本群绑定角色卡")
+        ctx.should_call_send(
+            event, "陈莉莉: 当前HP减少9\n损失HP:0 -> 损失HP:9"
+        )
         ctx.receive_event(bot, event)
 
 
 @pytest.mark.asyncio
 async def test_hp_target_without_char_api_failure_falls_back(app: App):
-    """无卡玩家且群成员查询失败 → 提示未绑定，名称回退「未知玩家（QQ号）」。"""
+    """无卡玩家且群成员查询失败 → 记录照样建立，名称回退「未知玩家（QQ号）」。"""
     from nonebot.adapters.onebot.v11.event import Sender
 
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
@@ -454,7 +610,7 @@ async def test_hp_target_without_char_api_failure_falls_back(app: App):
             exception=Exception("群成员查询失败"),
         )
         ctx.should_call_send(
-            event, "「未知玩家（1270859721）」未在本群绑定角色卡"
+            event, "未知玩家（1270859721）: 当前HP减少9\n损失HP:0 -> 损失HP:9"
         )
         ctx.receive_event(bot, event)
 
@@ -1036,17 +1192,24 @@ async def test_hp_mention_suffix_and_aoe_mixed(app: App):
 
 
 @pytest.mark.asyncio
-async def test_hp_mention_no_char_guides(app: App):
-    """@ 的玩家本群无卡 → 真 @ 消息段 + 建卡引导；.hp del @玩家 提示非 NPC 记录。"""
+async def test_hp_mention_no_char_creates_record(app: App):
+    """@ 的玩家本群无卡 → 直接建立无卡 HP 记录；.hp del @玩家 提示非 NPC 记录。"""
     from nonebot_plugin_dnddicer.commands.character import char_matcher
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
 
-    await _expect(
-        app, hp_matcher,
-        _mention_event(".hp ", MessageSegment.at(29999), " -5", user_id=23000),
-        Message(MessageSegment.at("29999"))
-        + " 未在本群绑定角色卡",
-    )
+    event = _mention_event(".hp ", MessageSegment.at(29999), " -5", user_id=23000)
+    async with app.test_matcher(hp_matcher) as ctx:
+        adapter = ctx.create_adapter(base=OnebotV11Adapter)
+        bot = ctx.create_bot(base=Bot, adapter=adapter)
+        ctx.should_call_api(
+            "get_group_member_info",
+            data={"group_id": _GROUP, "user_id": 29999},
+            result={"user_id": 29999, "card": "小鹿", "nickname": "鹿角"},
+        )
+        ctx.should_call_send(
+            event, "小鹿: 当前HP减少5\n损失HP:0 -> 损失HP:5"
+        )
+        ctx.receive_event(bot, event)
 
     await _expect(
         app, char_matcher,

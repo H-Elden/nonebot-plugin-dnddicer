@@ -1,5 +1,10 @@
 """HP 管理命令：``.hp`` + 休息 ``.短休`` / ``.生命骰`` / ``.长休`` + 死亡豁免 ``.死亡豁免`` / ``.ds``。
 
+HP 与角色卡解耦（2026-10-23）：本群绑定角色卡时读写卡面 ``$生命值$``；
+没有绑定卡时读写独立的群级 HP 记录（首次设置时创建，绑定卡时丢弃）。
+``.hp`` 与 ``.死亡豁免`` 因此不要求建卡；``.状态``、长休 / 短休、生命骰
+等需要卡面其他数据的命令仍要求绑定卡。
+
 休息闭环（2026-10-20 批③）：``.短休`` 恢复「短休 / 两者」类能力与契约魔法
 法术位、提示可用生命骰（不自动花骰）；``.生命骰 [N]`` 按卡面 ``$生命骰$``
 花费 N 颗回血，2014 逐粒「骰值 + 体质调整」、2024「骰点总和 + 枚数 × 体质
@@ -72,6 +77,11 @@ from ..data.characters import (
     list_characters_by_group,
     save_character,
 )
+from ..data.hp_records import (
+    get_hp_record,
+    list_hp_records,
+    save_hp_record,
+)
 from ..data.initiative import get_init_list
 from ..data.npc_health import (
     clear_npc_health,
@@ -107,7 +117,7 @@ from .weapon import (
 
 _HELP = (
     ".hp [目标] [= / ± / ±表达式] [当前/最大] [(临时)]\n"
-    "  记录 / 伤害 / 治疗 / 查看生命值\n"
+    "  记录 / 伤害 / 治疗 / 查看生命值（无卡也可）\n"
     "  查看：.hp（自己）、.hp @玩家、.hp list\n"
     "  清理：.hp del 名称（NPC）、.hp clr\n"
     "  武器写法：.hp 地精 -刺剑伤害（可加后缀）\n"
@@ -203,8 +213,9 @@ async def search_target(
 
     返回 (source_key, target_id)：
     - ("pc", user_id) PC 角色卡（含 @ 标记直连——@<qq> 命中该玩家角色卡）
+    - ("pc_hp", user_id) 无绑定卡、但有 HP 记录的玩家
     - ("npc", 名称) NPC 血量条目（或无血量、但存在于先攻表的 NPC）
-    - ("at_miss", qq) @ 标记指向的玩家本群无角色卡（由调用方真 @ 段引导建卡）
+    - ("at_miss", qq) @ 标记指向的玩家本群无角色卡、也无 HP 记录（由调用方决定引导）
     - ("multiple", "name1/name2") 多个匹配
     - ("", "") 未找到
 
@@ -213,13 +224,15 @@ async def search_target(
 
     @ 标记（2026-09-22 新增）为**直连**语义：只查该 QQ 的角色卡、不进入名称
     模糊搜索——@ 本应无歧义，回填名称会重新落入「@ 指名的角色被同名 NPC 抢
-    匹配」的歧义。
+    匹配」的歧义。2026-10-23 起再回退到无卡 HP 记录（HP 与角色卡解耦）。
     """
     mention_qq = onebot_v11.parse_mention_token(target_intent)
     if mention_qq is not None:
         character = await get_character(group_id, mention_qq)
         if character is not None and character.is_init:
             return "pc", mention_qq
+        if await get_hp_record(group_id, mention_qq) is not None:
+            return "pc_hp", mention_qq
         return "at_miss", mention_qq
 
     source, target_id = "", ""
@@ -634,6 +647,35 @@ async def _resolve_weapon_owner(
 # =========================================================================
 
 
+async def _load_player_hp(
+    group_id: int | str, user_id: int | str
+) -> Tuple[Optional[DNDCharacter], Optional[HPInfo]]:
+    """读取玩家 HP：本群绑定卡优先，其次无卡 HP 记录。
+
+    返回 ``(character, hp_info)``：命中卡片时 ``character`` 非空；命中无卡
+    记录或都没有时 ``character`` 为 None、``hp_info`` 可能为 None。
+    """
+    character = await get_character(group_id, user_id)
+    if character is not None and character.is_init:
+        return character, character.hp_info
+    return None, await get_hp_record(group_id, user_id)
+
+
+async def _save_player_hp(
+    group_id: int | str,
+    user_id: int | str,
+    hp_info: HPInfo,
+    character: Optional[DNDCharacter],
+) -> None:
+    """写回玩家 HP：有绑定卡写卡，否则写无卡 HP 记录。"""
+    if character is not None:
+        character.hp_info = hp_info
+        character.is_init = True
+        await save_character(character)
+        return
+    await save_hp_record(group_id, user_id, hp_info)
+
+
 @hp_matcher.handle()
 async def handle_hp(bot: Bot, event: MessageEvent) -> None:
     """处理 .hp 命令。"""
@@ -649,12 +691,14 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
         # 游离 @（如 @小明 .hp）：不按发送者自身执行，回纠正示例
         if mentioned_qqs:
             await hp_matcher.finish(text.TXT_MENTION_HP_POS_HINT)
-        character = await get_character(event.group_id, event.user_id)
+        character, hp_info = await _load_player_hp(
+            event.group_id, event.user_id
+        )
         name = await base.resolve_display_name(
             bot, event, char_name=character.name if character else ""
         )
-        if character and character.is_init and character.hp_info.is_init:
-            feedback = text.TXT_HP_INFO.format(name=name, hp_info=character.hp_info.get_info())
+        if hp_info is not None and hp_info.is_init:
+            feedback = text.TXT_HP_INFO.format(name=name, hp_info=hp_info.get_info())
         else:
             feedback = text.TXT_HP_INFO_MISS.format(name=name)
         await hp_matcher.finish(feedback)
@@ -666,13 +710,21 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
     if arg_str.startswith("list"):
         chars = await list_characters_by_group(event.group_id)
         feedback = ""
+        bound_users: set[str] = set()
         for char in chars:
+            bound_users.add(str(char.user_id))
             if char.hp_info.is_init:
                 name = await base.resolve_display_name(
                     bot, event, char.user_id, char_name=char.name
                 )
                 feedback += f"{name} {char.hp_info.get_info()}\n"
-        # NPC/怪物血量（PC 在前、NPC 在后）
+        # 无绑定卡、但有群级 HP 记录的玩家（PC 在前、NPC 在后）
+        for user_id, hp_info in await list_hp_records(event.group_id):
+            if str(user_id) in bound_users or not hp_info.is_init:
+                continue
+            name = await base.resolve_display_name(bot, event, user_id)
+            feedback += f"{name} {hp_info.get_info()}\n"
+        # NPC/怪物血量
         for npc in await list_npc_health(event.group_id):
             feedback += f"{npc.name} {npc.hp_info.get_info()}\n"
         feedback = feedback.strip()
@@ -710,6 +762,19 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
                     feedback_list.append(
                         text.TXT_HP_DEL_PC_TARGET.format(name=target_name)
                     )
+            elif source_key == "pc_hp":
+                # 无绑定卡、但有 HP 记录的玩家：同样不属于 NPC，不走删除
+                target_qq = onebot_v11.parse_mention_token(target_name)
+                if target_qq is not None:
+                    feedback_list.append(
+                        onebot_v11.at_reply(
+                            target_qq, text.TXT_HP_DEL_PC_RECORD_AT
+                        )
+                    )
+                else:
+                    feedback_list.append(
+                        text.TXT_HP_DEL_PC_RECORD.format(name=target_name)
+                    )
             elif source_key == "npc":
                 await delete_npc_health(event.group_id, target_id)
                 feedback_list.append(text.TXT_HP_DEL.format(name=target_id))
@@ -728,21 +793,18 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
     if view_qqs is not None:
         view_lines: List[Union[str, Message]] = []
         for qq in view_qqs:
-            character = await get_character(event.group_id, qq)
-            if character is None or not character.is_init:
-                view_lines.append(
-                    onebot_v11.at_reply(qq, text.TXT_MENTION_NO_CHAR)
-                )
-                continue
+            character, hp_info = await _load_player_hp(event.group_id, qq)
             name = await base.resolve_display_name(
-                bot, event, qq, char_name=character.name
+                bot, event, qq, char_name=character.name if character else ""
             )
-            if character.hp_info.is_init:
+            if hp_info is not None and hp_info.is_init:
                 view_lines.append(text.TXT_HP_INFO.format(
-                    name=name, hp_info=character.hp_info.get_info()
+                    name=name, hp_info=hp_info.get_info()
                 ))
             else:
-                view_lines.append(text.TXT_HP_INFO_MISS.format(name=name))
+                view_lines.append(
+                    onebot_v11.at_reply(qq, text.TXT_HP_INFO_MISS.format(name=name))
+                )
         await hp_matcher.finish(base.join_lines(view_lines))
 
     # 调整 HP（流程：先定位操作符，再剥离目标前缀，最后解析调整表达式）。
@@ -785,12 +847,11 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
                 if cmd_type != "-" and damage_factor != 1.0:
                     await hp_matcher.finish(text.TXT_HP_FACTOR_DMG_ONLY)
                 source_key, target_id = await search_target(target_name, event.group_id)
-                if source_key in ("pc", "npc"):
+                if source_key in ("pc", "pc_hp", "npc"):
                     target_list.append((source_key, target_id, damage_factor))
                 elif source_key == "at_miss":
-                    await hp_matcher.finish(
-                        onebot_v11.at_reply(target_id, text.TXT_MENTION_NO_CHAR)
-                    )
+                    # @ 的玩家无卡也无记录：HP 与角色卡解耦，按需建立无卡记录
+                    target_list.append(("pc_hp", target_id, damage_factor))
                 elif source_key == "multiple":
                     names = target_id.split("/")
                     feedback = text.TXT_HP_INFO_MULTI.format(name_list=names)
@@ -892,23 +953,18 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
             feedback += text.TXT_HP_MOD.format(name=target_id, hp_mod=mod_info) + "\n"
             continue
 
-        character = await get_character(event.group_id, target_id)
-        if character is None:
-            # 卡库化后 HP 随卡走：未绑定卡的玩家不再隐式创建空白卡
-            if str(target_id) == str(event.user_id) and len(target_list) == 1:
-                await hp_matcher.finish(text.TXT_CHAR_MISS)
-            target_name = await base.resolve_display_name(bot, event, target_id)
-            feedback += text.TXT_HP_TARGET_NO_CHAR.format(name=target_name) + "\n"
-            continue
+        character, hp_info = await _load_player_hp(event.group_id, target_id)
+        if hp_info is None:
+            # HP 与角色卡解耦：无卡玩家按需建立群级 HP 记录
+            hp_info = HPInfo()
 
         # 击晕（留活口）：近战把目标打到 0 HP 时可改为不杀。两版都有这条规则，
         # 差别在结果（2026-10-01 修订，此前误按「仅 2024 可用」实现）：
         # - 2014：HP 降到 0、陷入昏迷，**但伤势稳定**（不再掷死亡豁免）；
         # - 2024：改为降到 1 点 HP，昏迷并开始一次短休。
         # 两版都直接结束战斗状态下的死亡豁免流程，不走濒死。
-        if stun_request and cmd_type == "-" and character.hp_info.is_init:
+        if stun_request and cmd_type == "-" and hp_info.is_init:
             rules_version = await char_rules.rules_version(event.group_id)
-            hp_info = character.hp_info
             hp_info.hp_temp = 0
             hp_info.clear_death_state()
             if rules_version == char_rules.RULES_2024:
@@ -920,10 +976,10 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
                 hp_info.is_alive = False
                 hp_info.is_stable = True
                 stun_text = text.TXT_HP_STUN_2014
-            character.is_init = True
-            await save_character(character)
+            await _save_player_hp(event.group_id, target_id, hp_info, character)
             name = await base.resolve_display_name(
-                bot, event, target_id, char_name=character.name
+                bot, event, target_id,
+                char_name=character.name if character else "",
             )
             feedback += text.TXT_HP_STUN.format(name=name, effect=stun_text) + "\n"
             continue
@@ -932,20 +988,19 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
         # 濒死/稳定中再受伤 → 记失败（重击 +2）、伤害 ≥ HP 上限即死。
         # 「本来就在 0 HP 挨打」与「这一击打到 0」扣血后都是 0，故在扣血前
         # 先取昏迷状态（is_alive）；治疗使 HP 回正 → heal() 内已清死亡豁免状态
-        was_unconscious = not character.hp_info.is_alive
+        was_unconscious = not hp_info.is_alive
         mod_info = HPService.process_roll_result(
-            character.hp_info, cmd_type, hp_cur, hp_max, hp_temp,
+            hp_info, cmd_type, hp_cur, hp_max, hp_temp,
             short_feedback=(len(target_list) > 1),
             damage_factor=damage_factor,
         )
-        character.is_init = True
 
         death_line = ""
-        if cmd_type == "-" and hp_cur is not None and character.hp_info.is_init:
+        if cmd_type == "-" and hp_cur is not None and hp_info.is_init:
             damage = HPService.effective_damage(hp_cur, damage_factor)
             is_critical = weapon_damage is not None and "重击" in weapon_damage.note
             transition, death_line = HPService.apply_death_save_on_damage(
-                character.hp_info, damage,
+                hp_info, damage,
                 critical=is_critical, was_unconscious=was_unconscious,
             )
             if transition == HPService.DEATH_TRANSITION_ENTERED:
@@ -957,13 +1012,14 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
                 # 濒死计数会落在数值后面（如「濒死(成功0 失败0)」却已记 1 次失败）。
                 # 结算完重新生成一次，状态行与播报取同一份数据（2026-10-01 修订）。
                 mod_info = HPService.refresh_hp_status(
-                    character.hp_info, mod_info, short_feedback=(len(target_list) > 1)
+                    hp_info, mod_info, short_feedback=(len(target_list) > 1)
                 )
 
-        await save_character(character)
+        await _save_player_hp(event.group_id, target_id, hp_info, character)
 
         name = await base.resolve_display_name(
-            bot, event, target_id, char_name=character.name
+            bot, event, target_id,
+            char_name=character.name if character else "",
         )
         feedback += text.TXT_HP_MOD.format(name=name, hp_mod=mod_info) + "\n"
         if death_line:
@@ -983,12 +1039,14 @@ async def handle_death_save(bot: Bot, event: MessageEvent) -> None:
         await ds_matcher.finish(text.TXT_GROUP_ONLY)
 
     rest = (base.get_command_rest_with_mentions(event) or "").strip()
-    character = await get_character(event.group_id, event.user_id)
-    if character is None or not character.is_init:
-        await ds_matcher.finish(text.TXT_CHAR_MISS)
-    hp_info = character.hp_info
-    name = await base.resolve_display_name(bot, event, char_name=character.name)
-
+    character, hp_info = await _load_player_hp(event.group_id, event.user_id)
+    name = await base.resolve_display_name(
+        bot, event, char_name=character.name if character else ""
+    )
+    # 死亡豁免与 HP 记录绑定：计数、自然 20 回血、0 HP 受伤记失败都要读写 HP。
+    # 无卡玩家先用 .hp 当前/最大 记一次即可，不要求建卡（2026-10-23 文案修订）。
+    if hp_info is None:
+        await ds_matcher.finish(text.TXT_DS_NO_RECORD.format(name=name))
     if not hp_info.is_init:
         await ds_matcher.finish(text.TXT_DS_NO_HP.format(name=name))
 
@@ -1007,7 +1065,9 @@ async def handle_death_save(bot: Bot, event: MessageEvent) -> None:
             hp_info.add_death_success(count) if kind == "成功"
             else hp_info.add_death_failure(count)
         )
-        await save_character(character)
+        await _save_player_hp(
+            event.group_id, event.user_id, hp_info, character
+        )
         if fatal:
             message = (
                 text.TXT_DS_MANUAL_STABLE if kind == "成功"
@@ -1027,7 +1087,9 @@ async def handle_death_save(bot: Bot, event: MessageEvent) -> None:
         hp_info.clear_death_state()
         if hp_info.hp_cur < 0:
             hp_info.hp_cur = 0
-        await save_character(character)
+        await _save_player_hp(
+            event.group_id, event.user_id, hp_info, character
+        )
         await ds_matcher.finish(text.TXT_DS_RESET.format(
             name=name, hp_info=hp_info.get_info()
         ))
@@ -1060,7 +1122,9 @@ async def handle_death_save(bot: Bot, event: MessageEvent) -> None:
         )
     except AssertionError as exc:
         await ds_matcher.finish(str(exc))
-    await save_character(character)
+    await _save_player_hp(
+        event.group_id, event.user_id, hp_info, character
+    )
     await ds_matcher.finish(text.TXT_DS_RESULT.format(
         name=name, result=result_str, state=state, hp_info=hp_info.get_info()
     ))

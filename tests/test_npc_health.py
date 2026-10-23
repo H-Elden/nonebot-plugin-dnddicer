@@ -23,7 +23,7 @@ from fake_event import fake_group_message_event_v11
 from nonebot_plugin_dnddicer.engine.roll.karma_runtime import reset_runtime, set_runtime
 from nonebot_plugin_dnddicer.engine.roll.sequence_runtime import SequenceRuntime
 
-_CLEAN_FILES = ("initiative.json", "cards.json", "npc_health.json")
+_CLEAN_FILES = ("initiative.json", "cards.json", "npc_health.json", "hp_records.json")
 
 
 @pytest.fixture(autouse=True)
@@ -31,10 +31,12 @@ def _clear_store():
     """每个用例前清空先攻/NPC 血量/角色卡数据（缓存 + JSON）。"""
     from nonebot_plugin_dnddicer.data import get_data_file
     from nonebot_plugin_dnddicer.data import characters as _chars
+    from nonebot_plugin_dnddicer.data import hp_records as _hp_records
     from nonebot_plugin_dnddicer.data import initiative as _init
     from nonebot_plugin_dnddicer.data import npc_health as _npc
 
     _chars._cache = None
+    _hp_records._cache = None
     _init._cache = None
     _npc._cache = None
     for name in _CLEAN_FILES:

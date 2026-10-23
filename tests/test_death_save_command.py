@@ -36,13 +36,14 @@ def _clear_data():
     from nonebot_plugin_dnddicer.data import characters as _chars
     from nonebot_plugin_dnddicer.data import get_data_file
     from nonebot_plugin_dnddicer.data import group_config as _group_config
+    from nonebot_plugin_dnddicer.data import hp_records as _hp_records
     from nonebot_plugin_dnddicer.data import initiative as _init
     from nonebot_plugin_dnddicer.data import npc_health as _npc
 
-    for module in (_chars, _group_config, _init, _npc):
+    for module in (_chars, _group_config, _hp_records, _init, _npc):
         module._cache = None
-    for name in ("cards.json", "group_config.json", "initiative.json",
-                 "npc_health.json"):
+    for name in ("cards.json", "group_config.json", "hp_records.json",
+                 "initiative.json", "npc_health.json"):
         path = get_data_file(name)
         if path.exists():
             path.write_text("{}", encoding="utf-8")
@@ -316,10 +317,14 @@ async def test_hp_stun_only_in_damage(app: App):
 
 @pytest.mark.asyncio
 async def test_ds_no_character_card(app: App):
-    """.ds 无角色卡 → 提示建卡。"""
+    """.ds 无角色卡也无 HP 记录 → 提示先记录生命值（无卡也可以），不再引导建卡。"""
     from nonebot_plugin_dnddicer.commands.hp import ds_matcher
+    from nonebot_plugin_dnddicer.commands import text as cmd_text
 
-    await _expect(app, ds_matcher, _event(".ds", 22001), "你还没有在本群绑定角色卡，可发 .角色卡列表 查看卡库并绑定")
+    await _expect(
+        app, ds_matcher, _event(".ds", 22001),
+        cmd_text.TXT_DS_NO_RECORD.format(name="test"),
+    )
 
 
 @pytest.mark.asyncio

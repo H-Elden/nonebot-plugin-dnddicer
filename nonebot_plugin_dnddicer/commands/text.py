@@ -452,8 +452,6 @@ TXT_HP_INFO_MISS = "找不到{name}的生命值信息"
 #: .hp 指定目标未命中：附 NPC 记录方式的引导（NPC 需先入先攻表，见 commands/hp.py）
 TXT_HP_INFO_MISS_HINT = "找不到{name}的生命值信息\n新NPC需要先加入先攻表才可设置HP"
 TXT_HP_INFO_MULTI = "存在多个匹配目标：{name_list}"
-#: .hp 目标玩家未在本群绑定角色卡（卡库化后不再隐式建空白卡）
-TXT_HP_TARGET_NO_CHAR = "「{name}」未在本群绑定角色卡"
 TXT_HP_INFO_NONE = "本群没有任何生命值信息"
 TXT_HP_MOD = "{name}: {hp_mod}"
 TXT_HP_MOD_ERR = "修改生命值时出现错误：{error}"
@@ -464,6 +462,10 @@ TXT_HP_DEL = "已删除{name}的生命值信息"
 TXT_HP_DEL_NO_TARGET = "请指定要删除的NPC名称（.hp del 名称）；如需删除整张角色卡请用 .角色卡清除"
 #: 同上：目标解析为玩家角色卡时的引导（不再连卡删除，2026-09-21 语义修订）
 TXT_HP_DEL_PC_TARGET = "「{name}」是玩家角色卡，.hp del/clr 仅用于删除NPC血量记录；如需删除整张角色卡请用 .角色卡清除"
+#: 同上：目标是无绑定卡、但有 HP 记录的玩家（HP 与角色卡解耦，2026-10-23）
+TXT_HP_DEL_PC_RECORD = "「{name}」是玩家的生命值记录，.hp del/clr 仅用于删除NPC血量记录"
+#: 同上（@ 版本）
+TXT_HP_DEL_PC_RECORD_AT = "是玩家的生命值记录，.hp del/clr 仅用于删除NPC血量记录"
 #: .hp clr：清空本群全部 NPC 血量记录（含跨战斗保持的）
 TXT_HP_CLR_DONE = "已清空{n}条NPC血量记录"
 TXT_HP_CLR_NONE = "本群没有任何NPC生命值信息"
@@ -578,6 +580,11 @@ TXT_DS_ENTER = "已进入濒死，请在自己回合开始时掷 .死亡豁免�
 TXT_DS_RESTART = "伤势稳定被打破，重新开始死亡豁免（请在自己回合开始时掷 .死亡豁免）。"
 #: 未记录 HP：濒死判定无从谈起
 TXT_DS_NO_HP = "找不到{name}的生命值记录，请先用 .hp 当前/最大 记录生命值。"
+#: 完全没有 HP 记录（无卡且从未记过 HP）：先记录生命值，再掷死亡豁免
+TXT_DS_NO_RECORD = (
+    "找不到{name}的生命值记录：先发 .hp 当前/最大 记录生命值"
+    "（没有角色卡也可以），之后再用 .死亡豁免。"
+)
 #: 无需掷（HP 大于 0 / 已稳定 / 已死亡）
 TXT_DS_NOT_DYING = "HP 大于 0，无需死亡豁免。"
 TXT_DS_STABLE = "伤势已稳定，无需再掷死亡豁免（再受伤将重新开始）。"

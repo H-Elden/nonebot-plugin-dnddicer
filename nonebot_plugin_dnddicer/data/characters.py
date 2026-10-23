@@ -27,6 +27,7 @@ from ..character.constants import (
 )
 from ..character.models import DNDCharacter
 from ..data import get_data_file
+from ..data.hp_records import delete_hp_record
 from ..data.schema import dump_versioned_dict, load_versioned_dict
 
 _FILENAME = "cards.json"
@@ -409,6 +410,8 @@ async def bind_card(
         previous = mapping.get(owner_str)
         mapping[owner_str] = card_id
         await _dump_locked(store)
+        # 绑定后 HP 以卡面为准：丢弃该群此前记下的无卡 HP 记录
+        await delete_hp_record(group_str, owner_str)
         return previous
 
 
