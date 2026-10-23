@@ -287,6 +287,18 @@ CHAR_INFO_KEY_COMBAT_NOTES = "$战斗记录$"
 CHAR_INFO_KEY_STORY = "$故事$"
 CHAR_INFO_KEY_PROGRESS = "$进度$"
 CHAR_INFO_KEY_COINS = "$钱币$"
+# ── 角色卡库（卡名与上限，2026-10-23）────────────────────────────────────
+#: 卡名最大字符数（玩家可见的库内标识，与 $姓名$ 分开）
+CARD_NAME_MAX_LEN = 20
+#: 一个 QQ 最多同时持有的角色卡数量
+CARD_LIMIT = 10
+#: 卡名不能与 .角色卡 子命令重名，避免查看命令歧义
+CARD_NAME_RESERVED = (
+    "新建", "修改", "改名", "列表", "绑定", "解绑", "清除", "模板", "记录",
+)
+#: 卡名禁含符号（空白另按字符判断）
+CARD_NAME_FORBIDDEN_CHARS = ("$", "@")
+
 CHAR_INFO_KEY_LIST = [
     CHAR_INFO_KEY_NAME,
     CHAR_INFO_KEY_RACE,

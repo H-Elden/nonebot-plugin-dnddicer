@@ -4,8 +4,8 @@
 不转正 EXIF、不裁切；只校验图片格式（按魔数，不看扩展名）与 4 MB 体积上限。
 剪裁与取景由后续网页建卡器的裁切工具负责。
 
-存储：``<插件数据目录>/portraits/<群号>_<QQ号>.<扩展名>``。卡库化后文件名
-改为 ``<card_id>.<扩展名>``，本模块的读取/清理接口不变。
+存储：``<插件数据目录>/portraits/<card_id>.<扩展名>``（2026-10-23 卡库化后）。
+旧格式 ``<群号>_<QQ号>.<扩展名>`` 若存在仍可读取，不做文件迁移。
 
 图片获取只在 ``.立绘`` 上传时发生：本地路径优先，其次 http(s) URL，
 最后走 OneBot ``get_image``；渲染阶段只读本地文件并转 data URI，不联网。
@@ -84,10 +84,9 @@ def _portrait_path(name: str) -> Path:
     return get_data_dir() / name
 
 
-def _target_name(group_id: str, user_id: str, ext: str) -> str:
+def _target_name(card_id: str, ext: str) -> str:
     """生成当前卡的立绘文件名（只保留字母数字、下划线与短横线）。"""
-    raw = f"{group_id}_{user_id}"
-    safe = re.sub(r"[^A-Za-z0-9_-]", "_", raw)[:80]
+    safe = re.sub(r"[^A-Za-z0-9_-]", "_", str(card_id))[:80]
     return f"portraits/{safe}.{ext}"
 
 
@@ -104,7 +103,9 @@ def _remove_same_stem(path: Path) -> None:
             candidate.unlink(missing_ok=True)
 
 
-async def save_portrait(group_id: str, user_id: str, data: bytes) -> str:
+async def save_portrait(
+    card_id: str, data: bytes, old_name: str = ""
+) -> str:
     """校验并原样保存立绘，返回相对文件名；失败抛 ``PortraitError``。"""
     if len(data) > MAX_PORTRAIT_BYTES:
         raise PortraitTooLarge
@@ -112,14 +113,16 @@ async def save_portrait(group_id: str, user_id: str, data: bytes) -> str:
     if detected is None:
         raise PortraitBadFormat
     ext, _mime = detected
-    name = _target_name(group_id, user_id, ext)
+    name = _target_name(card_id, ext)
     path = _portrait_path(name)
-    # 先写新图再清旧扩展名：写盘失败时旧图仍在
+    # 先写新图再清旧文件：写盘失败时旧图仍在
     try:
         await asyncio.to_thread(_write_bytes, path, data)
         await asyncio.to_thread(_remove_same_stem, path)
     except OSError as exc:
         raise PortraitFetchFailed from exc
+    if old_name and old_name != name:
+        await delete_portrait(old_name)
     return name
 
 

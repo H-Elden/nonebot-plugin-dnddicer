@@ -691,10 +691,12 @@ class NPCHealth(BaseModel):
 
 
 class DNDCharacter(BaseModel):
-    """DND5e 角色卡（每人在每群一张，键 = 群 + QQ）。"""
+    """DND5e 角色卡（卡库内每张卡一条，按 card_id 定位）。"""
 
     group_id: str
     user_id: str
+    #: 卡库内部定位字段；不进入卡文本、不随 model_dump 落盘
+    card_id: str = Field(default="", exclude=True)
     name: str = ""
     race: str = ""        # 种族（$种族$；仅记录展示）
     char_class: str = ""  # 职业（$职业$；标准 12 职业或扩展职业名，偷袭骰只认游荡者）
@@ -743,7 +745,7 @@ class DNDCharacter(BaseModel):
         ]
 
     def get_char_info(self) -> str:
-        """完整角色卡文本（$xxx$ 段落格式，可再次 .角色卡记录）。
+        """完整角色卡文本（$xxx$ 段落格式，可用于 .角色卡新建 / .角色卡修改）。
 
         段顺序：身份 → 数值 → 特性 → 装备 → 资源 → 法术。
         """

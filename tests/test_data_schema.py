@@ -1,14 +1,12 @@
 """数据层 schema_version 版本化测试（data/schema.py + 各存储模块）。
 
-覆盖：v0 裸字典自动读取并随首次写入升级 v1、未来主版本拒绝读取、
-损坏文件按空处理、v1 包装结构正确。
+覆盖：cards.json 的 v1 包装结构、未来主版本拒绝读取、损坏文件按空处理。
+角色卡库自 2026-10-23 改用新文件，不做旧 characters.json 迁移。
 """
 
 import json
 
 import pytest
-
-from fake_event import fake_group_message_event_v11
 
 from nonebot_plugin_dnddicer.character.models import DNDCharacter
 from nonebot_plugin_dnddicer.data import get_data_file
@@ -23,7 +21,7 @@ def _clean_stores():
 
     for module in (_chars, _gc, _init):
         module._cache = None
-    for name in ("characters.json", "group_config.json", "initiative.json"):
+    for name in ("cards.json", "group_config.json", "initiative.json"):
         path = get_data_file(name)
         if path.exists():
             path.write_text("{}", encoding="utf-8")
@@ -41,7 +39,7 @@ def _read_document(filename: str) -> dict:
 
 
 # =========================================================================
-# 角色卡存储 characters.json
+# 角色卡库存储 cards.json
 # =========================================================================
 
 
@@ -50,46 +48,59 @@ async def _sample_char() -> DNDCharacter:
 
 
 @pytest.mark.asyncio
-async def test_characters_legacy_v0_read_and_upgrade():
-    """v0 裸字典可读；再次写入后文件自动升级为 v1 包装。"""
+async def test_cards_structure_and_roundtrip():
+    """新建 + 绑定后落盘为 v1 包装；清缓存后仍可读出。"""
     from nonebot_plugin_dnddicer.data import characters as chars
 
     char = await _sample_char()
-    # 先正常保存（得到合法条目），再手工把文件退化为 v0 裸字典形态
-    await chars.save_character(char)
-    document = _read_document("characters.json")
-    raw_v0 = document["data"]
-    _write_raw("characters.json", raw_v0)
-    chars._cache = None
+    card_id = await chars.create_card("99", "测试卡", "88", char)
+    await chars.bind_card("88", "99", card_id)
+
+    document = _read_document("cards.json")
+    assert document["schema_version"] == 1
+    data = document["data"]
+    assert card_id in data["cards"]
+    assert data["cards"][card_id]["card_name"] == "测试卡"
+    assert data["bindings"]["88"]["99"] == card_id
 
     loaded = await chars.get_character("88", "99")
     assert loaded is not None and loaded.name == "老王"
+    assert loaded.card_id == card_id
 
-    # 再次写入 → v1 包装，且数据可继续读出
-    await chars.save_character(char)
-    upgraded = _read_document("characters.json")
-    assert upgraded["schema_version"] == 1
-    assert "88:99" in upgraded["data"]
     chars._cache = None
-    assert (await chars.get_character("88", "99")).name == "老王"
+    reloaded = await chars.get_character("88", "99")
+    assert reloaded is not None and reloaded.name == "老王"
 
 
 @pytest.mark.asyncio
-async def test_characters_future_version_rejected():
-    """未知未来主版本 → 按空数据处理（拒绝降级写入读取）。"""
+async def test_cards_ignore_old_characters_file():
+    """旧 characters.json 不再读取（新存储隔离）。"""
     from nonebot_plugin_dnddicer.data import characters as chars
 
-    _write_raw("characters.json", {"schema_version": 99, "data": {"x": 1}})
+    _write_raw(
+        "characters.json",
+        {"schema_version": 1, "data": {"88:99": {"name": "旧卡"}}},
+    )
     chars._cache = None
     assert await chars.get_character("88", "99") is None
 
 
 @pytest.mark.asyncio
-async def test_characters_corrupt_file_empty():
+async def test_cards_future_version_rejected():
+    """未知未来主版本 → 按空数据处理（拒绝降级写入读取）。"""
+    from nonebot_plugin_dnddicer.data import characters as chars
+
+    _write_raw("cards.json", {"schema_version": 99, "data": {"cards": {}}})
+    chars._cache = None
+    assert await chars.get_character("88", "99") is None
+
+
+@pytest.mark.asyncio
+async def test_cards_corrupt_file_empty():
     """损坏 JSON → 空数据不崩溃。"""
     from nonebot_plugin_dnddicer.data import characters as chars
 
-    get_data_file("characters.json").write_text("{not json", encoding="utf-8")
+    get_data_file("cards.json").write_text("{not json", encoding="utf-8")
     chars._cache = None
     assert await chars.get_character("88", "99") is None
 

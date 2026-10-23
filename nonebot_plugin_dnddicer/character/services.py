@@ -3,7 +3,8 @@
 - ``AbilityService.initialize``：把「等级/六属性/熟练项/额外加值」校验写入 AbilityInfo；
 - ``AbilityService.perform_check``：按条目把 D20（可优势/劣势）+ 熟练 + 调整 + 加值
   拼成掷骰表达式交 ast_engine，返回 (hint 过程说明, result 掷骰过程文本, 数值)；
-- ``CharacterService.parse``：把 ``.角色卡记录`` 的 ``$xxx$`` 模板文本解析为角色；
+- ``CharacterService.parse``：整卡解析底层（命令层新建用 ``parse_full``、修改用
+  ``merge_segments``）；
 - ``gen_template_char``：生成示例模板（供 .角色卡模板 输出）。
 
 只处理数据，不负责存储（存储见 data/characters.py）。
@@ -140,11 +141,14 @@ def _normalize_name(name: str) -> str:
     return SKILL_SYNONYM_DICT.get(name, name)
 
 
-def parse_template_to_dict(input_str: str) -> Dict[str, str]:
+def parse_template_to_dict(
+    input_str: str, *, keep_empty: bool = False
+) -> Dict[str, str]:
     """把角色卡模板文本（``$关键字$ 内容``）拆成 {关键字: 内容} 字典。
 
     ``$`` 为段落分隔符，内容中不应再出现 ``$``；未知段直接报错（不再静默
-    忽略），空的已知段跳过，便于可选段留空。
+    忽略）。``keep_empty=False`` 时空的已知段跳过，便于可选段留空；
+    ``keep_empty=True`` 时保留空段，供 ``.角色卡修改`` 用空段清空内容。
     """
     known_keys = set(CHAR_INFO_KEY_LIST)
     matches = list(re.finditer(r"\$([^$\n]+)\$", input_str))
@@ -157,7 +161,7 @@ def parse_template_to_dict(input_str: str) -> Dict[str, str]:
             )
         end = matches[index + 1].start() if index + 1 < len(matches) else len(input_str)
         content = input_str[match.end():end].strip()
-        if content:
+        if content or keep_empty:
             result[key] = content
     return result
 
@@ -1450,6 +1454,13 @@ class CharacterService:
         ``$等级$`` / ``$属性$`` 等未提供的段不会被清空，这是网页建卡器
         4500 字拆块时后续部分能补全卡面的前提。
         """
+        for key in (
+            CHAR_INFO_KEY_NAME,
+            CHAR_INFO_KEY_LEVEL,
+            CHAR_INFO_KEY_ABILITY,
+        ):
+            if key in data and not data[key].strip():
+                raise AssertionError(f"{key.strip('$')}不能清空")
         existing_data = parse_template_to_dict(existing.get_char_info())
         for key, content in data.items():
             existing_data[key] = content
@@ -1464,8 +1475,51 @@ class CharacterService:
             existing.user_id,
             reserved_names,
         )
+        if not merged.name.strip():
+            raise AssertionError("姓名不能为空")
         merged.portrait = existing.portrait
+        merged.card_id = existing.card_id
         return merged
+
+    @staticmethod
+    def parse_full(
+        input_str: str,
+        group_id: str,
+        user_id: str,
+        reserved_names: Iterable[str] = (),
+    ) -> DNDCharacter:
+        """``.角色卡新建`` 专用：按整卡解析，必须含姓名、等级与属性。"""
+        character = CharacterService.parse(
+            input_str,
+            group_id,
+            user_id,
+            reserved_names,
+            existing=None,
+        )
+        if not character.name.strip():
+            raise AssertionError("必须设定姓名")
+        return character
+
+    @staticmethod
+    def merge_segments(
+        existing: DNDCharacter,
+        data: Dict[str, str],
+        reserved_names: Iterable[str] = (),
+    ) -> DNDCharacter:
+        """``.角色卡修改`` 专用：只覆盖 ``data`` 中提到的段。
+
+        与旧 ``.角色卡记录`` 的自动判断不同，本方法**永远走合并**；
+        即使输入同时含 ``$等级$`` 与 ``$属性$`` 也不会整卡覆盖。
+        """
+        if not data:
+            raise AssertionError("未找到可修改的段")
+        known_keys = set(CHAR_INFO_KEY_LIST)
+        for key in data:
+            if key not in known_keys:
+                raise AssertionError(
+                    f"未知段: {key}（可用段见 .角色卡模板）"
+                )
+        return CharacterService._merge_segments(existing, data, reserved_names)
 
     @staticmethod
     def parse(
@@ -1475,7 +1529,7 @@ class CharacterService:
         reserved_names: Iterable[str] = (),
         existing: Optional[DNDCharacter] = None,
     ) -> DNDCharacter:
-        """把 ``.角色卡记录`` 的模板文本解析为角色；失败抛 AssertionError。
+        """把整卡模板文本解析为角色；失败抛 AssertionError。
 
         模板格式（.角色卡模板 可查看示例）：
         $姓名$ 伊丽莎白
