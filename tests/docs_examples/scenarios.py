@@ -1373,6 +1373,19 @@ card_image_demo = Scene(
     ],
 )
 
+# 无卡 HP 记录（2026-10-23）：HP 与角色卡解耦，没建卡也能记录；
+# 放在时间线末尾，不影响前面所有「HP 随卡走」的示例。
+hp_no_card = Scene(
+    id="hp_no_card",
+    title="没建卡也能记 HP：自己记录与 DM 代结算",
+    steps=[
+        Step("小鹿", ".hp 24/30"),
+        Step("小鹿", ".hp"),
+        Step("白鸦", ".hp @小鹿 -6"),
+        Step("小鹿", ".hp"),
+    ],
+)
+
 master_forward = Scene(
     id="master_forward",
     title="联系骰主：反馈交由骰娘私聊转达（群聊与私聊都可用）",
@@ -1531,5 +1544,6 @@ TIMELINE = [
     rest_long,
     # 第十二幕：角色卡图与立绘（《角色卡图与立绘》页）
     card_image_demo,
+    hp_no_card,          # 无卡 HP 记录（《生命值管理》页；置尾避免影响前面示例）
     quickstart_bot_off,  # 压轴：服务关闭后本群不再响应其他命令
 ]
