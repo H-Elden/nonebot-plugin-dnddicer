@@ -32,7 +32,7 @@
 <tr class="hp-row"><td class="hp-label">临时生命</td><td class="hp-value-small">{{ view.temp_hp }}</td></tr>
 <tr class="hp-row"><td class="hp-label">生命骰</td><td class="hp-value-small">{{ view.hit_dice }}</td></tr>
 <tr class="hp-row hp-ds"><td class="hp-label">死亡豁免</td><td>{% if view.death_state %}<span class="hp-value-small">{{ view.death_state }}</span>{% else %}<div>成功 {{ pips(view.death_success, 3) }}</div><div>失败 {{ pips(view.death_failure, 3) }}</div>{% endif %}</td></tr>
-<tr class="hp-row hp-last"><td class="hp-label">英雄激励</td><td>{{ box(view.inspiration is true) }}</td></tr>
+<tr class="hp-row hp-last"><td class="hp-label">{{ view.inspiration_label }}</td><td>{% if view.inspiration is none %}—{% else %}{{ box(view.inspiration) }}{% endif %}</td></tr>
 </table></td>
 </tr></table>
 <table class="main"><tr>

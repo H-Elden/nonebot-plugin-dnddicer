@@ -370,3 +370,21 @@ def test_portrait_data_uri() -> None:
     plain = build_card_view(_empty("张三"))
     assert plain.has_portrait is False
     assert plain.portrait_data_uri == ""
+
+
+def test_inspiration_three_states_and_version_label() -> None:
+    """激励三态（未记录 / 无 / 有）与 2024 / 2014 两种称呼。"""
+    character = _empty()
+    view = build_card_view(character)
+    assert view.inspiration is None
+    assert view.inspiration_label == "英雄激励"
+
+    character.progress = {"激励": "无"}
+    view = build_card_view(character, version_2024=False)
+    assert view.inspiration is False
+    assert view.inspiration_label == "激励"
+
+    character.progress = {"激励": "有"}
+    view = build_card_view(character, version_2024=True)
+    assert view.inspiration is True
+    assert view.inspiration_label == "英雄激励"

@@ -327,3 +327,27 @@ def test_budget_leaves_margin_below_content_width() -> None:
     assert card_geometry.list_budget() < card_geometry.flat_budget()
     # 余量至少 5%（字体度量差异的实测上界）
     assert card_geometry.flat_budget() <= content * 0.95
+
+
+def test_char_card_inspiration_states_and_label() -> None:
+    """激励行：未记录画「—」、无画空框、有画勾选框；2014 称呼为「激励」。"""
+    pytest.importorskip("jinja2", reason="模板渲染需要可选的 [render] 依赖（含 Jinja2）")
+    from nonebot_plugin_dnddicer.character.card_view import build_card_view
+    from nonebot_plugin_dnddicer.character.models import DNDCharacter
+
+    character = DNDCharacter(
+        group_id="g", user_id="u", name="空卡", is_init=True
+    )
+    html = _render_char(build_card_view(character, version_2024=False))
+    assert '<td class="hp-label">激励</td><td>—</td>' in html
+
+    character.progress = {"激励": "无"}
+    html = _render_char(build_card_view(character, version_2024=False))
+    assert '<td class="hp-label">激励</td><td><span class="box"></span></td>' in html
+
+    character.progress = {"激励": "有"}
+    html = _render_char(build_card_view(character, version_2024=True))
+    assert (
+        '<td class="hp-label">英雄激励</td>'
+        '<td><span class="box filled"></span></td>' in html
+    )

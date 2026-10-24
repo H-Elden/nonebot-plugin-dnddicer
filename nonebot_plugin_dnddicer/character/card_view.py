@@ -177,6 +177,8 @@ class CharacterCardView:
     death_failure: int = 0
     death_state: str = ""
     inspiration: Optional[bool] = None
+    #: 激励行标题（2024 / 5r「英雄激励」、2014 / 5e「激励」，2026-10-24）
+    inspiration_label: str = "英雄激励"
     abilities: Tuple[AbilityView, ...] = ()
     proficiencies: Tuple[str, ...] = ()
     combat_notes: Tuple[str, ...] = ()
@@ -555,8 +557,14 @@ def build_card_view(
     character: DNDCharacter,
     portrait: bytes = b"",
     portrait_mime: str = "",
+    *,
+    version_2024: bool = True,
 ) -> CharacterCardView:
-    """把角色卡模型转成卡面视图；``portrait`` 为已校验的原始图片字节。"""
+    """把角色卡模型转成卡面视图；``portrait`` 为已校验的原始图片字节。
+
+    ``version_2024`` 只影响激励行的称呼（2024 / 5r 为「英雄激励」、
+    2014 / 5e 为「激励」），由命令层按群级规则版本传入；纯函数本身不读配置。
+    """
     portrait_uri = ""
     if portrait:
         mime = portrait_mime or "image/png"
@@ -584,6 +592,7 @@ def build_card_view(
         death_failure=hp_info.ds_failure if hp_info.is_init else 0,
         death_state=_death_state(character),
         inspiration=inspiration,
+        inspiration_label="英雄激励" if version_2024 else "激励",
         abilities=_ability_views(character),
         proficiencies=tuple(
             f"{label}：{'、'.join(items)}"

@@ -19,6 +19,7 @@ from nonebot.adapters.onebot.v11 import (
 )
 from nonebot.matcher import Matcher
 
+from ..character import rules as char_rules
 from ..character.card_view import build_card_view
 from ..character.models import DNDCharacter
 from ..data import portraits
@@ -123,8 +124,18 @@ async def handle_character_image(bot: Bot, event: MessageEvent) -> None:
                 loaded = await portraits.load_portrait(character.portrait)
                 if loaded is not None:
                     portrait_data, portrait_mime = loaded
+            version = (
+                await char_rules.rules_version(event.group_id)
+                if isinstance(event, GroupMessageEvent)
+                else char_rules.default_rules_version()
+            )
             png = await render_char_card(
-                build_card_view(character, portrait_data, portrait_mime)
+                build_card_view(
+                    character,
+                    portrait_data,
+                    portrait_mime,
+                    version_2024=version == char_rules.RULES_2024,
+                )
             )
         except Exception:
             logger.exception("DNDDicer 角色卡图渲染失败，已回退文字输出")
