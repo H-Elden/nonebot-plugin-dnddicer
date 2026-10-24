@@ -1399,6 +1399,63 @@ master_forward = Scene(
     ],
 )
 
+# 第十幕：角色卡体验补强（激励 / 资源目标 / 战斗记录 / 钱币，2026-10-24）
+inspiration_flow = Scene(
+    id="inspiration_flow",
+    title="英雄激励：状态、获得、按 @ 与角色名转赠、2014 称呼",
+    steps=[
+        Step("阿茶", ".激励"),
+        Step("阿茶", ".激励 +"),
+        Step("阿茶", ".激励 给予 @老猫"),
+        Step("老猫", ".激励"),
+        Step("阿茶", ".激励 +"),
+        Step("阿茶", ".激励 给予 布鲁姆"),
+        Step("阿岩", ".激励"),
+        # 2014 群称呼为「激励」
+        Step("白鸦", ".规则版本 5e"),
+        Step("小满", ".激励"),
+        Step("小满", ".激励 +"),
+        Step("白鸦", ".规则版本 5r"),
+        Step("白鸦", ".规则版本 默认"),
+    ],
+)
+
+resource_target = Scene(
+    id="resource_target",
+    title="DM 代操作资源：@玩家 / 角色名查看与增减",
+    steps=[
+        Step("白鸦", ".能力 @阿茶"),
+        Step("白鸦", ".能力 薇拉 圣疗 -1"),
+        Step("白鸦", ".法术位 @小满"),
+        Step("白鸦", ".法术位 洛恩 1 -1"),
+    ],
+)
+
+combat_notes = Scene(
+    id="combat_notes",
+    title="战斗记录：查看、追加、批量追加、按序号删除与清空",
+    steps=[
+        Step("老猫", ".战斗记录"),
+        Step("老猫", ".战斗记录 +祝福术(专注,3轮)"),
+        Step("老猫", ".战斗记录 +中毒; 目盲"),
+        Step("老猫", ".战斗记录"),
+        Step("老猫", ".战斗记录 -2"),
+        Step("老猫", ".战斗记录 清"),
+    ],
+)
+
+coins_flow = Scene(
+    id="coins_flow",
+    title="钱币收支：紧凑写法、同币种扣除与不足时按面值折算",
+    steps=[
+        Step("老猫", ".钱币"),
+        Step("老猫", ".钱币 +20GP-5SP"),
+        Step("老猫", ".钱币 -19GP"),
+        Step("老猫", ".钱币 +10SP"),
+        Step("老猫", ".钱币 -1GP"),
+    ],
+)
+
 #: 时间线（顺序执行；后续按页补场景，注意保持剧情顺序）
 TIMELINE = [
     quickstart_bot_on,
@@ -1544,6 +1601,11 @@ TIMELINE = [
     rest_long,
     # 第十二幕：角色卡图与立绘（《角色卡图与立绘》页）
     card_image_demo,
+    # 第十三幕：角色卡体验补强（2026-10-24）
+    inspiration_flow,
+    resource_target,
+    combat_notes,
+    coins_flow,
     hp_no_card,          # 无卡 HP 记录（《生命值管理》页；置尾避免影响前面示例）
     quickstart_bot_off,  # 压轴：服务关闭后本群不再响应其他命令
 ]

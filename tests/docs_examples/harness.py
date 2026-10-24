@@ -210,6 +210,8 @@ class TimelineRunner:
         await npc_health.clear_npc_health(cast.GROUP_ID)
         await initiative.clear_init_list(cast.GROUP_ID)
         await group_config.set_group_config_field(cast.GROUP_ID, "default_dice", "D20")
+        # 规则版本回到未设置（跟随默认），避免上一次运行留下的群级设置影响示例
+        await group_config.set_group_config_field(cast.GROUP_ID, "rules_version", None)
         # 查询：本处设置回到默认（文字、全部书目），候选记录与数据源一并复位
         chat_key = query_settings.group_key(cast.GROUP_ID)
         await query_settings.set_image_enabled(chat_key, False)
