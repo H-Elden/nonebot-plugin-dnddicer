@@ -33,7 +33,8 @@ from ..character.services import (
 )
 from ..data import spell_settings
 from ..data.characters import get_character, save_character
-from . import base, text
+from ..platform import onebot_v11
+from . import base, card_helpers, text
 from .weapon import find_exact_weapon
 
 _HELP_SPELL = (
@@ -64,10 +65,10 @@ del_spell_matcher = base.on_dnd_command(
 )
 
 _HELP_SPELL_SLOTS = (
-    ".法术位 / .ss [set 环阶:当前/上限]\n"
-    "  查看法术位；set 设置，如 1:4,2:3\n"
-    "  环阶 ±N 手动增减；契约 指契约魔法\n"
-    "  reset 恢复全部（长休口径）"
+    ".法术位 / .ss [目标] [set 环阶:当前/上限]\n"
+    "  查看法术位；目标写 @玩家 或角色名\n"
+    "  set 设置，如 1:4,2:3；环阶 ±N 手动增减\n"
+    "  契约 指契约魔法；reset 恢复全部（长休口径）"
 )
 spell_slots_matcher = base.on_dnd_command(
     "法术位", _HELP_SPELL_SLOTS, aliases=("ss",), doc="guide/resources"
@@ -371,23 +372,101 @@ async def handle_del_spell(event: MessageEvent) -> None:
     await del_spell_matcher.finish("\n".join(lines))
 
 
+#: set / reset 等自身子语法（非数字开头，不得被当成角色名）
+_SLOTS_SELF_KEYWORDS = (
+    "set", "设置", "reset", "重置", "恢复", "契约", "契约魔法", "契约位",
+)
+
+
+async def _resolve_slots_target(
+    bot: Bot, event: GroupMessageEvent, rest: str
+) -> Tuple[Optional[DNDCharacter], str, str]:
+    """拆出 ``.法术位`` 开头的目标 → (目标卡, 剩余参数, 展示名)。
+
+    数字 / ``set`` / ``reset`` / ``契约`` 等自身子语法优先；只有非数字且
+    能匹配到本群绑定卡的首段才当目标。匹配不到时按本人处理。
+    """
+    mentions = onebot_v11.iter_mentions(rest)
+    if mentions:
+        target_qq = mentions[0]
+        character = await get_character(event.group_id, target_qq)
+        if character is None or not character.is_init:
+            await spell_slots_matcher.finish(
+                onebot_v11.at_reply(target_qq, text.TXT_MENTION_NO_CHAR)
+            )
+        remaining = onebot_v11.strip_mentions(rest).strip()
+        display = await base.resolve_display_name(
+            bot, event, target_qq, char_name=character.name
+        )
+        return character, remaining, display
+
+    if not rest:
+        return None, rest, ""
+
+    token, separator, tail = rest.partition(" ")
+    lowered = token.lower()
+    if not token or token[0].isdigit() or lowered in _SLOTS_SELF_KEYWORDS:
+        return None, rest, ""
+    if lowered.startswith("set") or lowered.startswith("契约"):
+        return None, rest, ""
+
+    matches = await card_helpers.find_group_characters(
+        event.group_id, token
+    )
+    if len(matches) > 1:
+        await spell_slots_matcher.finish(
+            text.TXT_TARGET_CARD_MULTI.format(
+                name=token,
+                names="/".join(
+                    char.name or char.user_id for char in matches
+                ),
+            )
+        )
+    if len(matches) == 1:
+        display = await base.resolve_display_name(
+            bot, event, matches[0].user_id, char_name=matches[0].name
+        )
+        return matches[0], tail.strip() if separator else "", display
+    return None, rest, ""
+
+
 @spell_slots_matcher.handle()
-async def handle_spell_slots(event: MessageEvent) -> None:
-    """处理 .法术位 / .ss：查看 / set / ±N / reset。"""
+async def handle_spell_slots(bot: Bot, event: MessageEvent) -> None:
+    """处理 .法术位 / .ss：查看 / set / ±N / reset（支持 @ 与角色名目标）。"""
     if not isinstance(event, GroupMessageEvent):
         await spell_slots_matcher.finish(text.TXT_GROUP_ONLY)
 
-    rest = (base.get_command_rest(event) or "").strip()
-    character = await get_character(event.group_id, event.user_id)
-    if character is None or not character.is_init:
-        await spell_slots_matcher.finish(text.TXT_CHAR_MISS)
+    rest = (base.get_command_rest_with_mentions(event) or "").strip()
+    target, rest, target_name = await _resolve_slots_target(
+        bot, event, rest
+    )
+    if target is None:
+        character = await get_character(event.group_id, event.user_id)
+        if character is None or not character.is_init:
+            await spell_slots_matcher.finish(text.TXT_CHAR_MISS)
+    else:
+        character = target
     slots = character.spell_slots
 
     if not rest:
         if slots.is_empty():
-            await spell_slots_matcher.finish(text.TXT_SLOTS_EMPTY)
+            template = (
+                text.TXT_SLOTS_EMPTY_TARGET
+                if target is not None
+                else text.TXT_SLOTS_EMPTY
+            )
+            await spell_slots_matcher.finish(
+                template.format(name=target_name)
+            )
+        template = (
+            text.TXT_SLOTS_LIST_TARGET
+            if target is not None
+            else text.TXT_SLOTS_LIST
+        )
         await spell_slots_matcher.finish(
-            text.TXT_SLOTS_LIST.format(items=_format_slots_lines(slots))
+            template.format(
+                name=target_name, items=_format_slots_lines(slots)
+            )
         )
 
     if rest in ("reset", "重置", "恢复"):
@@ -396,9 +475,23 @@ async def handle_spell_slots(event: MessageEvent) -> None:
         slots.pact_cur = slots.pact_max
         await save_character(character)
         if slots.is_empty():
-            await spell_slots_matcher.finish(text.TXT_SLOTS_EMPTY)
+            template = (
+                text.TXT_SLOTS_EMPTY_TARGET
+                if target is not None
+                else text.TXT_SLOTS_EMPTY
+            )
+            await spell_slots_matcher.finish(
+                template.format(name=target_name)
+            )
+        template = (
+            text.TXT_SLOTS_RESET_TARGET
+            if target is not None
+            else text.TXT_SLOTS_RESET
+        )
         await spell_slots_matcher.finish(
-            text.TXT_SLOTS_RESET.format(items=_format_slots_lines(slots))
+            template.format(
+                name=target_name, items=_format_slots_lines(slots)
+            )
         )
 
     lowered = rest.lower()
@@ -431,14 +524,22 @@ async def handle_spell_slots(event: MessageEvent) -> None:
                 )
             )
         await save_character(character)
+        template = (
+            text.TXT_SLOTS_SET_TARGET
+            if target is not None
+            else text.TXT_SLOTS_SET
+        )
         if slots.is_empty():
             await spell_slots_matcher.finish(
-                text.TXT_SLOTS_SET.format(
-                    names="、".join(applied), items="（无）"
+                template.format(
+                    name=target_name,
+                    names="、".join(applied),
+                    items="（无）",
                 )
             )
         await spell_slots_matcher.finish(
-            text.TXT_SLOTS_SET.format(
+            template.format(
+                name=target_name,
                 names="、".join(applied),
                 items=_format_slots_lines(slots),
             )
@@ -447,18 +548,25 @@ async def handle_spell_slots(event: MessageEvent) -> None:
     matched = _SLOTS_ACTION_RE.match(rest)
     if matched is None:
         await spell_slots_matcher.finish(text.TXT_SLOTS_USAGE)
-    target, sign, amount_text = matched.groups()
+    level_target, sign, amount_text = matched.groups()
     amount = int(amount_text) if amount_text else 1
     if amount < 1:
         await spell_slots_matcher.finish(text.TXT_SLOTS_AMOUNT_INVALID)
 
-    is_pact = not target.isdigit()
+    is_pact = not level_target.isdigit()
     if is_pact:
         level = slots.pact_level
         if level <= 0 or slots.pact_max <= 0:
+            template = (
+                text.TXT_SLOTS_NOT_RECORDED_TARGET
+                if target is not None
+                else text.TXT_SLOTS_NOT_RECORDED
+            )
             await spell_slots_matcher.finish(
-                text.TXT_SLOTS_NOT_RECORDED.format(
-                    label="契约魔法法术位", hint="契约3:2/2"
+                template.format(
+                    name=target_name,
+                    label="契约魔法法术位",
+                    hint="契约3:2/2",
                 )
             )
         old, max_value = slots.pact_cur, slots.pact_max
@@ -470,15 +578,22 @@ async def handle_spell_slots(event: MessageEvent) -> None:
         if new != old:
             slots.pact_cur = new
     else:
-        level = int(target)
+        level = int(level_target)
         if not 1 <= level <= SPELL_LEVEL_MAX:
             await spell_slots_matcher.finish(
                 text.TXT_SLOTS_USAGE
             )
         if slots.slots_max[level - 1] <= 0:
+            template = (
+                text.TXT_SLOTS_NOT_RECORDED_TARGET
+                if target is not None
+                else text.TXT_SLOTS_NOT_RECORDED
+            )
             await spell_slots_matcher.finish(
-                text.TXT_SLOTS_NOT_RECORDED.format(
-                    label=f"{level}环法术位", hint=f"{level}:4/4"
+                template.format(
+                    name=target_name,
+                    label=f"{level}环法术位",
+                    hint=f"{level}:4/4",
                 )
             )
         old = slots.slots_cur[level - 1]
@@ -498,8 +613,14 @@ async def handle_spell_slots(event: MessageEvent) -> None:
         note = text.TXT_SLOTS_MOD_FULL
     if new != old:
         await save_character(character)
+    template = (
+        text.TXT_SLOTS_MOD_TARGET
+        if target is not None
+        else text.TXT_SLOTS_MOD
+    )
     await spell_slots_matcher.finish(
-        text.TXT_SLOTS_MOD.format(
+        template.format(
+            name=target_name,
             label=spell_slot_label(is_pact, level),
             old=old,
             max=max_value,

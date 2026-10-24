@@ -15,6 +15,7 @@ from ..data.characters import (
     get_card_by_name,
     list_bound_groups,
     list_cards_by_owner,
+    list_characters_by_group,
 )
 from . import text
 
@@ -126,6 +127,30 @@ def parse_group_id(value: str) -> Optional[int]:
         return None
     group_id = int(text_value)
     return group_id if group_id > 0 else None
+
+
+async def find_group_characters(
+    group_id: int | str, query: str
+) -> List[DNDCharacter]:
+    """按角色名匹配本群已绑定卡：精确优先，其次子串。
+
+    与 ``.hp`` 等既有目标搜索同款两级口径（多候选原样返回，由调用方列清单、
+    不猜）。空查询返回空列表。
+    """
+    lowered = (query or "").strip().lower()
+    if not lowered:
+        return []
+    chars = await list_characters_by_group(group_id)
+    exact = [
+        char for char in chars
+        if (char.name or "").strip().lower() == lowered
+    ]
+    if exact:
+        return exact
+    return [
+        char for char in chars
+        if lowered in (char.name or "").strip().lower()
+    ]
 
 
 async def bot_group_ids(bot: Bot) -> Optional[Set[str]]:

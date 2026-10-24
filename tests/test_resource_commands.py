@@ -55,6 +55,18 @@ def _event(text: str, user_id: int = 23001):
     )
 
 
+def _mention_event(
+    prefix: str, at_uid: int, suffix: str = "", user_id: int = 23001
+):
+    from nonebot.adapters.onebot.v11 import MessageSegment
+
+    return fake_group_message_event_v11(
+        message=Message(prefix) + MessageSegment.at(at_uid) + suffix,
+        group_id=_GROUP,
+        user_id=user_id,
+    )
+
+
 async def _expect(app: App, matcher, event, expected: str):
     async with app.test_matcher(matcher) as ctx:
         adapter = ctx.create_adapter(base=OnebotV11Adapter)
@@ -102,6 +114,11 @@ async def test_ability_list_detail_and_modify(app: App):
     await _expect(
         app, ability_matcher, _event(".能力 引导神力 -1"),
         "引导神力：1/2 → 0/2（已用尽）",
+    )
+    # 已经 0 时再消耗：明确提示用尽，不保存、不再显示 0/2 → 0/2
+    await _expect(
+        app, ability_matcher, _event(".能力 引导神力 -1"),
+        "「引导神力」已经用尽（0/2）",
     )
     await _expect(
         app, ability_matcher, _event(".能力 引导神力 +1"),
@@ -440,3 +457,130 @@ async def test_spell_slots_empty_and_no_card(app: App):
         "还没有记录法术位。用法：.法术位 set 1:4,2:3"
         "（当前/上限写 1:4/4；契约魔法写 契约3:2/2）",
     )
+
+
+# =========================================================================
+# 目标代操作（2026-10-24：@玩家 / 角色名）
+# =========================================================================
+
+_TARGET_CARD = "\n".join([
+    "$姓名$ 塔莉",
+    "$等级$ 5",
+    "$属性$ 10/10/10/10/10/10",
+    "$限定资源$ 引导神力:2/2短休+1,长休; 圣疗:25/25长休",
+    "$法术位$ 1:4/4; 2:3/3; 契约3:2/2",
+])
+
+
+async def _record_target(app: App, user_id: int = 23002, name: str = "塔莉"):
+    card = _TARGET_CARD.replace("$姓名$ 塔莉", f"$姓名$ {name}")
+    await _record(app, user_id=user_id, card=card)
+
+
+@pytest.mark.asyncio
+async def test_ability_target_by_mention_and_name(app: App):
+    from nonebot_plugin_dnddicer.commands.feature import ability_matcher
+    from nonebot_plugin_dnddicer.data.characters import get_character
+
+    await _record(app)
+    await _record_target(app)
+
+    await _expect(
+        app, ability_matcher,
+        _mention_event(".能力 ", 23002),
+        "塔莉的限定资源（2 项）：\n"
+        "1. 引导神力 2/2（短休+1，长休）\n"
+        "2. 圣疗 25/25（长休）\n"
+        "用法：.能力 名称 查看详情；.能力 名称 -N 消耗、+N 恢复",
+    )
+    await _expect(
+        app, ability_matcher, _event(".能力 塔莉 引导神力 -1"),
+        "塔莉的引导神力：2/2 → 1/2",
+    )
+    await _expect(
+        app, ability_matcher,
+        _mention_event(".能力 ", 23002, " 引导神力 +1"),
+        "塔莉的引导神力：1/2 → 2/2（已满）",
+    )
+    await _expect(
+        app, ability_matcher, _event(".能力 塔 圣疗"),
+        "塔莉的圣疗：25/25（长休）",
+    )
+    # @ 自己：按目标形式查看本人，输出带角色名
+    await _expect(
+        app, ability_matcher, _mention_event(".能力 ", 23001),
+        "测试的限定资源（2 项）：\n"
+        "1. 引导神力 2/2（短休+1，长休）\n"
+        "2. 圣疗 25/25（长休）\n"
+        "用法：.能力 名称 查看详情；.能力 名称 -N 消耗、+N 恢复",
+    )
+    # 目标卡改动不影响本人卡
+    self_char = await get_character(_GROUP, 23001)
+    assert self_char.features[0].uses_cur == 2
+    # DM 本人没有卡也能代操作
+    await _expect(
+        app, ability_matcher,
+        _mention_event(".能力 ", 23002, " 圣疗 -1", user_id=23009),
+        "塔莉的圣疗：25/25 → 24/25",
+    )
+
+
+@pytest.mark.asyncio
+async def test_ability_target_errors(app: App):
+    from nonebot.adapters.onebot.v11 import Message, MessageSegment
+
+    from nonebot_plugin_dnddicer.commands.feature import ability_matcher
+
+    await _record(app)
+    await _record_target(app)
+    await _record_target(app, user_id=23003, name="塔莉娅")
+
+    await _expect(
+        app, ability_matcher,
+        _mention_event(".能力 ", 39990),
+        Message(MessageSegment.at("39990")) + " 未在本群绑定角色卡",
+    )
+    await _expect(
+        app, ability_matcher, _event(".能力 塔"),
+        "目标名称不明确「塔」：候选 塔莉/塔莉娅（请写完整角色名或 @玩家）",
+    )
+    # 名称未命中任何卡：整段按本人能力名解析
+    await _expect(
+        app, ability_matcher, _event(".能力 查无此人"),
+        "找不到限定资源「查无此人」（可用 .设置能力 录入，.能力 查看清单）",
+    )
+
+
+@pytest.mark.asyncio
+async def test_spell_slots_target_operations(app: App):
+    from nonebot_plugin_dnddicer.commands.spell import spell_slots_matcher
+    from nonebot_plugin_dnddicer.data.characters import get_character
+
+    await _record(app)
+    await _record_target(app)
+
+    await _expect(
+        app, spell_slots_matcher,
+        _mention_event(".法术位 ", 23002),
+        "塔莉的法术位：\n1环：4/4\n2环：3/3\n契约魔法（3环）：2/2",
+    )
+    await _expect(
+        app, spell_slots_matcher,
+        _mention_event(".法术位 ", 23002, " 1 -1"),
+        "塔莉的1环：4/4 → 3/4",
+    )
+    await _expect(
+        app, spell_slots_matcher, _event(".法术位 塔莉"),
+        "塔莉的法术位：\n1环：3/4\n2环：3/3\n契约魔法（3环）：2/2",
+    )
+    await _expect(
+        app, spell_slots_matcher, _event(".法术位 塔莉 set 1:2,2:1/3"),
+        "已设置塔莉的法术位：1环 2/2、2环 1/3\n"
+        "当前法术位：\n1环：2/2\n2环：1/3\n契约魔法（3环）：2/2",
+    )
+    await _expect(
+        app, spell_slots_matcher, _event(".ss 塔莉 reset"),
+        "已恢复塔莉的全部法术位：\n1环：2/2\n2环：3/3\n契约魔法（3环）：2/2",
+    )
+    self_char = await get_character(_GROUP, 23001)
+    assert self_char.spell_slots.slots_cur[0] == 4

@@ -17,20 +17,25 @@ from __future__ import annotations
 import re
 from typing import List, Optional, Tuple
 
-from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageEvent
+from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, MessageEvent
 
 from ..character.constants import FEATURE_MAX_COUNT
-from ..character.models import CharacterFeature
+from ..character.models import CharacterFeature, DNDCharacter
 from ..character.services import match_features, parse_feature_list
-from ..data.characters import get_character, save_character
-from . import base, text
+from ..data.characters import (
+    get_character,
+    list_characters_by_group,
+    save_character,
+)
+from ..platform import onebot_v11
+from . import base, card_helpers, text
 
 _HELP = (
-    ".能力 [名称[±N]]\n"
+    ".能力 [目标] [名称[±N]]\n"
     "  无参数：列出卡上限定资源与恢复档\n"
-    "  写名称：查看详情；名称 -N 消耗、+N 恢复\n"
-    "  录入：.设置能力 名称:当前/上限恢复\n"
-    "  示例：.能力 引导神力 -1"
+    "  目标：@玩家 或角色名，可代看 / 代改\n"
+    "  写名称：详情；名称 -N 消耗、+N 恢复\n"
+    "  示例：.能力 薇拉 引导神力 -1"
 )
 ability_matcher = base.on_dnd_command("能力", _HELP, doc="guide/resources")
 
@@ -93,22 +98,119 @@ def _find_feature(
     return None, candidates
 
 
+async def _resolve_ability_target(
+    bot: Bot, event: GroupMessageEvent, rest: str
+) -> Tuple[Optional[DNDCharacter], str, str]:
+    """拆出 ``.能力`` 开头的目标 → (目标卡, 剩余参数, 展示名)。
+
+    没有目标时返回 ``(None, 原参数, "")``，由调用方按本人卡处理。
+    ``@`` 直连 QQ；名称按本群已绑定卡「精确优先 → 子串」，多候选列清单、
+    不猜（含与本人能力名同名的边界，见文档）。
+    目标无卡 / 多候选会直接回复并结束命令。
+    """
+    mentions = onebot_v11.iter_mentions(rest)
+    if mentions:
+        target_qq = mentions[0]
+        character = await get_character(event.group_id, target_qq)
+        if character is None or not character.is_init:
+            await ability_matcher.finish(
+                onebot_v11.at_reply(target_qq, text.TXT_MENTION_NO_CHAR)
+            )
+        remaining = onebot_v11.strip_mentions(rest).strip()
+        display = await base.resolve_display_name(
+            bot, event, target_qq, char_name=character.name
+        )
+        return character, remaining, display
+
+    if not rest:
+        return None, rest, ""
+
+    chars = await list_characters_by_group(event.group_id)
+    full_matches = await card_helpers.find_group_characters(
+        event.group_id, rest
+    )
+    if len(full_matches) > 1:
+        await ability_matcher.finish(
+            text.TXT_TARGET_CARD_MULTI.format(
+                name=rest,
+                names="/".join(char.name or char.user_id for char in full_matches),
+            )
+        )
+    if len(full_matches) == 1 and (
+        (full_matches[0].name or "").strip().lower() == rest.lower()
+    ):
+        display = await base.resolve_display_name(
+            bot, event, full_matches[0].user_id,
+            char_name=full_matches[0].name,
+        )
+        return full_matches[0], "", display
+
+    # 名称可能含空格：优先取最长的「完整名称 + 空白」前缀
+    for character in sorted(chars, key=lambda item: len(item.name or ""), reverse=True):
+        name = (character.name or "").strip()
+        if not name or not rest.startswith(name):
+            continue
+        if len(rest) > len(name) and rest[len(name)].isspace():
+            display = await base.resolve_display_name(
+                bot, event, character.user_id, char_name=character.name
+            )
+            return character, rest[len(name):].strip(), display
+
+    # 否则把首个空白前的文本当目标名做模糊匹配；匹配不到就整段按本人能力名
+    token, separator, tail = rest.partition(" ")
+    matches = await card_helpers.find_group_characters(
+        event.group_id, token
+    )
+    if len(matches) > 1:
+        await ability_matcher.finish(
+            text.TXT_TARGET_CARD_MULTI.format(
+                name=token,
+                names="/".join(char.name or char.user_id for char in matches),
+            )
+        )
+    if len(matches) == 1:
+        display = await base.resolve_display_name(
+            bot, event, matches[0].user_id, char_name=matches[0].name
+        )
+        return matches[0], tail.strip() if separator else "", display
+    return None, rest, ""
+
+
 @ability_matcher.handle()
-async def handle_ability(event: MessageEvent) -> None:
-    """处理 .能力：清单 / 详情 / 消耗与恢复。"""
+async def handle_ability(bot: Bot, event: MessageEvent) -> None:
+    """处理 .能力：清单 / 详情 / 消耗与恢复（支持 @ 与角色名目标）。"""
     if not isinstance(event, GroupMessageEvent):
         await ability_matcher.finish(text.TXT_GROUP_ONLY)
 
-    rest = (base.get_command_rest(event) or "").strip()
-    character = await get_character(event.group_id, event.user_id)
-    if character is None or not character.is_init:
-        await ability_matcher.finish(text.TXT_CHAR_MISS)
+    rest = (base.get_command_rest_with_mentions(event) or "").strip()
+    target, rest, target_name = await _resolve_ability_target(
+        bot, event, rest
+    )
+    if target is None:
+        character = await get_character(event.group_id, event.user_id)
+        if character is None or not character.is_init:
+            await ability_matcher.finish(text.TXT_CHAR_MISS)
+    else:
+        character = target
 
     if not rest:
         if not character.features:
-            await ability_matcher.finish(text.TXT_FEATURE_LIST_EMPTY)
+            template = (
+                text.TXT_FEATURE_LIST_EMPTY_TARGET
+                if target is not None
+                else text.TXT_FEATURE_LIST_EMPTY
+            )
+            await ability_matcher.finish(
+                template.format(name=target_name)
+            )
+        template = (
+            text.TXT_FEATURE_LIST_TARGET
+            if target is not None
+            else text.TXT_FEATURE_LIST
+        )
         await ability_matcher.finish(
-            text.TXT_FEATURE_LIST.format(
+            template.format(
+                name=target_name,
                 count=len(character.features),
                 items=_format_feature_lines(character.features),
             )
@@ -130,6 +232,16 @@ async def handle_ability(event: MessageEvent) -> None:
                 )
             await ability_matcher.finish(
                 text.TXT_FEATURE_NOT_FOUND.format(name=rest)
+            )
+        if target is not None:
+            await ability_matcher.finish(
+                text.TXT_FEATURE_DETAIL_TARGET.format(
+                    name=target_name,
+                    feature=feature.name,
+                    cur=feature.uses_cur,
+                    max=feature.uses_max,
+                    recover=feature.get_recover_display(),
+                )
             )
         await ability_matcher.finish(
             text.TXT_FEATURE_DETAIL.format(
@@ -155,6 +267,12 @@ async def handle_ability(event: MessageEvent) -> None:
         await ability_matcher.finish(text.TXT_FEATURE_NOT_FOUND.format(name=name))
 
     old = feature.uses_cur
+    if sign == "-" and old == 0:
+        await ability_matcher.finish(
+            text.TXT_FEATURE_ALREADY_EMPTY.format(
+                name=feature.name, max=feature.uses_max
+            )
+        )
     note = ""
     if sign == "-":
         feature.uses_cur = max(0, old - amount)
@@ -166,6 +284,17 @@ async def handle_ability(event: MessageEvent) -> None:
             note = text.TXT_FEATURE_MOD_FULL
     if feature.uses_cur != old:
         await save_character(character)
+    if target is not None:
+        await ability_matcher.finish(
+            text.TXT_FEATURE_MOD_TARGET.format(
+                name=target_name,
+                feature=feature.name,
+                old=old,
+                max=feature.uses_max,
+                new=feature.uses_cur,
+                note=note,
+            )
+        )
     await ability_matcher.finish(
         text.TXT_FEATURE_MOD.format(
             name=feature.name,

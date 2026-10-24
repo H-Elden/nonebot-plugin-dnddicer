@@ -347,6 +347,20 @@ TXT_FEATURE_DEL_MISS = "未找到限定资源: {missing}（可用 .设置能力 
 TXT_FEATURE_DEL_VAGUE_ITEM = "{name}（候选: {names}）"
 TXT_FEATURE_DEL_VAGUE = "名称不明确: {items}（请写更完整的名称）"
 TXT_FEATURE_DEL_USAGE = "用法：.删除能力 名称（多个用 / 分隔）"
+#: 已有 0 次时继续消耗（不保存、不显示 0/上限 → 0/上限）
+TXT_FEATURE_ALREADY_EMPTY = "「{name}」已经用尽（0/{max}）"
+#: 代操作目标（2026-10-24）：清单 / 详情 / 增删反馈带目标名（本人查看保持原样）
+TXT_FEATURE_LIST_TARGET = (
+    "{name}的限定资源（{count} 项）：\n{items}\n"
+    "用法：.能力 名称 查看详情；.能力 名称 -N 消耗、+N 恢复"
+)
+TXT_FEATURE_LIST_EMPTY_TARGET = "{name}还没有记录限定资源"
+TXT_FEATURE_DETAIL_TARGET = "{name}的{feature}：{cur}/{max}（{recover}）"
+TXT_FEATURE_MOD_TARGET = "{name}的{feature}：{old}/{max} → {new}/{max}{note}"
+#: 目标名称同时命中多张卡（不猜、不按本人执行）
+TXT_TARGET_CARD_MULTI = (
+    "目标名称不明确「{name}」：候选 {names}（请写完整角色名或 @玩家）"
+)
 
 # ── 法术清单与准备（$法术$ / .法术 命令族，2026-10-20 批②）──────────────
 #: 清单标题的施法属性片段（未填写时为空串）
@@ -416,6 +430,15 @@ TXT_SLOTS_USAGE = (
     "用法：.法术位 [set 环阶:当前/上限]；"
     ".法术位 1 -1 / 契约 -1 手动增减；.法术位 reset 恢复全部"
 )
+#: 代操作目标（2026-10-24）：查看 / set / 增减 / reset 带目标名
+TXT_SLOTS_LIST_TARGET = "{name}的法术位：\n{items}"
+TXT_SLOTS_EMPTY_TARGET = "{name}还没有记录法术位"
+TXT_SLOTS_NOT_RECORDED_TARGET = (
+    "尚未记录{label}（可用 .法术位 {name} set {hint} 设置）"
+)
+TXT_SLOTS_MOD_TARGET = "{name}的{label}：{old}/{max} → {new}/{max}{note}"
+TXT_SLOTS_SET_TARGET = "已设置{name}的法术位：{names}\n当前法术位：\n{items}"
+TXT_SLOTS_RESET_TARGET = "已恢复{name}的全部法术位：\n{items}"
 
 # ── 施法 .施法 / .cast（2026-10-20 批③）────────────────────────────────
 TXT_CAST_USAGE = "用法：.施法 <法术名>[N环|+N环]；或 .施法 <环阶>"
@@ -846,6 +869,62 @@ TXT_QUERY_BOOKS_TAIL = "共 {count} 项可设置；发送 .查询范围 <缩写>
 #: .规则书 图片形态的标题与说明行（正文内容与文字形态同源）
 TXT_QUERY_BOOKS_CARD_TITLE = "《5E不全书》可查询书目"
 TXT_QUERY_BOOKS_CARD_HINT = "发送 .查询范围 PHB24,MM25 设置本处可查的书；未设置 = 全部开放。"
+
+# ── 英雄激励 .激励（2026-10-24 新增）────────────────────────────────────
+# 数据仍存在 $进度$ 的「激励」键（有 / 无；键缺失 = 未记录）；称呼按群级
+# 规则版本：2024 / 5r 为「英雄激励」，2014 / 5e 为「激励」。
+TXT_INSPIRE_STATE = "{name}的{label}：{state}"
+TXT_INSPIRE_STATE_UNRECORDED = "未记录"
+TXT_INSPIRE_STATE_YES = "有"
+TXT_INSPIRE_STATE_NO = "无"
+TXT_INSPIRE_GAIN = "{name}获得了{label}。"
+TXT_INSPIRE_GAIN_ALREADY = (
+    "{name}已经有{label}了，不能叠加；可用 .激励 给予 目标 转赠。"
+)
+TXT_INSPIRE_SPEND = "{name}消耗了{label}。"
+TXT_INSPIRE_SPEND_NONE = "{name}当前没有{label}。"
+TXT_INSPIRE_GIVE = "{giver}将{label}转赠给{target}。"
+TXT_INSPIRE_GIVE_SELF = "不能把{label}给予自己。"
+TXT_INSPIRE_GIVE_NONE = "你当前没有{label}，无法转赠。"
+TXT_INSPIRE_GIVE_HAS = "{target}已经有{label}，无法接收。"
+TXT_INSPIRE_USAGE = "用法：.激励 [状态|+|-|给予 目标]"
+
+# ── 战斗记录 .战斗记录（2026-10-24 新增）─────────────────────────────────
+TXT_COMBAT_NOTE_LIST = "战斗记录（{count} 条）：\n{items}"
+TXT_COMBAT_NOTE_ITEM = "{index}. {text}"
+TXT_COMBAT_NOTE_EMPTY = (
+    "还没有战斗记录。可用 .战斗记录 +文本 添加（多项用 ; 分隔）"
+)
+TXT_COMBAT_NOTE_ADD = "已添加 {count} 条战斗记录：{items}（当前共 {total} 条）"
+TXT_COMBAT_NOTE_TOO_MANY = (
+    "战斗记录最多 {max} 条（当前 {cur} 条，本次添加 {add} 条）"
+)
+TXT_COMBAT_NOTE_TOO_LONG = "战斗记录每条最多 {max} 字：{text}"
+TXT_COMBAT_NOTE_DOLLAR = "战斗记录不能包含 $ 符号：{text}"
+TXT_COMBAT_NOTE_DEL = "已删除战斗记录：{items}"
+TXT_COMBAT_NOTE_DEL_PARTIAL = (
+    "已删除战斗记录：{items}；序号无效或超出范围：{invalid}"
+)
+TXT_COMBAT_NOTE_DEL_NONE = "没有删除任何记录：序号无效或超出范围 {invalid}"
+TXT_COMBAT_NOTE_CLR = "已清空战斗记录（{count} 条）"
+TXT_COMBAT_NOTE_CLR_EMPTY = "战斗记录本来就是空的"
+TXT_COMBAT_NOTE_USAGE = (
+    "用法：.战斗记录 [清]；.战斗记录 +文本（多项用 ; 分隔）；"
+    ".战斗记录 -序号（多个用 / 或 ; 分隔）"
+)
+
+# ── 钱币收支 .钱币（2026-10-24 新增）──────────────────────────────────────
+TXT_COIN_VIEW = "钱币：CP {CP}；SP {SP}；EP {EP}；GP {GP}；PP {PP}"
+TXT_COIN_DONE = "钱币：{ops}"
+TXT_COIN_CHANGE_ITEM = "{key}:{old} → {new}"
+TXT_COIN_UNCHANGED = "{keys} 不变"
+TXT_COIN_INSUFFICIENT = (
+    "钱币不足：扣 {amount}{unit} 需要 {need} CP，现有总价值 {total} CP"
+    "（本次未做任何改动）"
+)
+TXT_COIN_USAGE = (
+    "用法：.钱币 [+20GP-5SP]（币种 CP/SP/EP/GP/PP，数量为正整数）"
+)
 
 
 def _d20_crit_counts(res_list: List[RollResult]) -> Tuple[int, int]:
