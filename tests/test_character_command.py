@@ -487,6 +487,77 @@ async def test_char_private_bind_and_unbind(app: App):
 
 
 @pytest.mark.asyncio
+async def test_char_private_bind_multi_group_warns(app: App):
+    """私聊把同一张卡绑到第二个群：照常绑定并提醒数据冲突。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+
+    await _create_private(app, 10047, card_name="多群卡", content=_RECORD)
+    group_list = [{"group_id": _GROUP}, {"group_id": _OTHER_GROUP}]
+
+    first_event = _private(f".角色卡绑定 多群卡 {_GROUP}", 10047)
+    async with app.test_matcher(char_matcher) as ctx:
+        adapter = ctx.create_adapter(base=OnebotV11Adapter)
+        bot = ctx.create_bot(base=Bot, adapter=adapter)
+        ctx.should_call_api("get_group_list", data={}, result=group_list)
+        ctx.should_call_send(
+            first_event,
+            text.TXT_CHAR_BIND_OK.format(name="多群卡", group=_GROUP)
+            + text.TXT_CHAR_BIND_PRIVATE_HINT,
+        )
+        ctx.receive_event(bot, first_event)
+
+    second_event = _private(f".角色卡绑定 多群卡 {_OTHER_GROUP}", 10047)
+    async with app.test_matcher(char_matcher) as ctx:
+        adapter = ctx.create_adapter(base=OnebotV11Adapter)
+        bot = ctx.create_bot(base=Bot, adapter=adapter)
+        ctx.should_call_api("get_group_list", data={}, result=group_list)
+        ctx.should_call_send(
+            second_event,
+            text.TXT_CHAR_BIND_OK.format(name="多群卡", group=_OTHER_GROUP)
+            + text.TXT_CHAR_BIND_PRIVATE_HINT
+            + "\n"
+            + text.TXT_CHAR_BIND_MULTI_GROUP_WARNING,
+        )
+        ctx.receive_event(bot, second_event)
+
+    # 绑回已经绑过的群不算新增群，不重复提醒
+    again_event = _private(f".角色卡绑定 多群卡 {_GROUP}", 10047)
+    async with app.test_matcher(char_matcher) as ctx:
+        adapter = ctx.create_adapter(base=OnebotV11Adapter)
+        bot = ctx.create_bot(base=Bot, adapter=adapter)
+        ctx.should_call_api("get_group_list", data={}, result=group_list)
+        ctx.should_call_send(
+            again_event,
+            text.TXT_CHAR_BIND_OK.format(name="多群卡", group=_GROUP)
+            + text.TXT_CHAR_BIND_PRIVATE_HINT,
+        )
+        ctx.receive_event(bot, again_event)
+
+
+@pytest.mark.asyncio
+async def test_char_group_bind_multi_group_warns(app: App):
+    """群内把已绑在其他群的卡绑到本群：照常绑定并提醒数据冲突。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+
+    await _create(app, 10048)
+    await _expect(
+        app,
+        char_matcher,
+        _event(".角色卡绑定 测试卡", 10048, _OTHER_GROUP),
+        text.TXT_CHAR_BIND_OK.format(name="测试卡", group=_OTHER_GROUP)
+        + "\n"
+        + text.TXT_CHAR_BIND_MULTI_GROUP_WARNING,
+    )
+    # 绑回已经绑过的群不算新增群，不重复提醒
+    await _expect(
+        app,
+        char_matcher,
+        _event(".角色卡绑定 测试卡", 10048, _GROUP),
+        text.TXT_CHAR_BIND_OK.format(name="测试卡", group=_GROUP),
+    )
+
+
+@pytest.mark.asyncio
 async def test_char_group_modify_only_bound(app: App):
     """群内只能修改本群绑定卡；私聊卡不参与。"""
     from nonebot_plugin_dnddicer.commands.character import char_matcher

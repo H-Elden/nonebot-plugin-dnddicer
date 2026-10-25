@@ -285,6 +285,13 @@ async def _handle_list(event: MessageEvent) -> None:
     await char_matcher.finish(text.TXT_CHAR_LIST_TITLE + "\n" + body)
 
 
+def _multi_group_bind_warning(bound_before: list[str], group_id: int | str) -> str:
+    """绑定到卡片尚未绑定的新群时，返回多群共用提醒。"""
+    if bound_before and str(group_id) not in bound_before:
+        return "\n" + text.TXT_CHAR_BIND_MULTI_GROUP_WARNING
+    return ""
+
+
 async def _handle_bind(
     bot: Bot, event: MessageEvent, args: str
 ) -> None:
@@ -299,18 +306,22 @@ async def _handle_bind(
         )
         group_id = event.group_id  # type: ignore[attr-defined]
         old_bound = await get_bound_card(group_id, owner)
+        bound_before = await list_bound_groups(card_id)
         try:
             await bind_card(group_id, owner, card_id)
         except CardError as exc:
             await char_matcher.finish(str(exc))
+        warning = _multi_group_bind_warning(bound_before, group_id)
         if old_bound is not None and old_bound[0] != card_id:
             await char_matcher.finish(
                 text.TXT_CHAR_BIND_REPLACED.format(
                     name=card_name, group=group_id, old=old_bound[1]
                 )
+                + warning
             )
         await char_matcher.finish(
             text.TXT_CHAR_BIND_OK.format(name=card_name, group=group_id)
+            + warning
         )
 
     parts = args.split()
@@ -329,12 +340,14 @@ async def _handle_bind(
             text.TXT_CHAR_BIND_GROUP_MISSING.format(group=group_id)
         )
     old_bound = await get_bound_card(group_id, owner)
+    bound_before = await list_bound_groups(card_id)
     try:
         await bind_card(group_id, owner, card_id)
     except CardError as exc:
         await char_matcher.finish(str(exc))
     suffix = "" if group_ids is not None else text.TXT_CHAR_BIND_GROUP_UNKNOWN
     hint = text.TXT_CHAR_BIND_PRIVATE_HINT
+    warning = _multi_group_bind_warning(bound_before, group_id)
     if old_bound is not None and old_bound[0] != card_id:
         await char_matcher.finish(
             text.TXT_CHAR_BIND_REPLACED.format(
@@ -342,11 +355,13 @@ async def _handle_bind(
             )
             + hint
             + suffix
+            + warning
         )
     await char_matcher.finish(
         text.TXT_CHAR_BIND_OK.format(name=card_name, group=group_id)
         + hint
         + suffix
+        + warning
     )
 
 
