@@ -708,6 +708,12 @@
   font-weight: 500;
 }
 
+.cb-subhead--with-help {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .cb-check-grid {
   display: flex;
   flex-wrap: wrap;

@@ -21,6 +21,19 @@
     </div>
   </div>
 
+  <div class="cb-subhead cb-subhead--with-help">
+    其他
+    <HintDot text="某些能力会给先攻加上熟练加值，在此处选择" />
+  </div>
+  <div class="cb-chip-grid">
+    <ToggleChip
+      v-for="name in otherProficiencies"
+      :key="name"
+      :active="scaleOf(name) > 0"
+      @toggle="cycle(name, false)"
+    >{{ name }}</ToggleChip>
+  </div>
+
   <div class="cb-subhead">
     护甲受训
   </div>
@@ -163,6 +176,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { K } from '../../card-builder/core.mjs'
+import HintDot from './HintDot.vue'
 import ToggleChip from './ToggleChip.vue'
 import ToolPicker from './ToolPicker.vue'
 
@@ -179,6 +193,9 @@ const weaponCustom = ref('')
 const toolCustom = ref('')
 const languageCustom = ref('')
 
+// 先攻不属于常规技能，单独放进「其他」区块，避免混在技能清单里被忽略。
+const otherProficiencies = ['先攻']
+
 const sections = computed(() => [
   {
     label: '豁免',
@@ -187,7 +204,7 @@ const sections = computed(() => [
   },
   {
     label: '技能',
-    items: props.skills,
+    items: props.skills.filter((name) => !otherProficiencies.includes(name)),
     triple: true,
   },
 ])
