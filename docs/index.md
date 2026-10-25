@@ -22,7 +22,7 @@ features:
     link: /guide/roll-basics
     linkText: 掷骰基础
   - title: 角色卡与属性
-    details: 用 $…$ 模板建卡，或 .dnd/.dndx 以 4D6K3 掷点；完整卡面可用 .角色卡图 出图、.立绘 上传头像
+    details: 用 $…$ 模板建卡，或 .dnd/.dndx 以 4D6K3 掷点；.角色卡 在骰主开启后出图，.角色卡导出 取文字卡，.立绘 上传头像
     link: /guide/character-card
     linkText: 角色卡与属性
   - title: 网页建卡器
