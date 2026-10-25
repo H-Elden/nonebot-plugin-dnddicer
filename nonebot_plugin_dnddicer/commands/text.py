@@ -153,20 +153,13 @@ TXT_HELP_NOT_FOUND_HINT = ".help 命令 查看命令分组"
 # 群聊服务默认关闭（白名单）：未开启的群仅 .bot 命令可用，其余命令静默不响应；
 # 私聊不受群聊服务开关限制
 TXT_BOT_HEAD = "屠龙骰（nonebot-plugin-dnddicer）v{version}"
-TXT_BOT_INTRO = (
-    "专精 DND5e/5r 跑团的骰娘：掷骰表达式、角色卡与检定/豁免、"
-    "角色卡图与立绘、自定义武器与攻击、能力与法术资源、属性生成、"
-    "HP 管理、先攻列表、战斗轮、规则查询、群配置。"
-)
-TXT_BOT_STATE_PRIVATE = (
-    "私聊不受群聊服务开关限制：掷骰、属性生成、角色卡管理可直接使用，"
-    "HP、先攻等命令仅在群聊中可用。"
-)
+TXT_BOT_INTRO = "DND 5e/5r 跑团专用骰娘~"
+TXT_BOT_STATE_PRIVATE = "私聊无服务开关，部分功能仅群聊可用。"
 TXT_BOT_STATE_ON = "本群服务已开启，可直接使用本插件的全部命令。"
-TXT_BOT_STATE_OFF = "本群服务未开启，仅 .bot 命令可用。发送 .bot on（需群主或管理员权限）可开启。"
+TXT_BOT_STATE_OFF = "本群服务未开启，仅 .bot 命令可用。"
 TXT_BOT_USAGE = "用法：.bot on / .bot off——仅限群聊，需群主或管理员权限。"
 TXT_BOT_ON = "本群服务已开启。"
-TXT_BOT_OFF = "本群服务已关闭，本群将不再响应本插件的其他命令（.bot 不受影响）。"
+TXT_BOT_OFF = "本群服务已关闭。"
 TXT_BOT_NO_PERMISSION = "仅群主或管理员可以开启或关闭本群服务。"
 TXT_BOT_BAD_ARG = (
     "无效参数。用法：.bot 查看插件信息；.bot on / .bot off 开启/关闭本群服务"

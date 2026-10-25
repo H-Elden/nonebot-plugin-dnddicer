@@ -66,16 +66,16 @@ async def _expect_silence(app: App, matcher, event) -> None:
         ctx.receive_event(bot, event)
 
 
-def _info_lines(state_line: str) -> str:
-    return "\n".join(
-        [
-            text.TXT_BOT_HEAD.format(version=__version__),
-            text.TXT_BOT_INTRO,
-            state_line,
-            text.TXT_BOT_USAGE,
-            text.TXT_DOCS_LINK,
-        ]
-    )
+def _info_lines(state_line: str, *, usage: bool = True) -> str:
+    lines = [
+        text.TXT_BOT_HEAD.format(version=__version__),
+        text.TXT_BOT_INTRO,
+        state_line,
+    ]
+    if usage:
+        lines.append(text.TXT_BOT_USAGE)
+    lines.append(text.TXT_DOCS_LINK)
+    return "\n".join(lines)
 
 
 # ── .bot 信息（无参数）───────────────────────────────────────────────────
@@ -83,7 +83,7 @@ def _info_lines(state_line: str) -> str:
 
 @pytest.mark.asyncio
 async def test_bot_info_private(app: App):
-    """私聊 .bot：显示插件信息（私聊不受群聊服务开关限制）。"""
+    """私聊 .bot：显示插件信息（私聊不受群聊服务开关限制，也不显示群聊用法行）。"""
     from nonebot_plugin_dnddicer.commands.bot import bot_matcher
 
     event = fake_private_message_event_v11(message=Message(".bot"))
@@ -91,7 +91,7 @@ async def test_bot_info_private(app: App):
         app,
         bot_matcher,
         event,
-        _info_lines(text.TXT_BOT_STATE_PRIVATE),
+        _info_lines(text.TXT_BOT_STATE_PRIVATE, usage=False),
     )
 
 

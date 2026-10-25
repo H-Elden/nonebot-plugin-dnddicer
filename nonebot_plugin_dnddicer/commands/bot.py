@@ -38,9 +38,9 @@ async def _build_info(event: MessageEvent) -> str:
     if isinstance(event, GroupMessageEvent):
         enabled = await is_service_enabled(event.group_id)
         lines.append(text.TXT_BOT_STATE_ON if enabled else text.TXT_BOT_STATE_OFF)
+        lines.append(text.TXT_BOT_USAGE)
     else:
         lines.append(text.TXT_BOT_STATE_PRIVATE)
-    lines.append(text.TXT_BOT_USAGE)
     lines.append(text.TXT_DOCS_LINK)
     return "\n".join(lines)
 
