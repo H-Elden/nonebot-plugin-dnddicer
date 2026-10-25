@@ -110,34 +110,30 @@ async def _create_private(
 
 
 # =========================================================================
-# 模板 / 查看 / 状态 / 删除
+# 查看 / 状态 / 删除
 # =========================================================================
 
 
 @pytest.mark.asyncio
-async def test_char_template(app: App):
-    """.角色卡模板 → 示例卡 + 新命令提示（提示不含 $）。"""
-    from nonebot_plugin_dnddicer.character.services import gen_template_char
-    from nonebot_plugin_dnddicer.commands.character import (
-        _gen_template_feedback,
-        char_matcher,
+async def test_char_miss(app: App):
+    """群内未绑定 → 提示绑定并引导网页建卡器。"""
+    from nonebot_plugin_dnddicer.commands.character import char_matcher
+
+    await _expect(
+        app, char_matcher, _event(".角色卡", 10002),
+        text.TXT_CHAR_VIEW_MISS_GROUP.format(url=text.TXT_CARD_BUILDER_URL),
     )
-
-    expected = _gen_template_feedback()
-    assert "$" not in expected.split("——提示")[1]
-    assert ".角色卡新建 <卡名> <完整卡内容>" in expected
-    assert ".角色卡修改 <卡名> <段条目>" in expected
-    assert gen_template_char().get_char_info() in expected
-
-    await _expect(app, char_matcher, _event(".角色卡模板"), expected)
 
 
 @pytest.mark.asyncio
-async def test_char_miss(app: App):
-    """群内未绑定 → 统一的未绑定提示。"""
+async def test_char_miss_private(app: App):
+    """私聊无卡 → 引导网页建卡器。"""
     from nonebot_plugin_dnddicer.commands.character import char_matcher
 
-    await _expect(app, char_matcher, _event(".角色卡", 10002), text.TXT_CHAR_MISS)
+    await _expect(
+        app, char_matcher, _private(".角色卡", 10050),
+        text.TXT_CHAR_VIEW_MISS_PRIVATE.format(url=text.TXT_CARD_BUILDER_URL),
+    )
 
 
 @pytest.mark.asyncio
@@ -199,7 +195,10 @@ async def test_char_delete_requires_unbind_and_confirm(app: App):
         app, char_matcher, _event(".角色卡清除 测试卡 确认", 10005),
         text.TXT_CHAR_DELETE_OK.format(name="测试卡"),
     )
-    await _expect(app, char_matcher, _event(".角色卡", 10005), text.TXT_CHAR_MISS)
+    await _expect(
+        app, char_matcher, _event(".角色卡", 10005),
+        text.TXT_CHAR_VIEW_MISS_GROUP.format(url=text.TXT_CARD_BUILDER_URL),
+    )
 
 
 # =========================================================================
@@ -222,7 +221,10 @@ async def test_char_new_requires_full_card(app: App):
         _event(".角色卡新建 测试卡 $等级$ 1\n$属性$ 10/10/10/10/10/10", 10020),
         "必须设定姓名",
     )
-    await _expect(app, char_matcher, _event(".角色卡", 10020), text.TXT_CHAR_MISS)
+    await _expect(
+        app, char_matcher, _event(".角色卡", 10020),
+        text.TXT_CHAR_VIEW_MISS_GROUP.format(url=text.TXT_CARD_BUILDER_URL),
+    )
 
 
 @pytest.mark.asyncio
@@ -304,7 +306,7 @@ async def test_char_modify_atomic_and_required_clear(app: App):
     await _expect(
         app, char_matcher,
         _event(".角色卡修改 测试卡 $不存在$ 1", 10031),
-        "未知段: $不存在$（可用段见 .角色卡模板）",
+        "未知段: $不存在$（可用段见网页建卡器）",
     )
     await _expect(
         app, char_matcher,
@@ -463,7 +465,10 @@ async def test_char_private_bind_and_unbind(app: App):
         app, char_matcher, _private(f".角色卡解绑 {_GROUP}", 10042),
         text.TXT_CHAR_UNBIND_PRIVATE_OK.format(group=_GROUP),
     )
-    await _expect(app, char_matcher, _event(".角色卡", 10042), text.TXT_CHAR_MISS)
+    await _expect(
+        app, char_matcher, _event(".角色卡", 10042),
+        text.TXT_CHAR_VIEW_MISS_BOUND,
+    )
 
     await _create_private(
         app, 10043, card_name="私卡2",

@@ -127,13 +127,15 @@ def test_entry_limits():
     """总览 / 目录 / 链接 / 关于 / 骰主 / 联系的行数上限。"""
     landing = cmd_text.TXT_HELP_LANDING.format(version=__version__)
     catalog = cmd_text.TXT_HELP_CATALOG
-    link = cmd_text.TXT_HELP_LINK.format(url=cmd_text.TXT_HELP_DOCS_BASE)
+    link = cmd_text.TXT_HELP_LINK.format(
+        url=cmd_text.TXT_HELP_DOCS_BASE, builder=cmd_text.TXT_CARD_BUILDER_URL
+    )
     about = cmd_text.TXT_HELP_ABOUT.format(
         version=__version__, repo="https://example.com", group="1"
     )
     assert len(landing.splitlines()) <= 9
     assert len(catalog.splitlines()) <= 9
-    assert len(link.splitlines()) <= 6
+    assert len(link.splitlines()) <= 7
     assert len(about.splitlines()) <= 8
     assert len(cmd_text.TXT_HELP_MASTER.splitlines()) <= 4
     assert len(cmd_text.TXT_HELP_CONTACT.splitlines()) <= 4

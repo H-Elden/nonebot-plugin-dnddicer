@@ -80,6 +80,8 @@ TXT_DOCS_LINK = "详细帮助文档：https://dnddicer.netlify.app"
 # 回复末尾的文档站链接行由 `.help 链接 on/off` 控制（群聊默认关、私聊默认开）。
 #: 文档站基址（帮助回复用它拼链接；.bot 的链接行仍是 TXT_DOCS_LINK）
 TXT_HELP_DOCS_BASE = "https://dnddicer.netlify.app"
+#: 网页建卡器地址（帮助链接与无卡引导共用）
+TXT_CARD_BUILDER_URL = "https://dnddicer.netlify.app/guide/card-builder"
 #: 帮助回复末尾的链接行（各入口 / 组清单 / 详情共用；链接开关关闭时不加）
 TXT_HELP_DOC_LINE = "帮助文档：{url}"
 #: 无参数总览（版本 + 简介 + 开关骰娘 + 四个入口 + 冲突提示）
@@ -109,6 +111,7 @@ TXT_HELP_CATALOG = (
 TXT_HELP_LINK = (
     "【相关链接】\n"
     "帮助文档：{url}\n"
+    "网页建卡器：{builder}\n"
     "5e不全书：https://5echm.kagangtuya.top\n"
     "【相关命令】\n"
     ".help 链接 on/off\n"
@@ -169,6 +172,18 @@ TXT_BOT_BAD_ARG = (
 # ── DND5e 角色卡 .角色卡 / .状态 / 检定 文案 ─────────────────────────────
 #: 群内未绑定角色卡（所有依赖角色卡的命令共用）
 TXT_CHAR_MISS = "你还没有在本群绑定角色卡，可发 .角色卡列表 查看卡库并绑定"
+#: `.角色卡` 无绑定卡：群聊 / 私聊的引导（附网页建卡器地址）
+TXT_CHAR_VIEW_MISS_BOUND = (
+    "本群未绑定角色卡，请绑定角色卡\n"
+    "可发 .角色卡列表 查看卡库并绑定"
+)
+TXT_CHAR_VIEW_MISS_GROUP = (
+    "本群未绑定角色卡，请绑定角色卡\n"
+    "您还没有角色卡，推荐到网页建卡器建卡：{url}"
+)
+TXT_CHAR_VIEW_MISS_PRIVATE = (
+    "您还没有角色卡，推荐到网页建卡器建卡：{url}"
+)
 #: 角色卡库（2026-10-23 卡库化）
 TXT_CHAR_NO_CARD_PRIVATE = "你还没有角色卡，可发 .角色卡新建 <卡名> <完整卡内容> 建卡"
 TXT_CHAR_NEED_NAME = "你有 {count} 张角色卡，请带上卡名；可发 .角色卡列表 查看"
@@ -910,7 +925,6 @@ TXT_COMBAT_NOTE_USAGE = (
 TXT_COIN_VIEW = "钱币：CP {CP}；SP {SP}；EP {EP}；GP {GP}；PP {PP}"
 TXT_COIN_DONE = "钱币：{ops}"
 TXT_COIN_CHANGE_ITEM = "{key}:{old} → {new}"
-TXT_COIN_UNCHANGED = "{keys} 不变"
 TXT_COIN_INSUFFICIENT = (
     "钱币不足：扣 {amount}{unit} 需要 {need} CP，现有总价值 {total} CP"
     "（本次未做任何改动）"

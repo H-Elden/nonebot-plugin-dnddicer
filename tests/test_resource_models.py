@@ -43,7 +43,7 @@ def test_feature_item_full_syntax():
     assert feature.uses_cur == 2 and feature.uses_max == 2
     assert feature.recover == "短休+1,长休"
     assert feature.get_info() == "引导神力:2/2短休+1,长休"
-    assert feature.get_recover_display() == "短休+1，长休"
+    assert feature.get_recover_display() == "短休+1，长休回满"
 
 
 def test_feature_recover_defaults_to_full():
@@ -51,6 +51,21 @@ def test_feature_recover_defaults_to_full():
     assert parse_feature_item("圣疗:25/25长休").recover == "长休"
     assert parse_feature_item("充能:1/1手动").recover == "手动"
     assert parse_feature_item("狂暴:3/3两者").recover == "两者"
+
+
+def test_feature_recover_display_explicit_full():
+    """回满显式写成「回满」；``+N`` 与 ``手动`` 原样展示。"""
+    assert parse_feature_item("圣疗:25/25长休").get_recover_display() == "长休回满"
+    assert parse_feature_item("圣疗:25/25短休").get_recover_display() == "短休回满"
+    assert (
+        parse_feature_item("圣疗:25/25短休+1,长休").get_recover_display()
+        == "短休+1，长休回满"
+    )
+    assert (
+        parse_feature_item("狂暴:3/3两者").get_recover_display()
+        == "短休回满，长休回满"
+    )
+    assert parse_feature_item("充能:1/1手动").get_recover_display() == "手动"
 
 
 def test_feature_recover_normalized_order():

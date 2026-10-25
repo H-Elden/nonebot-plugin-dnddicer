@@ -37,7 +37,6 @@ from ..character.constants import (
 from ..character.services import (
     AbilityService,
     CharacterService,
-    gen_template_char,
     parse_template_to_dict,
 )
 from ..config import get_config
@@ -74,36 +73,6 @@ _HELP_STATE = (
     "  私聊多张卡需带卡名；@玩家 需在群聊"
 )
 state_matcher = base.on_dnd_command("状态", _HELP_STATE, doc="guide/hp")
-
-
-def _gen_template_feedback() -> str:
-    """.角色卡模板 输出：示例卡 + 段落使用提示。
-
-    提示为纯说明文字，禁含 $ 字符——建卡内容按 $ 分段，说明会污染
-    「复制模板再新建」的解析。
-    """
-    tips = (
-        "\n\n——提示（建卡时请仅复制上方模板段并修改）——\n"
-        "建卡：.角色卡新建 <卡名> <完整卡内容>（卡名最多 20 字，不能包含空格、美元符号、@）\n"
-        "改卡：.角色卡修改 <卡名> <段条目>（只覆盖提到的段；段名后留空表示清空）\n"
-        "群聊新建会自动绑定本群；私聊建卡后用 .角色卡绑定 <卡名> <群号> 绑定\n"
-        "属性段六个数值依次对应: 力量/敏捷/体质/智力/感知/魅力\n"
-        "熟练段 = 技能/豁免/先攻条目（2*为专精），可加护甲/武器/工具/语言分组\n"
-        "属性调整值、豁免与技能加值由骰娘按等级与熟练自动计算，无需另填\n"
-        "额外加值段键 = 六属性/技能/豁免条目/豁免（作用于全部豁免）\n"
-        "额外加值取值 = 可选 优势/劣势 ±掷骰表达式, 如: 隐匿:优势+2\n"
-        "武器段格式 = 名称+命中加值,伤害表达式+类型[,备注]（多项用 / 分隔）\n"
-        "限定资源段格式 = 名称:当前/上限恢复方式[|说明]（短休/长休/两者/手动，可加 +N 或 满）\n"
-        "法术段格式 = 施法属性:属性; 豁免DC:15; 法术攻击:+8; 法术名:环阶[*][|时间=…,距离=…,专注=是,仪式=否,材料=是,备注=…]\n"
-        "法术位段格式 = 环阶:当前/上限（契约魔法写 契约3:2/2），多项用 ; 分隔\n"
-        "战斗段格式 = AC:18; 速度:30（先攻、被动察觉由骰娘按属性、熟练与额外加值自动计算，不需要写）\n"
-        "进度段格式 = 经验:6500; 激励:有（下一级经验由骰娘按等级计算）\n"
-        "专长 / 种族特性段多项用 / 分隔，可写 名称:说明；职业特性写 等级|名称:说明\n"
-        "物品段格式 = 名称x数量，多项用 ; 分隔；魔法物品段格式 = 名称|标签|说明（说明用 // 分段）\n"
-        "钱币段格式 = CP:0; SP:8; EP:0; GP:18; PP:0\n"
-        "背景段为固定键:值（5e 另有理想/羁绊/缺点），多项用 ; 分隔；故事段可多行/多段（最多 1000 字，换行不计）；战斗记录段每项用 ; 分隔"
-    )
-    return gen_template_char().get_char_info() + tips
 
 
 def _reserved_names() -> Tuple[str, ...]:
@@ -423,15 +392,28 @@ async def _handle_view(bot: Bot, event: MessageEvent, rest: str) -> None:
     if not _is_group(event):
         if rest.startswith("@"):
             await char_matcher.finish(text.TXT_CHAR_PRIVATE_TARGET_UNSUPPORTED)
+        if not rest and not await list_cards_by_owner(owner):
+            await char_matcher.finish(
+                text.TXT_CHAR_VIEW_MISS_PRIVATE.format(
+                    url=text.TXT_CARD_BUILDER_URL
+                )
+            )
         _card_id, _card_name, character = await card_helpers.resolve_private_current(
             owner, rest, char_matcher
         )
         await char_matcher.finish(character.get_char_info())
 
     if not rest:
-        _card_id, _card_name, character = await card_helpers.resolve_group_bound(
-            event.group_id, owner, char_matcher  # type: ignore[attr-defined]
-        )
+        bound = await get_bound_card(event.group_id, owner)  # type: ignore[attr-defined]
+        if bound is None:
+            if await list_cards_by_owner(owner):
+                await char_matcher.finish(text.TXT_CHAR_VIEW_MISS_BOUND)
+            await char_matcher.finish(
+                text.TXT_CHAR_VIEW_MISS_GROUP.format(
+                    url=text.TXT_CARD_BUILDER_URL
+                )
+            )
+        _card_id, _card_name, character = bound
         await char_matcher.finish(character.get_char_info())
 
     # 群聊查看他人：.角色卡 @玩家 / .角色卡 角色名
@@ -513,8 +495,6 @@ async def handle_character(bot: Bot, event: MessageEvent) -> None:
     if head == "清除":
         await _handle_delete(event, tail)
         return
-    if head == "模板":
-        await char_matcher.finish(_gen_template_feedback())
 
     await _handle_view(bot, event, rest)
 

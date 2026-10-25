@@ -347,7 +347,7 @@ async def test_long_rest_restores_features_slots_and_hint(app: App):
 
     await _expect(
         app, ability_matcher, _event(".能力 奥术回想"),
-        "奥术回想：0/1（短休）",
+        "奥术回想：0/1（短休回满）",
     )
 
 

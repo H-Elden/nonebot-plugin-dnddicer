@@ -153,7 +153,7 @@ _HELP_LONG_REST = (
     "  生命骰回复量按本群规则版本（5e 一半 / 5r 全满）\n"
     "  @玩家 用于 DM 替不在场玩家收尾"
 )
-long_rest_matcher = base.on_dnd_command("长休", _HELP_LONG_REST, doc="guide/hp-advanced")
+long_rest_matcher = base.on_dnd_command("长休", _HELP_LONG_REST, doc="guide/resources")
 
 _HELP_SHORT_REST = (
     ".短休 [@玩家]\n"

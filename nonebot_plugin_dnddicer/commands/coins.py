@@ -34,7 +34,7 @@ coins_matcher = base.on_dnd_command("钱币", _HELP, doc="guide/character-card")
 
 
 def _format_changes(result: CoinResult) -> str:
-    """最终变更行：触及的币种按顺序列旧 → 新，其余合并为「不变」。"""
+    """最终变更行：只列数值发生变化的币种，按顺序显示旧 → 新。"""
     parts: List[str] = [
         text.TXT_COIN_CHANGE_ITEM.format(
             key=key,
@@ -42,12 +42,8 @@ def _format_changes(result: CoinResult) -> str:
             new=result.coins.get(key, 0),
         )
         for key in result.touched
+        if result.old_coins.get(key, 0) != result.coins.get(key, 0)
     ]
-    unchanged = [
-        key for key in COIN_KEY_LIST if key not in result.touched
-    ]
-    if unchanged:
-        parts.append(text.TXT_COIN_UNCHANGED.format(keys=" / ".join(unchanged)))
     return "；".join(parts)
 
 
@@ -96,5 +92,7 @@ async def handle_coins(event: MessageEvent) -> None:
     ]
     if result.details:
         lines.append("；".join(result.details))
-    lines.append(_format_changes(result))
+    changes = _format_changes(result)
+    if changes:
+        lines.append(changes)
     await coins_matcher.finish("\n".join(lines))

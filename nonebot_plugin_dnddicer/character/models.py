@@ -540,8 +540,16 @@ class CharacterFeature(BaseModel):
         return text
 
     def get_recover_display(self) -> str:
-        """恢复档的中文展示（逗号转全角），如 ``短休+1，长休``。"""
-        return self.recover.replace(",", "，")
+        """恢复档的中文展示（回满显式写出），如 ``短休+1，长休回满``。"""
+        parts = []
+        for token in self.recover.split(","):
+            if token == "两者":
+                parts.append("短休回满，长休回满")
+            elif token == "手动" or "+" in token:
+                parts.append(token)
+            else:
+                parts.append(f"{token}回满")
+        return "，".join(parts)
 
 
 class ClassFeature(BaseModel):

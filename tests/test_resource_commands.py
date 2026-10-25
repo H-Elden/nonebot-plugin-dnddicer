@@ -99,13 +99,13 @@ async def test_ability_list_detail_and_modify(app: App):
     await _expect(
         app, ability_matcher, _event(".能力"),
         "当前限定资源（2 项）：\n"
-        "1. 引导神力 2/2（短休+1，长休）\n"
-        "2. 圣疗 25/25（长休）\n"
+        "1. 引导神力 2/2（短休+1，长休回满）\n"
+        "2. 圣疗 25/25（长休回满）\n"
         "用法：.能力 名称 查看详情；.能力 名称 -N 消耗、+N 恢复",
     )
     await _expect(
         app, ability_matcher, _event(".能力 引导神力"),
-        "引导神力：2/2（短休+1，长休）",
+        "引导神力：2/2（短休+1，长休回满）",
     )
     await _expect(
         app, ability_matcher, _event(".能力 引导神力 -1"),
@@ -143,7 +143,7 @@ async def test_ability_fuzzy_match_and_errors(app: App):
     # 精确优先：输入完整名称命中同名条目
     await _expect(
         app, ability_matcher, _event(".能力 引路神力"),
-        "引路神力：1/1（长休）",
+        "引路神力：1/1（长休回满）",
     )
     # 子串同时命中两条：列候选、不执行
     await _expect(
@@ -175,17 +175,17 @@ async def test_set_and_delete_ability(app: App):
     await _expect(
         app, set_feature_matcher, _event(".设置能力 奥术回想:1/1短休"),
         "已设置限定资源：奥术回想（当前共 3 项）\n"
-        "1. 引导神力 2/2（短休+1，长休）\n"
-        "2. 圣疗 25/25（长休）\n"
-        "3. 奥术回想 1/1（短休）",
+        "1. 引导神力 2/2（短休+1，长休回满）\n"
+        "2. 圣疗 25/25（长休回满）\n"
+        "3. 奥术回想 1/1（短休回满）",
     )
     # 同名覆盖：当前值一并按新写法重置
     await _expect(
         app, set_feature_matcher, _event(".设置能力 奥术回想:0/1短休"),
         "已设置限定资源：奥术回想（当前共 3 项）\n"
-        "1. 引导神力 2/2（短休+1，长休）\n"
-        "2. 圣疗 25/25（长休）\n"
-        "3. 奥术回想 0/1（短休）",
+        "1. 引导神力 2/2（短休+1，长休回满）\n"
+        "2. 圣疗 25/25（长休回满）\n"
+        "3. 奥术回想 0/1（短休回满）",
     )
     await _expect(
         app, set_feature_matcher, _event(".设置能力 引导神力:2/2随便"),
@@ -201,8 +201,8 @@ async def test_set_and_delete_ability(app: App):
     )
     await _expect(app, ability_matcher, _event(".能力"), (
         "当前限定资源（2 项）：\n"
-        "1. 引导神力 2/2（短休+1，长休）\n"
-        "2. 圣疗 25/25（长休）\n"
+        "1. 引导神力 2/2（短休+1，长休回满）\n"
+        "2. 圣疗 25/25（长休回满）\n"
         "用法：.能力 名称 查看详情；.能力 名称 -N 消耗、+N 恢复"
     ))
 
@@ -489,8 +489,8 @@ async def test_ability_target_by_mention_and_name(app: App):
         app, ability_matcher,
         _mention_event(".能力 ", 23002),
         "塔莉的限定资源（2 项）：\n"
-        "1. 引导神力 2/2（短休+1，长休）\n"
-        "2. 圣疗 25/25（长休）\n"
+        "1. 引导神力 2/2（短休+1，长休回满）\n"
+        "2. 圣疗 25/25（长休回满）\n"
         "用法：.能力 名称 查看详情；.能力 名称 -N 消耗、+N 恢复",
     )
     await _expect(
@@ -504,14 +504,14 @@ async def test_ability_target_by_mention_and_name(app: App):
     )
     await _expect(
         app, ability_matcher, _event(".能力 塔 圣疗"),
-        "塔莉的圣疗：25/25（长休）",
+        "塔莉的圣疗：25/25（长休回满）",
     )
     # @ 自己：按目标形式查看本人，输出带角色名
     await _expect(
         app, ability_matcher, _mention_event(".能力 ", 23001),
         "测试的限定资源（2 项）：\n"
-        "1. 引导神力 2/2（短休+1，长休）\n"
-        "2. 圣疗 25/25（长休）\n"
+        "1. 引导神力 2/2（短休+1，长休回满）\n"
+        "2. 圣疗 25/25（长休回满）\n"
         "用法：.能力 名称 查看详情；.能力 名称 -N 消耗、+N 恢复",
     )
     # 目标卡改动不影响本人卡

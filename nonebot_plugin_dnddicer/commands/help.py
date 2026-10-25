@@ -100,7 +100,9 @@ async def _handle_link(event: MessageEvent, action: str) -> str:
     chat_key = _chat_key(event)
     group_id = getattr(event, "group_id", None)
     if not action:
-        return text.TXT_HELP_LINK.format(url=text.TXT_HELP_DOCS_BASE)
+        return text.TXT_HELP_LINK.format(
+            url=text.TXT_HELP_DOCS_BASE, builder=text.TXT_CARD_BUILDER_URL
+        )
     value = action.strip().lower()
     if value in ("on", "off"):
         await help_settings.set_link_enabled(chat_key, value == "on")

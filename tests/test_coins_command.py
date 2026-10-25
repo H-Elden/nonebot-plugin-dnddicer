@@ -78,20 +78,20 @@ async def test_coins_view_and_compact_flow(app: App):
         app, coins_matcher, _event(".钱币 +20GP-5SP"),
         "钱币：+20GP，-5SP\n"
         "SP 不足：拆 1 GP → +10 SP，扣 5 SP，余 5 SP\n"
-        "GP:0 → 19；SP:0 → 5；CP / EP / PP 不变",
+        "GP:0 → 19；SP:0 → 5",
     )
     assert await _coins() == {"CP": 0, "SP": 5, "EP": 0, "GP": 19, "PP": 0}
     # 同币种充足：直接扣，不换算
     await _expect(
         app, coins_matcher, _event(".钱币 -1GP"),
         "钱币：-1GP\n"
-        "GP:19 → 18；CP / SP / EP / PP 不变",
+        "GP:19 → 18",
     )
     # 大小写不敏感、操作间允许空白
     await _expect(
         app, coins_matcher, _event(".钱币 +20gp -5sp"),
         "钱币：+20GP，-5SP\n"
-        "GP:18 → 38；SP:5 → 0；CP / EP / PP 不变",
+        "GP:18 → 38；SP:5 → 0",
     )
     assert await _coins() == {"CP": 0, "SP": 0, "EP": 0, "GP": 38, "PP": 0}
 
@@ -104,7 +104,7 @@ async def test_coins_addition_does_not_convert(app: App):
     await _expect(
         app, coins_matcher, _event(".钱币 +20GP"),
         "钱币：+20GP\n"
-        "GP:0 → 20；CP / SP / EP / PP 不变",
+        "GP:0 → 20",
     )
     assert (await _coins()) == {"SP": 15, "GP": 20}
 
@@ -118,7 +118,7 @@ async def test_coins_lower_denomination_conversion(app: App):
         app, coins_matcher, _event(".钱币 -1GP"),
         "钱币：-1GP\n"
         "GP 不足：用 10 SP 折算 1 GP，扣 10 SP，余 5 SP\n"
-        "GP:0 → 0；SP:15 → 5；CP / EP / PP 不变",
+        "SP:15 → 5",
     )
     assert (await _coins()) == {"SP": 5}
 
@@ -132,7 +132,7 @@ async def test_coins_ep_and_cp_boundaries(app: App):
         app, coins_matcher, _event(".钱币 -2SP"),
         "钱币：-2SP\n"
         "SP 不足：拆 1 EP → +5 SP，扣 2 SP，余 3 SP\n"
-        "SP:0 → 3；EP:1 → 0；CP / GP / PP 不变",
+        "SP:0 → 3；EP:1 → 0",
     )
     assert (await _coins()) == {"SP": 3, "EP": 0}
 
@@ -155,7 +155,7 @@ async def test_coins_ep_and_cp_boundaries(app: App):
         app, coins_matcher, _event(".钱币 -1SP"),
         "钱币：-1SP\n"
         "SP 不足：用 10 CP 折算 1 SP，扣 10 CP，余 5 CP\n"
-        "SP:0 → 0；CP:15 → 5；EP / GP / PP 不变",
+        "CP:15 → 5",
     )
     assert (await _coins()) == {"CP": 5}
 
@@ -204,7 +204,7 @@ async def test_coins_missing_denominations_treated_as_zero(app: App):
     await _expect(
         app, coins_matcher, _event(".钱币 +2SP"),
         "钱币：+2SP\n"
-        "SP:0 → 2；CP / EP / GP / PP 不变",
+        "SP:0 → 2",
     )
     assert (await _coins()) == {"GP": 3, "SP": 2}
 

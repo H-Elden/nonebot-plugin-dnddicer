@@ -304,6 +304,8 @@ def test_card_face_extensions_are_wired() -> None:
     ]
     assert view.class_traits[0].text.startswith("法术书中的仪式")
     assert view.resources[0].text.startswith("短休时恢复")
+    assert view.resources[0].uses == "1/1 短休回满"
+    assert view.resources[1].uses == "1/1 长休回满"
     assert view.magic_items[0].name == "战法师魔杖 +1"
     assert view.magic_items[0].tag.startswith("魔杖")
     assert view.magic_items[0].paragraphs[1].startswith("此外")

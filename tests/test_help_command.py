@@ -129,6 +129,7 @@ _HP_DETAIL = (
 _LINK_ENTRY = (
     "【相关链接】\n"
     f"{_HOME_LINE}\n"
+    f"网页建卡器：{cmd_text.TXT_CARD_BUILDER_URL}\n"
     "5e不全书：https://5echm.kagangtuya.top\n"
     "【相关命令】\n"
     ".help 链接 on/off\n"
@@ -253,7 +254,7 @@ def _reply_body(keyword: str) -> str:
         ("管理", "guide/faq"),
         ("dnd", "guide/character-card"),
         ("状态", "guide/hp"),
-        ("长休", "guide/hp-advanced"),
+        ("长休", "guide/resources"),
         ("npc", "guide/hp"),
         ("ri", "guide/initiative"),
         ("br", "guide/battle"),

@@ -5,7 +5,7 @@
   拼成掷骰表达式交 ast_engine，返回 (hint 过程说明, result 掷骰过程文本, 数值)；
 - ``CharacterService.parse``：整卡解析底层（命令层新建用 ``parse_full``、修改用
   ``merge_segments``）；
-- ``gen_template_char``：生成示例模板（供 .角色卡模板 输出）。
+- ``gen_template_char``：生成示例角色卡（供测试与网页建卡器样例）。
 
 只处理数据，不负责存储（存储见 data/characters.py）。
 """
@@ -157,7 +157,7 @@ def parse_template_to_dict(
         key = f"${match.group(1)}$"
         if key not in known_keys:
             raise AssertionError(
-                f"未知段: {key}（可用段见 .角色卡模板）"
+                f"未知段: {key}（可用段见网页建卡器）"
             )
         end = matches[index + 1].start() if index + 1 < len(matches) else len(input_str)
         content = input_str[match.end():end].strip()
@@ -1517,7 +1517,7 @@ class CharacterService:
         for key in data:
             if key not in known_keys:
                 raise AssertionError(
-                    f"未知段: {key}（可用段见 .角色卡模板）"
+                    f"未知段: {key}（可用段见网页建卡器）"
                 )
         return CharacterService._merge_segments(existing, data, reserved_names)
 
@@ -1531,7 +1531,7 @@ class CharacterService:
     ) -> DNDCharacter:
         """把整卡模板文本解析为角色；失败抛 AssertionError。
 
-        模板格式（.角色卡模板 可查看示例）：
+        卡面格式（``$关键字$ 内容``）：
         $姓名$ 伊丽莎白
         $种族$ 半精灵
         $职业$ 游荡者
@@ -1727,7 +1727,7 @@ class CharacterService:
 
 
 def gen_template_char(group_id: str = "", user_id: str = "") -> DNDCharacter:
-    """生成一张示例角色卡（供 .角色卡模板 输出展示）。
+    """生成一张示例角色卡（供测试与网页建卡器样例）。
 
     示例为按 2024 规则完整建立的 5 级高等精灵法师（塑能师）：
     27 点购点、智者背景（+2 智力 / +1 体质）、4 级属性提升（+1 智力 / +1 感知），
