@@ -25,7 +25,7 @@ DNDDicer 的目标是填补「NoneBot 商店中缺少 **DND5e/5r 专业 + 现代
 
 - 开始：[快速开始](./docs/guide/quickstart.md) · [示例团与人物](./docs/guide/cast.md)
 - 第一章 · 基础操作：[掷骰基础](./docs/guide/roll-basics.md) · [掷骰进阶](./docs/guide/roll-advanced.md) · [生命值管理](./docs/guide/hp.md) · [先攻列表](./docs/guide/initiative.md) · [战斗轮](./docs/guide/battle.md) · [规则查询](./docs/guide/query.md)
-- 第二章 · 玩家进阶：[角色卡与属性](./docs/guide/character-card.md) · [角色卡图与立绘](./docs/guide/card-image.md) · [检定与豁免](./docs/guide/checks.md) · [武器与攻击](./docs/guide/weapons.md) · [休息与资源](./docs/guide/resources.md) · [HP 进阶与长休](./docs/guide/hp-advanced.md)
+- 第二章 · 玩家进阶：[角色卡与属性](./docs/guide/character-card.md) · [角色卡图与立绘](./docs/guide/card-image.md) · [检定与豁免](./docs/guide/checks.md) · [武器与攻击](./docs/guide/weapons.md) · [休息与资源](./docs/guide/resources.md) · [HP 进阶](./docs/guide/hp-advanced.md)
 - 第三章 · DM 进阶：[代掷与代操作](./docs/guide/dm-proxy.md) · [血量与伤害结算](./docs/guide/dm-settlement.md) · [查询范围](./docs/guide/query-scope.md)
 - 第四章 · 最佳实践：[最佳实践](./docs/guide/best-practices.md)
 - 参考：[命令总览](./docs/guide/overview.md) · [群管理与 FAQ](./docs/guide/faq.md) · [自建查询服务](./docs/guide/self-host.md)
@@ -83,7 +83,7 @@ plugins = ["nonebot_plugin_dnddicer"]
 
 | 命令 | 说明 |
 | --- | --- |
-| `.角色卡模板` / `.角色卡新建 <卡名>` + 完整卡面 | 查看示例卡 / 新建卡（须含姓名、等级、属性；群聊自动绑定本群） |
+| `.角色卡新建 <卡名>` + 完整卡面 | 新建卡（须含姓名、等级、属性；群聊自动绑定本群；也可用网页建卡器生成） |
 | `.角色卡修改 <卡名> <段条目>` | 只覆盖提到的段；空段清空，必填段不可清空 |
 | `.角色卡` / `.角色卡列表` / `.角色卡清除 <卡名> 确认` | 查看 / 列出卡库 / 删除未绑定的卡（连同立绘） |
 | `.角色卡绑定` / `.角色卡解绑` / `.角色卡改名` | 绑定 / 解绑到群、修改卡名（私聊绑定需群号） |
@@ -120,7 +120,7 @@ plugins = ["nonebot_plugin_dnddicer"]
 | --- | --- |
 | `.生命骰 [N] [@玩家]` | 花生命骰回血（缺省 1 颗；5e 逐粒加体质、5r 骰点总和 + 枚数 × 体质） |
 | `.短休 [@玩家]` | 恢复短休类限定资源与契约魔法位，提示可用生命骰（不自动花骰） |
-| `.长休 [@玩家]` | 回满 HP、恢复长休类限定资源与全部法术位；完整结算见下方生命值管理 |
+| `.长休 [@玩家]` | 回满 HP、清临时 HP 与死亡豁免、恢复长休类限定资源与全部法术位、按规则版本恢复生命骰 |
 | `.能力` / `.能力 名称` | 查看限定资源清单 / 单个限定资源详情（当前/上限与恢复档）；最前面可写 `@玩家` 或角色名代操作 |
 | `.能力 名称 -1` / `+1` | 消耗 / 恢复次数（不会越过 0 与上限） |
 | `.设置能力` / `.删除能力` | 维护卡上限定资源（多项用 `;`，同名覆盖；删除支持模糊匹配） |
@@ -155,7 +155,7 @@ plugins = ["nonebot_plugin_dnddicer"]
 | `.死亡豁免` / `.ds` | 0 HP 濒死时掷 1d20：≥10 成功、≤9 失败；3 成功稳定、3 失败死亡（自然 20 回 1 点 HP、自然 1 记两败）；`状态` / `重置` / `成功+N` 手动裁决（绑定角色卡与无卡 HP 记录都适用） |
 | `.长休` / `.长休 @玩家` | 长休结算（回满 HP、清临时 HP、清死亡豁免、恢复长休类能力与全部法术位、按群级规则版本恢复生命骰）；@ 形式代不在场的玩家收尾 |
 
-> 基础用法见[生命值管理](./docs/guide/hp.md)，武器伤害写法与长休进阶见 [HP 进阶与长休](./docs/guide/hp-advanced.md)，DM 的结算打法见[血量与伤害结算](./docs/guide/dm-settlement.md)。
+> 基础用法见[生命值管理](./docs/guide/hp.md)，武器伤害写法见 [HP 进阶](./docs/guide/hp-advanced.md)，休息与资源恢复见[休息与资源](./docs/guide/resources.md)，DM 的结算打法见[血量与伤害结算](./docs/guide/dm-settlement.md)。
 
 ### ⚔️ 先攻与战斗轮（群聊）
 

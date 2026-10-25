@@ -227,14 +227,6 @@ roll_adv_unimpl = Scene(
 
 # ── 第三幕之前：出发整备（角色卡与属性） ────────────────────────────────────
 
-char_template = Scene(
-    id="char_template",
-    title="查看示例模板（小鹿问怎么建卡）",
-    steps=[
-        Step("小鹿", ".角色卡模板"),
-    ],
-)
-
 char_view_self = Scene(
     id="char_view_self",
     title="查看自己的角色卡",
@@ -1484,7 +1476,6 @@ TIMELINE = [
     roll_adv_reason,
     roll_adv_unimpl,
     # 第三幕之前：出发整备（角色卡与属性 / 检定与豁免）
-    char_template,
     char_view_self,
     char_view_other,
     hp_set,

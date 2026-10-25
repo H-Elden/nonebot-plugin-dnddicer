@@ -160,18 +160,6 @@ function main() {
     checkEqual(`${name}: 整卡命令长度按整条消息`, wholeCommand.length, whole.length)
   }
 
-  // 粘贴 .角色卡模板 的完整回复（卡 + 提示）也能导入
-  const tips =
-    '\n\n——提示（记录时请仅复制上方模板段并修改）——\n' +
-    '属性段六个数值依次对应: 力量/敏捷/体质/智力/感知/魅力\n'
-  const templateWithTips = builder.parseCardText(`${CARD_COMMAND}\n${templateFixture.text}${tips}`)
-  check('模板回复（含提示）可导入', templateWithTips.errors.length === 0)
-  checkEqual(
-    '模板回复（含提示）内容不变',
-    builder.serializeCard(templateWithTips.state),
-    templateFixture.text,
-  )
-
   // 旧段不再兼容：导入直接报未知段
   const legacyDerived = builder.parseCardText(
     '$姓名$ 旧卡\n$等级$ 1\n$属性$ 10/10/10/10/10/10\n' +
@@ -284,6 +272,8 @@ function main() {
   checkEqual('编辑后的卡专长说明', editedParsed.state[K.FEATS][0].text, '可以用附赠动作再攻击一次')
   checkEqual('编辑后的卡熟练组', editedParsed.state[K.PROF].groups['护甲'], '轻甲·中甲·盾牌')
   checkEqual('编辑后的卡限定资源', builder.contentFor(editedParsed.state, K.FEATURE), '动作如潮:1/1短休+1,长休|短休回复一次')
+  const editedPreview = buildPreviewView(builder, editedParsed.state)
+  checkEqual('编辑后的卡预览限定资源', editedPreview.resources[0].uses, '1/1 短休+1，长休回满')
   checkEqual('编辑后的卡战斗记录', editedParsed.state[K.COMBAT_NOTES][0], '祝福术(专注,3轮)')
   checkEqual('编辑后的卡技能专精', editedParsed.state[K.PROF].checks['运动'], 2)
 

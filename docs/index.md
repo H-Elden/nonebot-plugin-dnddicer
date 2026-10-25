@@ -34,7 +34,7 @@ features:
     link: /guide/checks
     linkText: 检定与豁免
   - title: 生命值管理
-    details: 记录、伤害/治疗（支持直接掷骰）、临时 HP、抗性易伤、NPC 血量跨战斗保持；武器伤害写法与长休进阶
+    details: 记录、伤害/治疗（支持直接掷骰）、临时 HP、抗性易伤、NPC 血量跨战斗保持；武器伤害写法与休息恢复
     link: /guide/hp
     linkText: 生命值管理
   - title: 先攻列表

@@ -43,9 +43,18 @@ function recoverText(modes, modeOrder) {
   for (const mode of modeOrder) {
     const state = modes && modes[mode]
     if (!state || !state.on) continue
-    parts.push(`${mode}${trimOf(state.amount) ? `+${trimOf(state.amount)}` : ''}`)
+    if (mode === '两者') {
+      parts.push('短休回满，长休回满')
+      continue
+    }
+    const amount = trimOf(state.amount)
+    if (mode === '手动' || amount === '满') {
+      parts.push(mode === '手动' ? '手动' : `${mode}回满`)
+      continue
+    }
+    parts.push(`${mode}${amount ? `+${amount}` : '回满'}`)
   }
-  return parts.join(',').replace(/,/g, '，')
+  return parts.join('，')
 }
 
 /**
