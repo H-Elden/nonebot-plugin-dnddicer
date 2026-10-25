@@ -221,11 +221,8 @@
   font-size: 12px;
 }
 
-.cb-toolbar__spacer {
-  flex: 1;
-}
-
 .cb-status {
+  flex: none;
   font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
@@ -962,15 +959,6 @@
     grid-template-columns: minmax(0, 1fr) 64px 64px;
   }
 
-  .cb-toolbar__spacer {
-    display: none;
-  }
-
-  .cb-status {
-    order: 5;
-    flex: 1 1 100%;
-  }
-
   /* 窄屏隐藏上下移动按钮，把宽度留给键值输入（删除仍可用） */
   .cb-repeater--compact .cb-repeater__actions button:nth-child(-n + 2) {
     display: none;
@@ -1040,28 +1028,6 @@
   font-size: 12px;
   line-height: 1.6;
   pointer-events: none;
-}
-
-.cb-anchors {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 0 0 18px;
-}
-
-.cb-anchors a {
-  padding: 3px 9px;
-  border: 1px solid var(--vp-c-divider);
-  border-radius: 999px;
-  background-color: var(--vp-c-bg);
-  color: var(--vp-c-text-2);
-  font-size: 12px;
-  text-decoration: none;
-}
-
-.cb-anchors a:hover {
-  border-color: var(--vp-c-brand-1);
-  color: var(--vp-c-brand-1);
 }
 
 .cb-tool-picker {

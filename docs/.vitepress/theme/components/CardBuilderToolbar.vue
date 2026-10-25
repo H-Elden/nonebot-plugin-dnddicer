@@ -36,17 +36,11 @@
         导入卡文本
       </button>
       <button type="button" class="cb-btn cb-btn--ghost" @click="clearAll">清空</button>
-      <span class="cb-toolbar__spacer"></span>
       <span class="cb-status" :class="statusClass">{{ statusText }}</span>
       <a class="cb-btn cb-btn--ghost" href="#角色卡预览">预览角色卡</a>
-      <a class="cb-btn cb-btn--ghost" href="#导出命令">跳到导出</a>
     </div>
 
     <p v-if="notice" class="cb-notice" :class="`cb-notice--${noticeKind}`">{{ notice }}</p>
-
-    <nav class="cb-anchors" aria-label="建卡章节跳转">
-      <a v-for="item in anchors" :key="item.id" :href="`#${item.id}`">{{ item.label }}</a>
-    </nav>
 
     <section v-if="importOpen" class="cb-panel">
       <h3 class="cb-panel__title">
@@ -96,19 +90,6 @@ import {
   validation,
 } from '../card-builder/store.mjs'
 import HintDot from './card-builder/HintDot.vue'
-
-const anchors = [
-  { id: '身份', label: '身份' },
-  { id: '属性与检定', label: '属性' },
-  { id: '战斗', label: '战斗' },
-  { id: '特性与专长', label: '特性' },
-  { id: '法术', label: '法术' },
-  { id: '装备', label: '装备' },
-  { id: '其他', label: '其他' },
-  { id: '立绘', label: '立绘' },
-  { id: '角色卡预览', label: '预览' },
-  { id: '导出命令', label: '导出' },
-]
 
 const importOpen = ref(false)
 const importText = ref('')
