@@ -1061,6 +1061,7 @@ faq_dset_denied = Scene(
         Step("阿茶", ".dset 20"),                       # 普通成员修改
         Step("白鸦", ".dset 1"),                        # 无效表达式
         Step("阿茶", ".dset 6", channel="private"),      # 私聊发出（只有群聊可用）
+        Step("小满", ".dset20", channel="private"),      # 私聊没有空格写法，同样被拒
     ],
 )
 

@@ -4,17 +4,17 @@ layout: home
 hero:
   name: 屠龙骰
   text: DNDDicer 使用文档
-  tagline: 专精 DND5e/5r 的 QQ 跑团骰娘插件：掷骰表达式、角色卡与属性、角色卡图与立绘、检定与豁免、生命值管理、先攻列表与战斗轮、规则查询
+  tagline: 专精 DND5e/5r 跑团的 NoneBot2 骰娘插件，致力于做功能最全面、体验最好的 DND 骰娘。
   actions:
     - theme: brand
-      text: 快速开始
-      link: /guide/quickstart
-    - theme: alt
-      text: 命令总览
+      text: 使用文档
       link: /guide/overview
     - theme: alt
-      text: GitHub
-      link: https://github.com/H-Elden/nonebot-plugin-dnddicer
+      text: 部署指南
+      link: /guide/quickstart
+    - theme: alt
+      text: 快速建卡
+      link: /guide/card-builder
 
 features:
   - title: 掷骰表达式
@@ -26,7 +26,7 @@ features:
     link: /guide/character-card
     linkText: 角色卡与属性
   - title: 网页建卡器
-    details: 在浏览器里填表生成 .角色卡新建 / .角色卡修改 命令，纯本地不上传；内置立绘裁切与角色卡预览，整卡超过 4500 字会自动拆块
+    details: 在浏览器里填表生成 .角色卡新建 / .角色卡修改 命令，纯本地不上传；内置立绘裁切与角色卡预览，整卡超长自动拆块
     link: /guide/card-builder
     linkText: 网页建卡器
   - title: 检定与豁免

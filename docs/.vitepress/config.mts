@@ -26,8 +26,8 @@ export default defineConfig({
 
   themeConfig: {
     nav: [
+      { text: '部署指南', link: '/guide/quickstart' },
       { text: '使用文档', link: '/guide/overview' },
-      { text: '快速开始', link: '/guide/quickstart' },
       { text: 'GitHub', link: 'https://github.com/H-Elden/nonebot-plugin-dnddicer' },
       { text: 'PyPI', link: 'https://pypi.org/project/nonebot-plugin-dnddicer/' },
     ],
@@ -37,6 +37,7 @@ export default defineConfig({
         text: '开始',
         items: [
           { text: '快速开始', link: '/guide/quickstart' },
+          { text: '命令总览', link: '/guide/overview' },
           { text: '示例团与人物', link: '/guide/cast' },
         ],
       },
@@ -55,7 +56,6 @@ export default defineConfig({
         text: '第二章 · 玩家进阶',
         items: [
           { text: '角色卡与属性', link: '/guide/character-card' },
-          { text: '网页建卡器', link: '/guide/card-builder' },
           { text: '角色卡图与立绘', link: '/guide/card-image' },
           { text: '检定与豁免', link: '/guide/checks' },
           { text: '武器与攻击', link: '/guide/weapons' },
@@ -78,9 +78,9 @@ export default defineConfig({
         items: [{ text: '最佳实践', link: '/guide/best-practices' }],
       },
       {
-        text: '参考',
+        text: '参考与工具',
         items: [
-          { text: '命令总览', link: '/guide/overview' },
+          { text: '网页建卡器', link: '/guide/card-builder' },
           { text: '群管理与 FAQ', link: '/guide/faq' },
           { text: '自建查询服务（可选）', link: '/guide/self-host' },
           { text: '更新日志', link: '/guide/changelog' },
