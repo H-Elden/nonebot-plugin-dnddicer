@@ -13,7 +13,7 @@
         v-model="cardName"
         class="cb-input"
         maxlength="20"
-        placeholder="例如：薇拉"
+        placeholder="例如：矿坑"
         autocomplete="off"
       />
       <HintDot text="卡名是卡库里的标识，最多 20 字，不能包含空格、$、@；重名会被骰娘拒绝。" />

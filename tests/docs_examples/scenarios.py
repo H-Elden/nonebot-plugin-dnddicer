@@ -290,6 +290,23 @@ dndx_record = Scene(
     ],
 )
 
+char_modify_clear = Scene(
+    id="char_modify_clear",
+    title="修改与清除：查看临时卡「角色卡1」、解绑并删除",
+    steps=[
+        Step("小鹿", (
+            ".角色卡新建 角色卡1\n"
+            "$姓名$ 小鹿\n"
+            "$等级$ 1\n"
+            "$生命值$ 8/8\n"
+            "$属性$ 9/15/15/15/12/9"
+        )),
+        Step("小鹿", ".角色卡"),
+        Step("小鹿", ".角色卡解绑"),
+        Step("小鹿", ".角色卡清除 角色卡1 确认"),
+    ],
+)
+
 dnd_times_over_limit = Scene(
     id="dnd_times_over_limit",
     title="次数越界：提示上限且不掷点（不再静默回退 1 次）",
@@ -1482,6 +1499,7 @@ TIMELINE = [
     hp_set,
     dnd_roll,
     dndx_record,
+    char_modify_clear,
     dnd_times_over_limit,
     char_record_error,
     check_skill_expertise,

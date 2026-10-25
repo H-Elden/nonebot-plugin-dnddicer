@@ -26,7 +26,7 @@
           v-model="cardName"
           class="cb-input cb-input--short"
           maxlength="20"
-          placeholder="例如：薇拉"
+          placeholder="例如：矿坑"
           autocomplete="off"
         />
       </label>
