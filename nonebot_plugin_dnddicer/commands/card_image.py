@@ -1,42 +1,28 @@
-"""角色卡图命令：``.角色卡图 [@玩家|卡名]`` 与 ``.立绘 [卡名]``（2026-10-23）。
+"""角色卡图片：卡面渲染辅助与 ``.立绘`` 命令。
 
-- 群聊：只看本群绑定卡；``@玩家`` / 角色名查看他人绑定卡；
-- 私聊：按卡名选本人卡，卡库仅一张时可省略卡名；
-- 渲染不可用或渲染异常时回退文字卡，并在末尾附一行「请联系骰主解决」；
+- ``render_card_png``：供 ``.角色卡`` 调用，角色卡图开关开启且渲染依赖可用时
+  返回 PNG 字节，不可用或渲染异常返回 ``None``（调用方回退文字卡）；
+- ``.立绘 [卡名]``：群聊设置本群绑定卡、私聊按卡名设置本人卡；
 - 立绘按 ``card_id`` 落盘；旧路径若存在继续可读，不做文件迁移。
 """
 
 from __future__ import annotations
-
-from typing import Optional
 
 from nonebot import logger
 from nonebot.adapters.onebot.v11 import (
     Bot,
     GroupMessageEvent,
     MessageEvent,
-    MessageSegment,
 )
-from nonebot.matcher import Matcher
 
 from ..character import rules as char_rules
 from ..character.card_view import build_card_view
 from ..character.models import DNDCharacter
 from ..data import portraits
-from ..data.characters import get_character, save_card
+from ..data.characters import save_card
 from ..platform import onebot_v11
 from ..render import char_card_available, render_char_card
 from . import base, card_helpers, text
-
-_HELP = (
-    ".角色卡图 [@玩家|卡名]\n"
-    "  将角色卡渲染为图片\n"
-    "  群聊看本群绑定卡或他人；私聊看本人卡\n"
-    "  私聊多张卡需带卡名；需骰主开启图片渲染"
-)
-character_image_matcher = base.on_dnd_command(
-    "角色卡图", _HELP, doc="guide/card-image"
-)
 
 _HELP_PORTRAIT = (
     ".立绘 [卡名]\n"
@@ -49,100 +35,35 @@ portrait_matcher = base.on_dnd_command(
 )
 
 
-def _fallback_text(character: DNDCharacter, target_name: str = "") -> str:
-    """渲染不可用时的文字卡（他人带标题行）+ 一行回退提示。"""
-    body = character.get_char_info()
-    if target_name:
-        body = text.TXT_CHAR_TARGET_TITLE.format(name=target_name) + "\n" + body
-    return f"{body}\n{text.TXT_CARD_IMAGE_FALLBACK}"
-
-
-async def _resolve_target(
-    bot: Bot,
-    event: MessageEvent,
-    matcher: Matcher,
-    rest: str,
-) -> Optional[tuple[DNDCharacter, str]]:
-    """解析查看目标，返回 (角色卡, 展示名)；无法查看时已回复并返回 None。"""
-    if not isinstance(event, GroupMessageEvent):
-        if rest.startswith("@"):
-            await matcher.finish(text.TXT_CHAR_PRIVATE_TARGET_UNSUPPORTED)
-        _card_id, _card_name, character = await card_helpers.resolve_private_current(
-            event.user_id, rest, matcher
+async def render_card_png(
+    event: MessageEvent, character: DNDCharacter
+) -> bytes | None:
+    """渲染角色卡 PNG；开关关闭、依赖不可用或渲染失败时返回 None。"""
+    if not char_card_available():
+        return None
+    try:
+        portrait_data = b""
+        portrait_mime = ""
+        if character.portrait:
+            loaded = await portraits.load_portrait(character.portrait)
+            if loaded is not None:
+                portrait_data, portrait_mime = loaded
+        version = (
+            await char_rules.rules_version(event.group_id)
+            if isinstance(event, GroupMessageEvent)
+            else char_rules.default_rules_version()
         )
-        return character, ""
-
-    if not rest:
-        _card_id, _card_name, character = await card_helpers.resolve_group_bound(
-            event.group_id, event.user_id, matcher
-        )
-        return character, ""
-
-    # 延迟导入：保持 commands 包的导入顺序（同 commands/character.py）
-    from .hp import search_target
-
-    source_key, target_id = await search_target(rest, event.group_id)
-    if source_key == "at_miss":
-        await matcher.finish(
-            onebot_v11.at_reply(target_id, text.TXT_MENTION_NO_CHAR)
-        )
-    if source_key == "multiple":
-        await matcher.finish(
-            text.TXT_HP_INFO_MULTI.format(name_list=target_id.split("/"))
-        )
-    if source_key == "npc":
-        await matcher.finish(text.TXT_CHAR_NPC_NO_CARD.format(name=target_id))
-    if source_key == "pc":
-        character = await get_character(event.group_id, target_id)
-        if character is None:
-            await matcher.finish(
-                onebot_v11.at_reply(target_id, text.TXT_MENTION_NO_CHAR)
+        return await render_char_card(
+            build_card_view(
+                character,
+                portrait_data,
+                portrait_mime,
+                version_2024=version == char_rules.RULES_2024,
             )
-        name = await base.resolve_display_name(
-            bot, event, target_id, char_name=character.name
         )
-        return character, name
-
-    await matcher.finish(text.TXT_CHAR_TARGET_MISS.format(name=rest))
-    return None
-
-
-@character_image_matcher.handle()
-async def handle_character_image(bot: Bot, event: MessageEvent) -> None:
-    """``.角色卡图``：渲染角色卡为图片，失败回退文字卡。"""
-    rest = (base.get_command_rest_with_mentions(event) or "").strip()
-    resolved = await _resolve_target(bot, event, character_image_matcher, rest)
-    if resolved is None:  # 理论不可达：_resolve_target 内已 finish
-        return
-    character, target_name = resolved
-
-    if char_card_available():
-        try:
-            portrait_data = b""
-            portrait_mime = ""
-            if character.portrait:
-                loaded = await portraits.load_portrait(character.portrait)
-                if loaded is not None:
-                    portrait_data, portrait_mime = loaded
-            version = (
-                await char_rules.rules_version(event.group_id)
-                if isinstance(event, GroupMessageEvent)
-                else char_rules.default_rules_version()
-            )
-            png = await render_char_card(
-                build_card_view(
-                    character,
-                    portrait_data,
-                    portrait_mime,
-                    version_2024=version == char_rules.RULES_2024,
-                )
-            )
-        except Exception:
-            logger.exception("DNDDicer 角色卡图渲染失败，已回退文字输出")
-        else:
-            await character_image_matcher.finish(MessageSegment.image(png))
-
-    await character_image_matcher.finish(_fallback_text(character, target_name))
+    except Exception:
+        logger.exception("DNDDicer 角色卡图片渲染失败，已回退文字输出")
+        return None
 
 
 @portrait_matcher.handle()

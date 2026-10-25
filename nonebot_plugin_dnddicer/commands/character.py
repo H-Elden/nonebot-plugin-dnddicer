@@ -1,8 +1,10 @@
 """DND5e 角色卡命令：``.角色卡`` 系列 + ``.状态`` + 检定类点命令。
 
-命令面（2026-10-23 卡库化）：
-- ``.角色卡 [卡名]`` / ``.角色卡 @玩家|角色名``：查看；私聊按卡名选，卡库
-  仅一张时可省略卡名；群聊只看本群绑定卡；
+命令面（2026-10-23 卡库化；2026-10-25 图片/文字分流）：
+- ``.角色卡 [卡名]`` / ``.角色卡 @玩家|角色名``：查看；骰主开启角色卡图时
+  输出图片，否则输出文字卡；私聊按卡名选，卡库仅一张时可省略卡名；
+  群聊只看本群绑定卡；
+- ``.角色卡导出 [卡名]`` / ``.角色卡导出 @玩家|角色名``：始终输出文字卡；
 - ``.角色卡新建 <卡名> <完整卡内容>``：新建；群聊成功后自动绑定本群；
 - ``.角色卡修改 [卡名] <段条目…>``：只覆盖提到的段，空段表示清空；
 - ``.角色卡改名 / 列表 / 绑定 / 解绑 / 清除``：卡库管理；
@@ -23,7 +25,12 @@ from __future__ import annotations
 import re
 from typing import Optional, Tuple
 
-from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, MessageEvent
+from nonebot.adapters.onebot.v11 import (
+    Bot,
+    GroupMessageEvent,
+    MessageEvent,
+    MessageSegment,
+)
 from nonebot.matcher import Matcher
 from nonebot.plugin import on_message
 from nonebot.rule import Rule
@@ -34,6 +41,7 @@ from ..character.constants import (
     SAVING_LIST,
     SKILL_SYNONYM_DICT,
 )
+from ..character.models import DNDCharacter
 from ..character.services import (
     AbilityService,
     CharacterService,
@@ -61,11 +69,22 @@ from . import base, card_helpers, text
 _HELP = (
     ".角色卡 [卡名] / .角色卡 @玩家\n"
     "  群聊看本群绑定卡；私聊看本人卡（多张需带卡名）\n"
-    "  新建：.角色卡新建 <卡名> <完整卡内容>（群聊自动绑定）\n"
-    "  修改：.角色卡修改 [卡名] <段条目>（空段表示清空）\n"
-    "  改名/列表/绑定/解绑/清除等卡库管理见帮助文档"
+    "  开启角色卡图时发图片，否则发文字\n"
+    "  文字卡导出：.角色卡导出\n"
+    "  新建：.角色卡新建 <卡名> <卡内容>（群聊自动绑定）\n"
+    "  修改：.角色卡修改 [卡名] <段条目>（空段清空）"
 )
 char_matcher = base.on_dnd_command("角色卡", _HELP, doc="guide/character-card")
+
+_HELP_EXPORT = (
+    ".角色卡导出 [卡名] / .角色卡导出 @玩家\n"
+    "  输出可复制的文字版角色卡\n"
+    "  群聊看本群绑定卡或他人；私聊看本人卡\n"
+    "  私聊多张卡需带卡名，单张可省略"
+)
+export_matcher = base.on_dnd_command(
+    "角色卡导出", _HELP_EXPORT, doc="guide/character-card"
+)
 
 _HELP_STATE = (
     ".状态 [@玩家|卡名]\n"
@@ -386,37 +405,47 @@ async def _handle_delete(event: MessageEvent, args: str) -> None:
     await char_matcher.finish(text.TXT_CHAR_DELETE_OK.format(name=name))
 
 
-async def _handle_view(bot: Bot, event: MessageEvent, rest: str) -> None:
-    """``.角色卡`` 查看。"""
+def _card_text(character: DNDCharacter, target_name: str = "") -> str:
+    """角色卡的文字形态（查看他人时带标题行）。"""
+    body = character.get_char_info()
+    if target_name:
+        body = text.TXT_CHAR_TARGET_TITLE.format(name=target_name) + "\n" + body
+    return body
+
+
+async def _resolve_view_target(
+    bot: Bot, event: MessageEvent, matcher: Matcher, rest: str
+) -> tuple[DNDCharacter, str]:
+    """解析查看目标，返回 (角色卡, 展示名)；无法查看时已回复并结束处理。"""
     owner = _owner(event)
     if not _is_group(event):
         if rest.startswith("@"):
-            await char_matcher.finish(text.TXT_CHAR_PRIVATE_TARGET_UNSUPPORTED)
+            await matcher.finish(text.TXT_CHAR_PRIVATE_TARGET_UNSUPPORTED)
         if not rest and not await list_cards_by_owner(owner):
-            await char_matcher.finish(
+            await matcher.finish(
                 text.TXT_CHAR_VIEW_MISS_PRIVATE.format(
                     url=text.TXT_CARD_BUILDER_URL
                 )
             )
         _card_id, _card_name, character = await card_helpers.resolve_private_current(
-            owner, rest, char_matcher
+            owner, rest, matcher
         )
-        await char_matcher.finish(character.get_char_info())
+        return character, ""
 
     if not rest:
         bound = await get_bound_card(event.group_id, owner)  # type: ignore[attr-defined]
         if bound is None:
             if await list_cards_by_owner(owner):
-                await char_matcher.finish(text.TXT_CHAR_VIEW_MISS_BOUND)
-            await char_matcher.finish(
+                await matcher.finish(text.TXT_CHAR_VIEW_MISS_BOUND)
+            await matcher.finish(
                 text.TXT_CHAR_VIEW_MISS_GROUP.format(
                     url=text.TXT_CARD_BUILDER_URL
                 )
             )
         _card_id, _card_name, character = bound
-        await char_matcher.finish(character.get_char_info())
+        return character, ""
 
-    # 群聊查看他人：.角色卡 @玩家 / .角色卡 角色名
+    # 群聊查看他人：@玩家 / 角色名
     # 注：函数内导入——避免 commands 包的模块导入顺序被改变。
     from .hp import search_target
 
@@ -424,41 +453,60 @@ async def _handle_view(bot: Bot, event: MessageEvent, rest: str) -> None:
         rest, event.group_id  # type: ignore[attr-defined]
     )
     if source_key == "at_miss":
-        await char_matcher.finish(
+        await matcher.finish(
             onebot_v11.at_reply(target_id, text.TXT_MENTION_NO_CHAR)
         )
     if source_key == "pc_hp":
         # 只有无卡 HP 记录的玩家：角色卡相关命令仍按「未绑定」处理
         if onebot_v11.parse_mention_token(rest) is not None:
-            await char_matcher.finish(
+            await matcher.finish(
                 onebot_v11.at_reply(target_id, text.TXT_MENTION_NO_CHAR)
             )
-        await char_matcher.finish(
-            text.TXT_CHAR_TARGET_MISS.format(name=rest)
-        )
+        await matcher.finish(text.TXT_CHAR_TARGET_MISS.format(name=rest))
     if source_key == "multiple":
-        await char_matcher.finish(
+        await matcher.finish(
             text.TXT_HP_INFO_MULTI.format(name_list=target_id.split("/"))
         )
     if source_key == "npc":
-        await char_matcher.finish(
-            text.TXT_CHAR_NPC_NO_CARD.format(name=target_id)
-        )
+        await matcher.finish(text.TXT_CHAR_NPC_NO_CARD.format(name=target_id))
     if source_key == "pc":
         target_char = await get_character(event.group_id, target_id)  # type: ignore[attr-defined]
         if target_char is None:
-            await char_matcher.finish(
+            await matcher.finish(
                 onebot_v11.at_reply(target_id, text.TXT_MENTION_NO_CHAR)
             )
         name = await base.resolve_display_name(
             bot, event, target_id, char_name=target_char.name
         )
+        return target_char, name
+    await matcher.finish(text.TXT_CHAR_TARGET_MISS.format(name=rest))
+
+
+async def _handle_view(bot: Bot, event: MessageEvent, rest: str) -> None:
+    """``.角色卡`` 查看：开启角色卡图时出图，否则发文字卡。"""
+    character, target_name = await _resolve_view_target(
+        bot, event, char_matcher, rest
+    )
+    if get_config().dnddicer_card_image_enabled:
+        from .card_image import render_card_png
+
+        png = await render_card_png(event, character)
+        if png is not None:
+            await char_matcher.finish(MessageSegment.image(png))
         await char_matcher.finish(
-            text.TXT_CHAR_TARGET_TITLE.format(name=name)
+            _card_text(character, target_name)
             + "\n"
-            + target_char.get_char_info()
+            + text.TXT_CARD_IMAGE_FALLBACK
         )
-    await char_matcher.finish(text.TXT_CHAR_TARGET_MISS.format(name=rest))
+    await char_matcher.finish(_card_text(character, target_name))
+
+
+async def _handle_export(
+    bot: Bot, event: MessageEvent, matcher: Matcher, rest: str
+) -> None:
+    """``.角色卡导出`` 查看：始终输出文字卡。"""
+    character, target_name = await _resolve_view_target(bot, event, matcher, rest)
+    await matcher.finish(_card_text(character, target_name))
 
 
 # =========================================================================
@@ -495,8 +543,18 @@ async def handle_character(bot: Bot, event: MessageEvent) -> None:
     if head == "清除":
         await _handle_delete(event, tail)
         return
+    if head == "导出":
+        await _handle_export(bot, event, char_matcher, tail)
+        return
 
     await _handle_view(bot, event, rest)
+
+
+@export_matcher.handle()
+async def handle_export(bot: Bot, event: MessageEvent) -> None:
+    """处理 .角色卡导出（始终输出文字卡）。"""
+    rest = (base.get_command_rest_with_mentions(event) or "").strip()
+    await _handle_export(bot, event, export_matcher, rest)
 
 
 @state_matcher.handle()

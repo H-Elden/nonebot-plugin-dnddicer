@@ -222,7 +222,7 @@ TXT_CHAR_DELETE_BOUND = "角色卡「{name}」已绑定到群 {groups}，请先�
 TXT_CHAR_DELETE_OK = "角色卡「{name}」已删除"
 TXT_CHAR_MODIFY_GROUP_MISMATCH = "本群只能修改当前绑定的卡「{name}」；其他卡请到私聊修改"
 TXT_CHAR_PRIVATE_TARGET_UNSUPPORTED = "私聊只能查看自己的角色卡；@玩家 请在群聊使用"
-#: .角色卡图 渲染不可用/失败时的回退提示（不暴露配置名与安装命令）
+#: .角色卡 图片渲染不可用/失败时的回退提示（不暴露配置名与安装命令）
 TXT_CARD_IMAGE_FALLBACK = "（图片渲染未就绪，请联系骰主解决）"
 #: .立绘（2026-10-21）
 TXT_PORTRAIT_USAGE = "用法：发送一张图片并附带 .立绘 [卡名]（私聊多张卡需带卡名）"

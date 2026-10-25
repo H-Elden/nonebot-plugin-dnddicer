@@ -34,7 +34,7 @@
 from . import base  # noqa: F401  # 基础设施（注册表/起始符/解析）
 from . import roll  # noqa: F401  # .r / .rh 掷骰命令（模块顶层注册 matcher）
 from . import character  # noqa: F401  # .角色卡/.状态 + 检定/豁免 点命令
-from . import card_image  # noqa: F401  # .角色卡图 图片卡面（2026-10-21）
+from . import card_image  # noqa: F401  # 角色卡图片渲染辅助 + .立绘（2026-10-21）
 from . import inspiration  # noqa: F401  # .激励 英雄激励记录与转赠（2026-10-24）
 from . import combat_notes  # noqa: F401  # .战斗记录 增删清（2026-10-24）
 from . import coins  # noqa: F401  # .钱币 紧凑收支（2026-10-24）
