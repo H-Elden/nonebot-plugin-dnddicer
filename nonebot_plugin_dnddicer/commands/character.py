@@ -431,70 +431,11 @@ def _card_text(character: DNDCharacter, target_name: str = "") -> str:
 async def _resolve_view_target(
     bot: Bot, event: MessageEvent, matcher: Matcher, rest: str
 ) -> tuple[DNDCharacter, str]:
-    """解析查看目标，返回 (角色卡, 展示名)；无法查看时已回复并结束处理。"""
-    owner = _owner(event)
-    if not _is_group(event):
-        if rest.startswith("@"):
-            await matcher.finish(text.TXT_CHAR_PRIVATE_TARGET_UNSUPPORTED)
-        if not rest and not await list_cards_by_owner(owner):
-            await matcher.finish(
-                text.TXT_CHAR_VIEW_MISS_PRIVATE.format(
-                    url=text.TXT_CARD_BUILDER_URL
-                )
-            )
-        _card_id, _card_name, character = await card_helpers.resolve_private_current(
-            owner, rest, matcher
-        )
-        return character, ""
+    """解析查看目标，返回 (角色卡, 展示名)；无法查看时已回复并结束处理。
 
-    if not rest:
-        bound = await get_bound_card(event.group_id, owner)  # type: ignore[attr-defined]
-        if bound is None:
-            if await list_cards_by_owner(owner):
-                await matcher.finish(text.TXT_CHAR_VIEW_MISS_BOUND)
-            await matcher.finish(
-                text.TXT_CHAR_VIEW_MISS_GROUP.format(
-                    url=text.TXT_CARD_BUILDER_URL
-                )
-            )
-        _card_id, _card_name, character = bound
-        return character, ""
-
-    # 群聊查看他人：@玩家 / 角色名
-    # 注：函数内导入——避免 commands 包的模块导入顺序被改变。
-    from .hp import search_target
-
-    source_key, target_id = await search_target(
-        rest, event.group_id  # type: ignore[attr-defined]
-    )
-    if source_key == "at_miss":
-        await matcher.finish(
-            onebot_v11.at_reply(target_id, text.TXT_MENTION_NO_CHAR)
-        )
-    if source_key == "pc_hp":
-        # 只有无卡 HP 记录的玩家：角色卡相关命令仍按「未绑定」处理
-        if onebot_v11.parse_mention_token(rest) is not None:
-            await matcher.finish(
-                onebot_v11.at_reply(target_id, text.TXT_MENTION_NO_CHAR)
-            )
-        await matcher.finish(text.TXT_CHAR_TARGET_MISS.format(name=rest))
-    if source_key == "multiple":
-        await matcher.finish(
-            text.TXT_HP_INFO_MULTI.format(name_list=target_id.split("/"))
-        )
-    if source_key == "npc":
-        await matcher.finish(text.TXT_CHAR_NPC_NO_CARD.format(name=target_id))
-    if source_key == "pc":
-        target_char = await get_character(event.group_id, target_id)  # type: ignore[attr-defined]
-        if target_char is None:
-            await matcher.finish(
-                onebot_v11.at_reply(target_id, text.TXT_MENTION_NO_CHAR)
-            )
-        name = await base.resolve_display_name(
-            bot, event, target_id, char_name=target_char.name
-        )
-        return target_char, name
-    await matcher.finish(text.TXT_CHAR_TARGET_MISS.format(name=rest))
+    解析规则集中在 ``card_helpers.resolve_view_target``（``.立绘`` 查看共用）。
+    """
+    return await card_helpers.resolve_view_target(bot, event, matcher, rest)
 
 
 async def _handle_view(bot: Bot, event: MessageEvent, rest: str) -> None:

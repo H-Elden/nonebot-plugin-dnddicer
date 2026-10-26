@@ -225,10 +225,16 @@ TXT_CHAR_MODIFY_GROUP_MISMATCH = "本群只能修改当前绑定的卡「{name}�
 TXT_CHAR_PRIVATE_TARGET_UNSUPPORTED = "私聊只能查看自己的角色卡；@玩家 请在群聊使用"
 #: .角色卡 图片渲染不可用/失败时的回退提示（不暴露配置名与安装命令）
 TXT_CARD_IMAGE_FALLBACK = "（图片渲染未就绪，请联系骰主解决）"
-#: .立绘（2026-10-21）
-TXT_PORTRAIT_USAGE = "用法：发送一张图片并附带 .立绘 [卡名]（私聊多张卡需带卡名）"
-TXT_PORTRAIT_SET = "立绘已设置"
+#: .立绘（2026-10-21 首版；2026-10-26 支持查看与按卡名设置）
+TXT_PORTRAIT_SET_USAGE = (
+    "用法：发送一张图片并附带 .立绘 [卡名]\n"
+    "群聊只能改本群绑定卡；私聊多张卡需带卡名"
+)
+TXT_PORTRAIT_SET = "角色卡「{name}」的立绘已设置"
 TXT_PORTRAIT_MULTI = "（只保留第一张图片）"
+TXT_PORTRAIT_NONE_SELF = "你还没有设置立绘，发送图片并附带 .立绘 即可设置"
+TXT_PORTRAIT_NONE_TARGET = "「{name}」还没有设置立绘"
+TXT_PORTRAIT_LOAD_FAILED = "立绘文件读取失败，请重新发送图片设置"
 TXT_PORTRAIT_TOO_LARGE = "图片超过 4 MB，请压缩后再试"
 TXT_PORTRAIT_BAD_FORMAT = "无法识别图片格式，仅支持 PNG / JPG / WebP"
 TXT_PORTRAIT_FETCH_FAILED = "图片获取失败，请重新发送"
