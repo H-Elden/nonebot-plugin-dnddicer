@@ -32,6 +32,7 @@ from .constants import (
     CHAR_INFO_KEY_COMBAT_NOTES,
     CHAR_INFO_KEY_EXT,
     CHAR_INFO_KEY_FEATS,
+    CHAR_INFO_KEY_HALF_PROF,
     CHAR_INFO_KEY_HP,
     CHAR_INFO_KEY_HP_DICE,
     CHAR_INFO_KEY_ITEMS,
@@ -77,6 +78,8 @@ from .constants import (
     FEATURE_NAME_MAX_LEN,
     FEATURE_RECOVER_MODES,
     FEATURE_TEXT_MAX_LEN,
+    HALF_PROF_ROUNDING_LIST,
+    HALF_PROF_SCOPE_LIST,
     ITEM_MAX_COUNT,
     ITEM_NAME_MAX_LEN,
     ITEM_QUANTITY_MAX,
@@ -128,6 +131,7 @@ from .models import (
     CharacterFeature,
     ClassFeature,
     DNDCharacter,
+    HalfProfRule,
     HPInfo,
     MagicItem,
     SpellEntry,
@@ -800,6 +804,50 @@ def parse_prof_entries(content: str) -> Tuple[List[str], Dict[str, List[str]]]:
     return checks, groups
 
 
+def parse_half_prof(content: str) -> List[HalfProfRule]:
+    """解析 ``$半熟练$`` 段：``范围:取整``，多条用 ``/`` 分隔。
+
+    范围：``全部``（任意属性检定）/ ``技能``（18 个正式技能，不含先攻）/
+    ``力敏体``（力量、敏捷、体质检定）；取整：``向下`` / ``向上``。
+    """
+    _ensure_no_dollar(content, "半熟练")
+    rules: List[HalfProfRule] = []
+    seen: set[tuple[str, str]] = set()
+    for raw_item in content.split("/"):
+        item = raw_item.strip()
+        if not item:
+            continue
+        normalized = _normalize_colon(item)
+        scope, separator, rounding = normalized.partition(":")
+        scope, rounding = scope.strip(), rounding.strip()
+        if not separator or not scope or not rounding or ":" in rounding:
+            raise AssertionError(
+                f"半熟练条目不完整: {item}（示例：全部:向下）"
+            )
+        if scope not in HALF_PROF_SCOPE_LIST:
+            raise AssertionError(
+                f"半熟练范围无效: {scope}"
+                f"（可用：{'/'.join(HALF_PROF_SCOPE_LIST)}）"
+            )
+        if rounding not in HALF_PROF_ROUNDING_LIST:
+            raise AssertionError(
+                f"半熟练取整方式无效: {rounding}"
+                f"（可用：{'/'.join(HALF_PROF_ROUNDING_LIST)}）"
+            )
+        key = (scope, rounding)
+        if key in seen:
+            raise AssertionError(f"半熟练规则重复: {scope}:{rounding}")
+        seen.add(key)
+        rules.append(HalfProfRule(scope=scope, rounding=rounding))
+    rules.sort(
+        key=lambda rule: (
+            HALF_PROF_SCOPE_LIST.index(rule.scope),
+            HALF_PROF_ROUNDING_LIST.index(rule.rounding),
+        )
+    )
+    return rules
+
+
 def _parse_signed_bonus(value: str, label: str) -> str:
     """解析带符号加值（如 ``+7``、``-1``），返回规范化文本。"""
     text = value.strip().replace("＋", "+").replace("－", "-")
@@ -1245,11 +1293,13 @@ class AbilityService:
         prof_list: List[str],
         ext_dict: Dict[str, str],
         prof_groups: Optional[Dict[str, List[str]]] = None,
+        half_prof_rules: Optional[List[HalfProfRule]] = None,
     ) -> None:
         """校验并写入等级/六属性/熟练项/额外加值；失败抛 AssertionError（用户可见）。
 
         ``prof_groups`` 是 ``$熟练$`` 的扩展分组（护甲/武器/工具/语言），
-        只展示、不参与检定计算；传空时四组一并清空。
+        只展示、不参与检定计算；传空时四组一并清空。``half_prof_rules``
+        是 ``$半熟练$`` 规则（范围 + 取整），传空时清空。
         """
         try:
             level = int(level_str)
@@ -1321,6 +1371,7 @@ class AbilityService:
         ability_info.check_prof = check_prof
         ability_info.check_ext = check_ext
         ability_info.check_adv = check_adv
+        ability_info.half_prof_rules = list(half_prof_rules or [])
         groups = prof_groups or {}
         ability_info.prof_armor = list(groups.get("护甲", []))
         ability_info.prof_weapons = list(groups.get("武器", []))
@@ -1368,11 +1419,15 @@ class AbilityService:
         elif is_saving:
             parent_name = SAVING_PARENT_DICT[name]
 
-        # 熟练加值
+        # 熟练加值（半熟练只在未熟练时生效）
         scale = ability_info.check_prof[check_index]
-        prof_bonus = scale * ability_info.get_prof_bonus()
+        half_bonus = ability_info.get_half_prof_bonus(name)
+        prof_bonus = scale * ability_info.get_prof_bonus() + half_bonus
         if scale == 0:
-            hint_parts.append("无熟练加值")
+            if half_bonus:
+                hint_parts.append(f"半熟练加值:{half_bonus}")
+            else:
+                hint_parts.append("无熟练加值")
         elif scale == 1:
             hint_parts.append(f"熟练加值:{prof_bonus}")
         else:
@@ -1616,6 +1671,7 @@ class CharacterService:
         level_str = data.get(CHAR_INFO_KEY_LEVEL, "")
         ability_str = data.get(CHAR_INFO_KEY_ABILITY, "")
         prof_str = data.get(CHAR_INFO_KEY_PROF, "")
+        half_prof_str = data.get(CHAR_INFO_KEY_HALF_PROF, "")
         ext_str = data.get(CHAR_INFO_KEY_EXT, "")
         if not level_str or not ability_str:
             raise AssertionError("必须设定等级与属性")
@@ -1627,6 +1683,7 @@ class CharacterService:
         prof_list, prof_groups = (
             parse_prof_entries(prof_str) if prof_str else ([], {})
         )
+        half_prof_rules = parse_half_prof(half_prof_str) if half_prof_str else []
         ext_dict: Dict[str, str] = {}
         if ext_str:
             for item in ext_str.split("/"):
@@ -1642,6 +1699,7 @@ class CharacterService:
             prof_list,
             ext_dict,
             prof_groups=prof_groups,
+            half_prof_rules=half_prof_rules,
         )
 
         # ── 种族/职业/子职/武器（可选段；职业与武器名有校验）──

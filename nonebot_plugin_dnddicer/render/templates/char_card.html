@@ -44,7 +44,7 @@
 <td class="ab-score-cell"><div class="ab-circle">{{ ab.score }}</div><div class="ab-mod-line">调整 {{ ab.mod }}</div></td>
 <td class="ab-list">
 {% if ab.save %}<div class="ab-save">{{ box(ab.save.proficient) }}豁免 <span class="skv">{{ ab.save.value }}</span></div>{% endif %}
-{% for skill in ab.skills %}<div class="ab-skill">{% if skill.expertise %}<span class="star">✦</span>{% else %}{{ box(skill.proficient) }}{% endif %}{{ skill.name }} <span class="skv">{{ skill.value }}</span></div>{% endfor %}
+{% for skill in ab.skills %}<div class="ab-skill">{% if skill.expertise %}<span class="star">✦</span>{% else %}{{ box(skill.proficient) }}{% endif %}{{ skill.name }} <span class="skv">{{ skill.value }}</span>{% if skill.half %}<span class="half-mark">半</span>{% endif %}</div>{% endfor %}
 </td>
 </tr>
 </table>

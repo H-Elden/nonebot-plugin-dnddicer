@@ -714,6 +714,23 @@
   gap: 4px;
 }
 
+.cb-half-prof {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cb-half-prof__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cb-half-prof__bonus {
+  font-size: 12px;
+  color: var(--vp-c-text-2);
+}
+
 .cb-check-grid {
   display: flex;
   flex-wrap: wrap;
@@ -783,9 +800,17 @@
   color: #fff;
 }
 
+.cb-chip--half {
+  border-style: dashed;
+}
+
 .cb-chip__mark {
   margin-left: 3px;
   font-size: 10px;
+}
+
+.cb-chip__mark--half {
+  color: var(--vp-c-text-2);
 }
 
 .cb-chip__value {

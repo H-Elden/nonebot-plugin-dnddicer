@@ -324,6 +324,12 @@ body {
   vertical-align: -3px;
 }
 
+.half-mark {
+  color: #7a1f1f;
+  font-size: 10px;
+  margin-left: 2px;
+}
+
 /* 面板 */
 .panel {
   border: 1px solid #b9a98a;

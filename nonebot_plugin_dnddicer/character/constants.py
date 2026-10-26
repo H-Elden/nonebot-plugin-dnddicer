@@ -28,6 +28,9 @@ SKILL_LIST = [
 ]
 SKILL_NUM = len(SKILL_LIST)
 
+#: 正式技能（18 项，不含「先攻」；先攻是敏捷检定，不是技能）
+TRUE_SKILL_LIST = [name for name in SKILL_LIST if name != "先攻"]
+
 #: 技能 → 关联属性
 SKILL_PARENT_DICT = {
     "运动": "力量",
@@ -269,6 +272,12 @@ CHAR_INFO_KEY_HP = "$生命值$"
 CHAR_INFO_KEY_HP_DICE = "$生命骰$"
 CHAR_INFO_KEY_ABILITY = "$属性$"
 CHAR_INFO_KEY_PROF = "$熟练$"
+#: 半熟练规则段：``全部:向下/技能:向下/力敏体:向上``
+CHAR_INFO_KEY_HALF_PROF = "$半熟练$"
+#: 半熟练的适用范围
+HALF_PROF_SCOPE_LIST = ("全部", "技能", "力敏体")
+#: 半熟练的取整方式
+HALF_PROF_ROUNDING_LIST = ("向下", "向上")
 CHAR_INFO_KEY_EXT = "$额外加值$"
 CHAR_INFO_KEY_WEAPON = "$武器$"
 CHAR_INFO_KEY_RESOURCE = "$限定资源$"
@@ -313,6 +322,7 @@ CHAR_INFO_KEY_LIST = [
     CHAR_INFO_KEY_LEVEL,
     CHAR_INFO_KEY_ABILITY,
     CHAR_INFO_KEY_PROF,
+    CHAR_INFO_KEY_HALF_PROF,
     CHAR_INFO_KEY_EXT,
     CHAR_INFO_KEY_FEATS,
     CHAR_INFO_KEY_RACE_TRAITS,

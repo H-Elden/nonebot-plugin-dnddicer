@@ -390,3 +390,26 @@ def test_inspiration_three_states_and_version_label() -> None:
     view = build_card_view(character, version_2024=True)
     assert view.inspiration is True
     assert view.inspiration_label == "英雄激励"
+
+
+def test_skill_half_proficiency_marker() -> None:
+    """半熟练技能有独立标记，先攻按范围决定是否吃半熟练。"""
+    skill_only = CharacterService.parse(
+        "$姓名$ 半熟练\n$等级$ 5\n$属性$ 10/14/10/10/14/10\n$半熟练$ 技能:向下",
+        "g",
+        "u",
+    )
+    view = build_card_view(skill_only)
+    skills = {skill.name: skill for ability in view.abilities for skill in ability.skills}
+    assert skills["运动"].half is True
+    assert skills["运动"].proficient is False
+    assert skills["运动"].value == "+1"
+    assert {stat.label: stat.value for stat in view.core_stats}["先攻"] == "+2"
+
+    all_checks = CharacterService.parse(
+        "$姓名$ 半熟练\n$等级$ 5\n$属性$ 10/14/10/10/14/10\n$半熟练$ 全部:向下",
+        "g",
+        "u",
+    )
+    all_view = build_card_view(all_checks)
+    assert {stat.label: stat.value for stat in all_view.core_stats}["先攻"] == "+3"

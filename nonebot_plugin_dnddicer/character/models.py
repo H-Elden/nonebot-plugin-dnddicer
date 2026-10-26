@@ -25,6 +25,7 @@ from .constants import (
     CHAR_INFO_KEY_COMBAT_NOTES,
     CHAR_INFO_KEY_EXT,
     CHAR_INFO_KEY_FEATS,
+    CHAR_INFO_KEY_HALF_PROF,
     CHAR_INFO_KEY_HP,
     CHAR_INFO_KEY_HP_DICE,
     CHAR_INFO_KEY_ITEMS,
@@ -45,6 +46,8 @@ from .constants import (
     COMBAT_KEY_LIST,
     EXT_ITEM_INDEX_DICT,
     EXT_ITEM_LIST,
+    HALF_PROF_ROUNDING_LIST,
+    HALF_PROF_SCOPE_LIST,
     PROFICIENCY_GROUP_LIST,
     SAVING_ALL_KEY,
     SAVING_LIST,
@@ -52,6 +55,7 @@ from .constants import (
     SKILL_LIST,
     SKILL_PARENT_DICT,
     SPELL_LEVEL_MAX,
+    TRUE_SKILL_LIST,
 )
 
 
@@ -316,13 +320,21 @@ def _split_constant_bonus(expr: str) -> Tuple[int, str]:
     return total, "".join(extra_parts)
 
 
+class HalfProfRule(BaseModel):
+    """``$半熟练$`` 的一条规则：适用范围 + 取整方式。"""
+
+    scope: str
+    rounding: str
+
+
 class AbilityInfo(BaseModel):
     """属性与检定信息。
 
     - ``ability``：六属性原始值（力量~魅力）；
     - ``check_prof``：每个检定条目的熟练系数（0=未熟练，1=熟练，2=双倍熟练……）；
     - ``check_ext``：每个检定条目的额外加值表达式片段（可含全局豁免键）；
-    - ``check_adv``：每个条目自带优劣势（1 优势 / -1 劣势 / 0 无）。
+    - ``check_adv``：每个条目自带优劣势（1 优势 / -1 劣势 / 0 无）；
+    - ``half_prof_rules``：半熟练规则（范围 + 取整），只在条目未熟练时生效。
     """
 
     is_init: bool = False
@@ -332,6 +344,7 @@ class AbilityInfo(BaseModel):
     check_prof: List[int] = Field(default_factory=lambda: [0] * len(CHECK_ITEM_LIST))
     check_ext: List[str] = Field(default_factory=lambda: [""] * len(EXT_ITEM_LIST))
     check_adv: List[int] = Field(default_factory=lambda: [0] * len(EXT_ITEM_LIST))
+    half_prof_rules: List[HalfProfRule] = Field(default_factory=list)
     #: ``$熟练$`` 扩展分组（护甲/武器/工具/语言），仅展示，不参与检定计算
     prof_armor: List[str] = Field(default_factory=list)
     prof_weapons: List[str] = Field(default_factory=list)
@@ -365,14 +378,60 @@ class AbilityInfo(BaseModel):
         return f"{self.get_modifier(ability_index):+d}"
 
     def get_check_scale(self, check_name: str) -> int:
-        """某检定条目的熟练系数（0=未熟练，1=熟练，2=专精……）。"""
+        """某检定条目的熟练系数（0=未熟练，1=熟练，2=专精……）。
+
+        半熟练不写入系数，见 ``get_half_prof_bonus``。
+        """
         return self.check_prof[CHECK_ITEM_INDEX_DICT[check_name]]
+
+    def get_half_prof_bonus(self, check_name: str) -> int:
+        """半熟练加值：未熟练且命中规则时，按向下/向上取整并取最大值。
+
+        半熟练只作用于属性检定（含技能、先攻、纯属性检定），不作用于
+        豁免；已有熟练或专精（系数 > 0）时不再叠加。
+        """
+        if not self.is_init or not self.half_prof_rules:
+            return 0
+        if check_name not in CHECK_ITEM_INDEX_DICT:
+            return 0
+        if self.get_check_scale(check_name) > 0:
+            return 0
+        if check_name in SAVING_LIST:
+            return 0
+
+        is_ability = check_name in ABILITY_LIST or check_name in SKILL_LIST
+        if not is_ability:
+            return 0
+        is_skill = check_name in TRUE_SKILL_LIST
+        if check_name in ABILITY_LIST:
+            parent = check_name
+        else:
+            parent = SKILL_PARENT_DICT.get(check_name, "")
+        is_physical = parent in ("力量", "敏捷", "体质")
+
+        prof_bonus = self.get_prof_bonus()
+        best = 0
+        for rule in self.half_prof_rules:
+            matched = (
+                (rule.scope == "全部" and is_ability)
+                or (rule.scope == "技能" and is_skill)
+                or (rule.scope == "力敏体" and is_physical)
+            )
+            if not matched:
+                continue
+            value = (
+                (prof_bonus + 1) // 2
+                if rule.rounding == "向上"
+                else prof_bonus // 2
+            )
+            best = max(best, value)
+        return best
 
     def get_check_bonus(self, check_name: str) -> Tuple[int, str]:
         """按卡面数据算出某检定条目的固定加值与剩余掷骰表达式。
 
         规则与 ``AbilityService.perform_check`` 完全一致：属性调整值 +
-        熟练加值 × 系数 + 额外加值。额外加值沿用同一套来源叠加规则：
+        熟练加值 × 系数 + 半熟练 + 额外加值。额外加值沿用同一套来源叠加规则：
 
         - 技能 / 豁免：条目自身 + 父属性 +（豁免再加全局 ``豁免``）；
         - 属性检定：条目自身。
@@ -398,7 +457,11 @@ class AbilityInfo(BaseModel):
         if parent_name:
             parent_index = ABILITY_LIST.index(parent_name)
         modifier = self.get_modifier(parent_index)
-        total = modifier + self.get_check_scale(check_name) * self.get_prof_bonus()
+        total = (
+            modifier
+            + self.get_check_scale(check_name) * self.get_prof_bonus()
+            + self.get_half_prof_bonus(check_name)
+        )
 
         ext_str = self.check_ext[index]
         if parent_name:
@@ -445,8 +508,27 @@ class AbilityInfo(BaseModel):
             f"{CHAR_INFO_KEY_ABILITY} {'/'.join(str(v) for v in self.ability)}"
         )
 
+    def get_half_prof_info(self) -> str:
+        """``$半熟练$`` 行（无规则时为空串）；规则按固定顺序回写。"""
+        if not self.half_prof_rules:
+            return ""
+        rules = sorted(
+            enumerate(self.half_prof_rules),
+            key=lambda pair: (
+                HALF_PROF_SCOPE_LIST.index(pair[1].scope)
+                if pair[1].scope in HALF_PROF_SCOPE_LIST
+                else len(HALF_PROF_SCOPE_LIST),
+                HALF_PROF_ROUNDING_LIST.index(pair[1].rounding)
+                if pair[1].rounding in HALF_PROF_ROUNDING_LIST
+                else len(HALF_PROF_ROUNDING_LIST),
+                pair[0],
+            ),
+        )
+        text = "/".join(f"{rule.scope}:{rule.rounding}" for _, rule in rules)
+        return f"{CHAR_INFO_KEY_HALF_PROF} {text}"
+
     def get_prof_info(self) -> str:
-        """``$熟练$`` 与 ``$额外加值$`` 两行（无内容时为空串）。"""
+        """``$熟练$``、``$半熟练$`` 与 ``$额外加值$``（无内容的行为空）。"""
         info = ""
         prof_parts = []
         for index, scale in enumerate(self.check_prof):
@@ -460,6 +542,9 @@ class AbilityInfo(BaseModel):
         )
         if prof_parts:
             info += f"{CHAR_INFO_KEY_PROF} {'/'.join(prof_parts)}\n"
+        half_info = self.get_half_prof_info()
+        if half_info:
+            info += f"{half_info}\n"
 
         ext_parts = []
         # 2026-10-21 修：只有 优势/劣势 前缀、没有数值的条目（如 隐匿:优势）

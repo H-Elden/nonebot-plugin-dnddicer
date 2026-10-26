@@ -4,7 +4,7 @@
       v-for="segment in segments"
       :key="segment.key"
       :label="segment.label"
-      :summary="segment.summary"
+      :summary="summaryOf(segment)"
       :segment-key="segment.key"
       :required="segment.required"
       :errors="errorsByKey[segment.key]"
@@ -169,6 +169,14 @@
         :abilities="abilities"
         :skills="skills"
         :values="checkValues"
+        :half-values="halfProfValues"
+      />
+
+      <HalfProficiencyEditor
+        v-else-if="kindOf(segment.key) === 'halfprof'"
+        :rules="state[K.HALF_PROF]"
+        :proficiency-bonus="proficiencyBonus"
+        :rules-version="rulesVersion"
       />
 
       <RepeaterRows
@@ -341,6 +349,7 @@ import {
   limits,
   passivePerceptionValue,
   proficiencyBonus,
+  rulesVersion,
   segmentCommandsByKey,
   skills,
   spellStats,
@@ -354,6 +363,7 @@ import AbilityGroupEditor from './card-builder/AbilityGroupEditor.vue'
 import BuilderField from './card-builder/BuilderField.vue'
 import ClassFeatureList from './card-builder/ClassFeatureList.vue'
 import FeatureList from './card-builder/FeatureList.vue'
+import HalfProficiencyEditor from './card-builder/HalfProficiencyEditor.vue'
 import HintDot from './card-builder/HintDot.vue'
 import ItemList from './card-builder/ItemList.vue'
 import MagicItemList from './card-builder/MagicItemList.vue'
@@ -371,7 +381,23 @@ const props = defineProps({
 const segments = computed(() =>
   builder.formSegments.filter((segment) => segment.group === props.groupId),
 )
+const halfProfValues = computed(() =>
+  Object.fromEntries(skills.map((name) => [name, builder.halfProfBonusOf(state, name)])),
+)
 const combatKeys = ['AC', '速度']
+
+// 半熟练段的问号说明随规则版本变化：两版的官方来源不同。
+const HALF_PROF_SUMMARY = {
+  '5e': '吟游诗人2级万事通或勇士范型战士7级运动健将请选择下方对应按钮',
+  '5r': '吟游诗人2级万事通请选择下方按钮',
+}
+
+function summaryOf(segment) {
+  if (segment.key === K.HALF_PROF) {
+    return HALF_PROF_SUMMARY[rulesVersion.value] || segment.summary
+  }
+  return segment.summary
+}
 
 function kindOf(key) {
   return builder.kinds[key]

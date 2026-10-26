@@ -71,8 +71,8 @@ function main() {
   // ── 1. 清单对齐 ──────────────────────────────────────────────────────
   const specKeys = spec.segments.map((segment) => segment.key)
   const kindKeys = Object.keys(SEGMENT_KINDS)
-  checkEqual('段清单数量', specKeys.length, 25)
-  checkEqual('表单形态数量', kindKeys.length, 25)
+  checkEqual('段清单数量', specKeys.length, 26)
+  checkEqual('表单形态数量', kindKeys.length, 26)
   for (const key of specKeys) {
     check(`段 ${key} 有表单形态`, Boolean(SEGMENT_KINDS[key]))
   }
@@ -471,6 +471,68 @@ function main() {
     oversized.tooLarge.every((item) => item.key && item.length > 800),
   )
 
+  // ── 半熟练 ──────────────────────────────────────────────────────────
+  const halfBase = '$姓名$ 半熟练测试\n$等级$ 5\n$属性$ 10/14/10/10/14/10\n'
+  const joat14 = builder.parseCardText(halfBase + '$半熟练$ 全部:向下')
+  check('半熟练解析无错误', joat14.errors.length === 0, JSON.stringify(joat14.errors))
+  const joat14Values = builder.deriveCheckValues(joat14.state)
+  checkEqual('2014 万事通先攻', joat14Values['先攻'], '+3')
+  checkEqual('2014 万事通运动', joat14Values['运动'], '+1')
+  checkEqual('2014 万事通察觉', joat14Values['察觉'], '+3')
+  checkEqual('2014 万事通纯属性检定', joat14Values['智力'], '+1')
+  checkEqual('2014 万事通不加豁免', joat14Values['敏捷豁免'], '+2')
+  checkEqual('2014 万事通派生先攻', builder.deriveInitiative(joat14.state), '+3')
+  checkEqual('2014 万事通派生被动', builder.derivePassivePerception(joat14.state), '13')
+
+  const joat24 = builder.parseCardText(halfBase + '$半熟练$ 技能:向下')
+  const joat24Values = builder.deriveCheckValues(joat24.state)
+  checkEqual('2024 万事通先攻不适用', joat24Values['先攻'], '+2')
+  checkEqual('2024 万事通运动', joat24Values['运动'], '+1')
+  checkEqual('2024 万事通察觉', joat24Values['察觉'], '+3')
+  checkEqual('2024 万事通纯属性检定不适用', joat24Values['智力'], '+0')
+
+  const athlete = builder.parseCardText(halfBase + '$半熟练$ 力敏体:向上')
+  const athleteValues = builder.deriveCheckValues(athlete.state)
+  checkEqual('运动健将先攻', athleteValues['先攻'], '+4')
+  checkEqual('运动健将运动', athleteValues['运动'], '+2')
+  checkEqual('运动健将察觉不适用', athleteValues['察觉'], '+2')
+
+  const bothHalf = builder.parseCardText(halfBase + '$半熟练$ 力敏体:向上/全部:向下')
+  const bothValues = builder.deriveCheckValues(bothHalf.state)
+  checkEqual('半熟练重叠取较高', bothValues['先攻'], '+4')
+  checkEqual('半熟练重叠技能取较高', bothValues['运动'], '+2')
+  checkEqual('半熟练重叠感知取向下', bothValues['察觉'], '+3')
+  checkEqual(
+    '半熟练规则回写排序',
+    builder.contentFor(bothHalf.state, K.HALF_PROF),
+    '全部:向下/力敏体:向上',
+  )
+  const halfSerialized = builder.serializeCard(bothHalf.state)
+  const halfReparsed = builder.parseCardText(halfSerialized)
+  check('半熟练回写可再解析', halfReparsed.errors.length === 0, JSON.stringify(halfReparsed.errors))
+  checkEqual('半熟练回写幂等', builder.serializeCard(halfReparsed.state), halfSerialized)
+
+  const fullProf = builder.parseCardText(halfBase + '$熟练$ 先攻\n$半熟练$ 全部:向下')
+  checkEqual('熟练优先于半熟练', builder.deriveCheckValues(fullProf.state)['先攻'], '+5')
+
+  const halfCommand = builder
+    .buildSegmentCommands(joat14.state, {}, TEST_CARD_NAME)
+    .find((item) => item.key === K.HALF_PROF)
+  check('半熟练有分段命令', Boolean(halfCommand))
+  check(
+    '半熟练分段命令可导入',
+    halfCommand && builder.parseCardText(halfCommand.command).errors.length === 0,
+  )
+
+  const badHalf = builder.parseCardText(halfBase + '$半熟练$ 全部:随便')
+  check(
+    '半熟练取整方式错误被拒绝',
+    badHalf.errors.some(
+      (error) => error.key === K.HALF_PROF && error.message.includes('取整方式'),
+    ),
+    JSON.stringify(badHalf.errors),
+  )
+
   // ── 角色卡预览 ──────────────────────────────────────────────────────
   const previewState = builder.parseCardText(templateFixture.text).state
   const previewView = buildPreviewView(builder, previewState, { rulesVersion: '5r' }, '')
@@ -504,6 +566,17 @@ function main() {
     '预览被动察觉按察觉加值现算',
     edgePassive && edgePassive.value === '10',
     JSON.stringify(edgePassive),
+  )
+  const halfPreview = buildPreviewView(builder, joat14.state, { rulesVersion: '5e' }, '')
+  const halfInitiative = halfPreview.coreStats.find((item) => item.label === '先攻')
+  checkEqual('预览先攻含半熟练', halfInitiative && halfInitiative.value, '+3')
+  const halfSkillRows = halfPreview.abilities.flatMap((ability) => ability.skills)
+  const halfAthletics = halfSkillRows.find((skill) => skill.name === '运动')
+  check('预览技能半熟练标记', halfAthletics && halfAthletics.half === true, JSON.stringify(halfAthletics))
+  const halfHtml = renderPreviewHtml(halfPreview, cardCss)
+  check(
+    '预览半熟练的半标记在加值后',
+    halfHtml.includes('<span class="skv">+1</span><span class="half-mark">半</span>'),
   )
 
   // ── 汇总 ────────────────────────────────────────────────────────────

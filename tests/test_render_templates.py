@@ -175,6 +175,22 @@ def test_char_card_template_renders_with_production_env() -> None:
     assert "&#34;" not in html
 
 
+def test_char_card_half_proficiency_marker() -> None:
+    """半熟练技能在加值后标「半」，熟练框保持为空。"""
+    pytest.importorskip("jinja2", reason="模板渲染需要可选的 [render] 依赖（含 Jinja2）")
+    from nonebot_plugin_dnddicer.character.card_view import build_card_view
+    from nonebot_plugin_dnddicer.character.services import CharacterService
+
+    char = CharacterService.parse(
+        "$姓名$ 半熟练\n$等级$ 5\n$属性$ 10/14/10/10/14/10\n$半熟练$ 技能:向下",
+        "g",
+        "u",
+    )
+    html = _render_char(build_card_view(char))
+    assert '<span class="box"></span>运动' in html
+    assert '<span class="skv">+1</span><span class="half-mark">半</span>' in html
+
+
 def test_char_card_story_keeps_paragraph_lines() -> None:
     """多段故事按行渲染，换行不丢（卡面「背景故事」面板）。"""
     pytest.importorskip("jinja2", reason="模板渲染需要可选的 [render] 依赖（含 Jinja2）")

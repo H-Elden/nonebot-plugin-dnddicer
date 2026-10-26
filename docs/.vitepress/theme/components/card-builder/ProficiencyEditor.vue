@@ -9,7 +9,7 @@
         :key="name"
         type="button"
         class="cb-chip"
-        :class="chipClass(name)"
+        :class="[chipClass(name), { 'cb-chip--half': halfOf(name) > 0 && scaleOf(name) === 0 }]"
         :title="chipTitle(name, section.triple)"
         :aria-pressed="scaleOf(name) > 0 ? 'true' : 'false'"
         @click="cycle(name, section.triple)"
@@ -17,6 +17,10 @@
         {{ shortName(name) }}
         <span class="cb-chip__value">{{ values[name] || '—' }}</span>
         <span v-if="scaleOf(name) > 0" class="cb-chip__mark">{{ markOf(name) }}</span>
+        <span
+          v-else-if="halfOf(name) > 0"
+          class="cb-chip__mark cb-chip__mark--half"
+        >半</span>
       </button>
     </div>
   </div>
@@ -187,6 +191,7 @@ const props = defineProps({
   abilities: { type: Array, required: true },
   skills: { type: Array, required: true },
   values: { type: Object, default: () => ({}) },
+  halfValues: { type: Object, default: () => ({}) },
 })
 
 const weaponCustom = ref('')
@@ -236,7 +241,14 @@ function shortName(name) {
   return name.endsWith('豁免') ? name.slice(0, -2) : name
 }
 
+function halfOf(name) {
+  return Number(props.halfValues?.[name] || 0)
+}
+
 function chipTitle(name, triple) {
+  if (halfOf(name) > 0 && scaleOf(name) === 0) {
+    return `${name}：半熟练（由半熟练规则自动计算）`
+  }
   if (triple) return `${name}：未熟练 → 熟练 → 专精（点击切换）`
   return `${name}：未熟练 ↔ 熟练（点击切换）`
 }

@@ -59,12 +59,13 @@ class SaveView:
 
 @dataclass(frozen=True)
 class SkillView:
-    """一条技能：值 + 熟练 / 专精标记。"""
+    """一条技能：值 + 熟练 / 专精 / 半熟练标记。"""
 
     name: str
     value: str
     proficient: bool
     expertise: bool
+    half: bool = False
 
 
 @dataclass(frozen=True)
@@ -335,8 +336,9 @@ def _death_state(character: DNDCharacter) -> str:
 def _skill_views(character: DNDCharacter, ability: str) -> Tuple[SkillView, ...]:
     """某属性下的全部技能（含未熟练；先攻归页眉，不重复）。
 
-    数值由 ``AbilityInfo.get_check_display`` 按属性调整值、熟练与额外加值
-    现算；熟练框看 ``check_prof``，专精星看系数是否 ≥2。
+    数值由 ``AbilityInfo.get_check_display`` 按属性调整值、熟练、半熟练与
+    额外加值现算；熟练框看 ``check_prof``，专精星看系数是否 ≥2，半熟练
+    标记看半熟练规则是否命中。
     """
     info = character.ability_info
     if not info.is_init:
@@ -352,6 +354,7 @@ def _skill_views(character: DNDCharacter, ability: str) -> Tuple[SkillView, ...]
                 value=info.get_check_display(skill),
                 proficient=scale >= 1,
                 expertise=scale >= 2,
+                half=scale == 0 and info.get_half_prof_bonus(skill) > 0,
             )
         )
     return tuple(rows)

@@ -26,6 +26,7 @@ from .constants import (
     CHAR_INFO_KEY_COMBAT_NOTES,
     CHAR_INFO_KEY_EXT,
     CHAR_INFO_KEY_FEATS,
+    CHAR_INFO_KEY_HALF_PROF,
     CHAR_INFO_KEY_HP,
     CHAR_INFO_KEY_HP_DICE,
     CHAR_INFO_KEY_ITEMS,
@@ -65,6 +66,8 @@ from .constants import (
     FEATURE_NAME_MAX_LEN,
     FEATURE_RECOVER_MODES,
     FEATURE_TEXT_MAX_LEN,
+    HALF_PROF_ROUNDING_LIST,
+    HALF_PROF_SCOPE_LIST,
     ITEM_MAX_COUNT,
     ITEM_NAME_MAX_LEN,
     ITEM_QUANTITY_MAX,
@@ -100,6 +103,7 @@ from .constants import (
     SUBCLASS_LEVEL_5E_DICT,
     SUBCLASS_LEVEL_5R,
     TOOL_OPTION_LIST,
+    TRUE_SKILL_LIST,
     WEAPON_CATEGORY_LIST,
     WEAPON_MAX_COUNT,
     WEAPON_NAME_MAX_LEN,
@@ -111,7 +115,7 @@ from .constants import (
 #: 表单分组（顺序即页面分组顺序）
 CARD_SPEC_GROUPS: List[Dict[str, str]] = [
     {"id": "identity", "label": "身份", "summary": "姓名、种族、等级、职业、子职、背景与故事"},
-    {"id": "core", "label": "属性与检定", "summary": "六属性、熟练、额外加值（豁免与技能加值自动计算）"},
+    {"id": "core", "label": "属性与检定", "summary": "六属性、熟练、半熟练、额外加值（豁免与技能加值自动计算）"},
     {"id": "combat", "label": "战斗", "summary": "生命值、战斗数值、经验与武器"},
     {"id": "traits", "label": "特性与专长", "summary": "专长、种族/职业特性与限定资源"},
     {"id": "spells", "label": "法术", "summary": "施法属性、法术清单、法术位与契约法术"},
@@ -237,6 +241,18 @@ CARD_SPEC_SEGMENTS: List[Dict[str, object]] = [
             "奥秘/历史/2*调查/洞悉/察觉/智力豁免/感知豁免/"
             "武器:简易武器/工具:书法工具/语言:通用语·精灵语·龙语"
         ),
+    },
+    {
+        "key": CHAR_INFO_KEY_HALF_PROF,
+        "label": "半熟练",
+        "group": "core",
+        "required": False,
+        "summary": (
+            "半熟练只在没有熟练或专精时生效；不同来源取整不同"
+            "（万事通向下、运动健将向上）。"
+        ),
+        # 不写示例：buildExampleCard 会把示例拼进示例卡，默认示例卡不带半熟练。
+        "example": "",
     },
     {
         "key": CHAR_INFO_KEY_EXT,
@@ -409,6 +425,7 @@ CARD_SPEC_OUTPUT_ORDER: List[str] = [
     CHAR_INFO_KEY_LEVEL,
     CHAR_INFO_KEY_ABILITY,
     CHAR_INFO_KEY_PROF,
+    CHAR_INFO_KEY_HALF_PROF,
     CHAR_INFO_KEY_EXT,
     CHAR_INFO_KEY_FEATS,
     CHAR_INFO_KEY_RACE_TRAITS,
@@ -437,6 +454,7 @@ CARD_SPEC_FORM_ORDER: List[str] = [
     CHAR_INFO_KEY_BACKGROUND,
     CHAR_INFO_KEY_STORY,
     CHAR_INFO_KEY_ABILITY,
+    CHAR_INFO_KEY_HALF_PROF,
     CHAR_INFO_KEY_PROF,
     CHAR_INFO_KEY_EXT,
     CHAR_INFO_KEY_HP,
@@ -533,8 +551,11 @@ CARD_SPEC_ENUMS: Dict[str, object] = {
     "xp_thresholds": list(XP_THRESHOLDS),
     # 熟练/额外加值的条目表（顺序即卡文本回写顺序）
     "skills": list(SKILL_LIST),
+    "true_skills": list(TRUE_SKILL_LIST),
     "saving_items": list(SAVING_LIST),
     "check_items": list(CHECK_ITEM_LIST),
+    "half_prof_scopes": list(HALF_PROF_SCOPE_LIST),
+    "half_prof_roundings": list(HALF_PROF_ROUNDING_LIST),
     "ext_items": list(EXT_ITEM_LIST),
     "saving_all_key": SAVING_ALL_KEY,
     # 技能/豁免 → 父属性（网页端预览加值与骰娘同一套算法）
@@ -548,7 +569,7 @@ CARD_SPEC_ENUMS: Dict[str, object] = {
 
 #: 导出给网页建卡器的完整清单
 CARD_SPEC: Dict[str, object] = {
-    "version": 6,
+    "version": 7,
     "groups": CARD_SPEC_GROUPS,
     "segments": CARD_SPEC_SEGMENTS,
     "output_order": CARD_SPEC_OUTPUT_ORDER,

@@ -99,6 +99,7 @@ export function buildPreviewView(builder, state, options = {}, portraitDataUrl =
         value: infoReady ? values[skill] || '—' : '—',
         proficient: scale >= 1,
         expertise: scale >= 2,
+        half: scale === 0 && builder.halfProfBonusOf(state, skill) > 0,
       })
     }
     return { name, score, mod, save, skills: rows }
@@ -450,7 +451,9 @@ function abilityBlock(ability) {
       (skill) =>
         `<div class="ab-skill">${
           skill.expertise ? '<span class="star">✦</span>' : box(skill.proficient)
-        }${escapeHtml(skill.name)} <span class="skv">${escapeHtml(skill.value)}</span></div>`,
+        }${escapeHtml(skill.name)} <span class="skv">${escapeHtml(skill.value)}</span>${
+          skill.half ? '<span class="half-mark">半</span>' : ''
+        }</div>`,
     )
     .join('')
   return `<table class="ability"><tr><td class="ab-name" colspan="2"><table class="ab-head"><tr><td class="ab-head-name">${escapeHtml(

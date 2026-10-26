@@ -27,6 +27,7 @@ export const K = Object.freeze({
   PROGRESS: '$进度$',
   ABILITY: '$属性$',
   PROF: '$熟练$',
+  HALF_PROF: '$半熟练$',
   EXT: '$额外加值$',
   FEATS: '$专长$',
   RACE_TRAITS: '$种族特性$',
@@ -56,6 +57,7 @@ export const SEGMENT_KINDS = Object.freeze({
   [K.PROGRESS]: 'progress',
   [K.ABILITY]: 'ability',
   [K.PROF]: 'prof',
+  [K.HALF_PROF]: 'halfprof',
   [K.EXT]: 'ext',
   [K.FEATS]: 'feats',
   [K.RACE_TRAITS]: 'raceTraits',
@@ -182,6 +184,9 @@ export function createCardBuilder(spec) {
   const savingAllKey = enums.saving_all_key || '豁免'
   const skillParent = enums.skill_parent || {}
   const savingParent = enums.saving_parent || {}
+  const trueSkills = enums.true_skills || skills.filter((name) => name !== '先攻')
+  const halfProfScopes = enums.half_prof_scopes || ['全部', '技能', '力敏体']
+  const halfProfRoundings = enums.half_prof_roundings || ['向下', '向上']
   const skillSynonyms = enums.skill_synonyms || {}
   const classSynonyms = enums.class_synonyms || {}
   const damageTypeSynonyms = enums.damage_type_synonyms || {}
@@ -455,6 +460,46 @@ export function createCardBuilder(spec) {
       checks[name] = scale
     }
     return { checks, groups }
+  }
+
+  function sortHalfProfRules(rules) {
+    return rules
+      .map((rule, index) => ({ rule, index }))
+      .sort(
+        (left, right) =>
+          halfProfScopes.indexOf(left.rule.scope) - halfProfScopes.indexOf(right.rule.scope) ||
+          halfProfRoundings.indexOf(left.rule.rounding) -
+            halfProfRoundings.indexOf(right.rule.rounding) ||
+          left.index - right.index,
+      )
+      .map((entry) => entry.rule)
+  }
+
+  function parseHalfProf(content) {
+    const rules = []
+    const seen = new Set()
+    for (const rawItem of content.split('/')) {
+      const item = rawItem.trim()
+      if (!item) continue
+      const normalized = withHalfColon(item)
+      const [rawScope, rawRounding] = partition(normalized, ':')
+      const scope = rawScope.trim()
+      const rounding = rawRounding.trim()
+      if (!normalized.includes(':') || !scope || !rounding || rounding.includes(':')) {
+        fail(`半熟练条目不完整: ${item}（示例：全部:向下）`)
+      }
+      if (!halfProfScopes.includes(scope)) {
+        fail(`半熟练范围无效: ${scope}（可用：${halfProfScopes.join('/')}）`)
+      }
+      if (!halfProfRoundings.includes(rounding)) {
+        fail(`半熟练取整方式无效: ${rounding}（可用：${halfProfRoundings.join('/')}）`)
+      }
+      const key = `${scope}:${rounding}`
+      if (seen.has(key)) fail(`半熟练规则重复: ${key}`)
+      seen.add(key)
+      rules.push({ scope, rounding })
+    }
+    return sortHalfProfRules(rules)
   }
 
   function parseExt(content) {
@@ -1065,6 +1110,8 @@ export function createCardBuilder(spec) {
         return parseAbility(content)
       case 'prof':
         return parseProf(content)
+      case 'halfprof':
+        return parseHalfProf(content)
       case 'ext':
         return parseExt(content)
       case 'feats':
@@ -1126,6 +1173,7 @@ export function createCardBuilder(spec) {
         checks: Object.fromEntries(checkItems.map((name) => [name, 0])),
         groups: Object.fromEntries(proficiencyGroups.map((name) => [name, ''])),
       },
+      [K.HALF_PROF]: [],
       [K.EXT]: [{ key: '', adv: '', bonus: '' }],
       [K.FEATS]: [{ name: '', text: '' }],
       [K.RACE_TRAITS]: [{ name: '', text: '' }],
@@ -1341,6 +1389,30 @@ export function createCardBuilder(spec) {
     return items.join('/')
   }
 
+  function buildHalfProf(state) {
+    const rules = state[K.HALF_PROF] || []
+    const normalized = []
+    const seen = new Set()
+    for (const rule of rules) {
+      const scope = trimOf(rule.scope)
+      const rounding = trimOf(rule.rounding)
+      if (!scope && !rounding) continue
+      if (!halfProfScopes.includes(scope)) {
+        fail(`半熟练范围无效: ${scope}（可用：${halfProfScopes.join('/')}）`)
+      }
+      if (!halfProfRoundings.includes(rounding)) {
+        fail(`半熟练取整方式无效: ${rounding}（可用：${halfProfRoundings.join('/')}）`)
+      }
+      const key = `${scope}:${rounding}`
+      if (seen.has(key)) fail(`半熟练规则重复: ${key}`)
+      seen.add(key)
+      normalized.push({ scope, rounding })
+    }
+    return sortHalfProfRules(normalized)
+      .map((rule) => `${rule.scope}:${rule.rounding}`)
+      .join('/')
+  }
+
   // ── 派生值预览（与插件 AbilityInfo.get_check_display 同一套口径）─────────
   // 只用于表单展示：让玩家在点选熟练时直接看到骰娘会算出的加值；导出的卡
   // 文本不写这些派生值，插件仍按 $属性$ / $熟练$ / $额外加值$ 现算。
@@ -1375,12 +1447,44 @@ export function createCardBuilder(spec) {
     )
   }
 
+  function halfBonusFor(name, profBonus, rules, scale = 0) {
+    if (!rules.length || !Number.isFinite(profBonus) || scale > 0) return 0
+    if (savingItems.includes(name)) return 0
+    const isAbility = abilities.includes(name) || skills.includes(name)
+    if (!isAbility) return 0
+    const isSkill = trueSkills.includes(name)
+    const parent = abilities.includes(name) ? name : skillParent[name]
+    const isPhysical = ['力量', '敏捷', '体质'].includes(parent)
+    let best = 0
+    for (const rule of rules) {
+      const scope = trimOf(rule.scope)
+      const rounding = trimOf(rule.rounding)
+      const matched =
+        (scope === '全部' && isAbility) ||
+        (scope === '技能' && isSkill) ||
+        (scope === '力敏体' && isPhysical)
+      if (!matched) continue
+      const value = rounding === '向上' ? Math.ceil(profBonus / 2) : Math.floor(profBonus / 2)
+      best = Math.max(best, value)
+    }
+    return best
+  }
+
+  /** 某条目的半熟练加值（0 = 不适用），供预览与技能胶囊标记共用。 */
+  function halfProfBonusOf(state, name) {
+    const profBonus = proficiencyBonusOfLevel(trimOf(state[K.LEVEL]))
+    if (profBonus === '' || !Number.isFinite(profBonus)) return 0
+    const rawScale = Number(state[K.PROF]?.checks?.[name] || 0)
+    const scale = Number.isFinite(rawScale) ? rawScale : 0
+    return halfBonusFor(name, profBonus, state[K.HALF_PROF] || [], scale)
+  }
+
   /**
    * 按当前表单算出每个检定条目的展示加值。
    *
-   * 公式：属性调整值 + 熟练加值 × 系数 + 额外加值；技能/豁免叠父属性
-   * 额外加值，豁免再叠全局「豁免」。骰子项（+1d4）无法静态求和，原样
-   * 以 `+1d4` 形式附在数值后面。等级或六属性没填全时返回空对象。
+   * 公式：属性调整值 + 熟练加值 × 系数 + 半熟练 + 额外加值；技能/豁免叠
+   * 父属性额外加值，豁免再叠全局「豁免」。骰子项（+1d4）无法静态求和，
+   * 原样以 `+1d4` 形式附在数值后面。等级或六属性没填全时返回空对象。
    */
   function deriveCheckValues(state) {
     const rawLevel = trimOf(state[K.LEVEL])
@@ -1415,6 +1519,12 @@ export function createCardBuilder(spec) {
       let total = Math.floor((Number(scores[index]) - 10) / 2)
       const scale = Number(state[K.PROF]?.checks?.[name] || 0)
       total += (Number.isFinite(scale) ? scale : 0) * profBonus
+      total += halfBonusFor(
+        name,
+        profBonus,
+        state[K.HALF_PROF] || [],
+        Number.isFinite(scale) ? scale : 0,
+      )
       let expr = extOf(name)
       if (isSkill || isSaving) expr += extOf(parent)
       if (isSaving) expr += extOf(savingAllKey)
@@ -1722,6 +1832,8 @@ export function createCardBuilder(spec) {
         return buildAbility(state)
       case 'prof':
         return buildProf(state)
+      case 'halfprof':
+        return buildHalfProf(state)
       case 'ext':
         return buildExt(state)
       case 'feats':
@@ -2164,6 +2276,7 @@ export function createCardBuilder(spec) {
     messageLength,
     deriveAbilityModifiers,
     deriveCheckValues,
+    halfProfBonusOf,
     deriveProficiencyBonus,
     deriveXpNext,
     deriveInitiative,

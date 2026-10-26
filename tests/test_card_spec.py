@@ -114,7 +114,7 @@ def test_spec_rules_metadata() -> None:
 
 def test_spec_has_no_legacy_segments() -> None:
     """旧段与旧兼容样例已全部删除。"""
-    assert CARD_SPEC["version"] == 6
+    assert CARD_SPEC["version"] == 7
     assert "legacy_segments" not in CARD_SPEC
     keys = {segment["key"] for segment in CARD_SPEC["segments"]}
     assert {
