@@ -913,7 +913,7 @@ async def handle_hp(bot: Bot, event: MessageEvent) -> None:
     # 多武器写法（2026-09-27）改由逐项行 + 合计行输出（与 .X伤害 同一套组装）
     if weapon_damage is not None and hp_cur is not None:
         raw_total = hp_cur.get_val()
-        # 表头数值与实际生效伤害同口径（抗性/易伤只施加一次，见 HPService.effective_damage）
+        # 表头数值与实际生效伤害一致（抗性/易伤只施加一次，见 HPService.effective_damage）
         total = (
             HPService.effective_damage(hp_cur, target_list[0][2])
             if len(target_list) == 1

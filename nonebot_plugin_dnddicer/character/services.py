@@ -347,7 +347,7 @@ def parse_weapon_list(content: str, reserved_names: Iterable[str] = ()) -> List[
 
 
 def _split_semicolon_items(content: str) -> List[str]:
-    """按半角/全角分号切分段内容（新增三段统一口径）。"""
+    """按半角/全角分号切分段内容（新增三段统一处理）。"""
     return [item.strip() for item in re.split(r"[;；]", content) if item.strip()]
 
 
@@ -752,7 +752,7 @@ def _ensure_no_dollar(content: str, label: str, *, allow_newline: bool = False) 
 
 
 def _normalize_colon(text: str) -> str:
-    """全角冒号归一为半角（新段统一口径）。"""
+    """全角冒号归一为半角（新段统一处理）。"""
     return text.replace("：", ":")
 
 
@@ -1137,7 +1137,7 @@ def parse_combat_notes(content: str) -> List[str]:
 
 
 def _story_char_count(text: str) -> int:
-    """故事字数：按码点计，换行不计（与网页建卡器的计数口径一致）。"""
+    """故事字数：按码点计，换行不计（与网页建卡器的计数方式一致）。"""
     return sum(1 for char in text if char not in "\r\n")
 
 
@@ -1240,7 +1240,7 @@ def match_features(
 
 
 def match_spells(spells: Iterable[SpellEntry], name: str) -> List[SpellEntry]:
-    """按名称匹配法术（精确优先 → 子串），口径同 ``match_features``。"""
+    """按名称匹配法术（精确优先 → 子串），规则与 ``match_features`` 相同。"""
     lowered = name.lower()
     for spell in spells:
         if spell.name.lower() == lowered:
@@ -2039,7 +2039,7 @@ class HPService:
         *,
         version_2024: bool = False,
     ) -> str:
-        """使用生命骰恢复 HP，返回修改结果描述（旧接口，行为同默认 2014 口径）。"""
+        """使用生命骰恢复 HP，返回修改结果描述（旧接口，行为同默认 2014 版规则）。"""
         _ok, text = HPService.use_hp_dice_ex(
             hp_info, num, con_mod, version_2024=version_2024
         )
@@ -2055,7 +2055,7 @@ class HPService:
     ) -> Tuple[bool, str]:
         """使用生命骰恢复 HP，返回 ``(是否成功, 描述)``。
 
-        两版口径（2026-10-20 批③，规则原文见 doc30 §2.2）：
+        两版规则（2026-10-20 批③，规则原文见 doc30 §2.2）：
 
         - **2014**：逐粒掷 ``1D面数 + 体质调整值``，每粒最低 0，累加；
         - **2024**：掷 ``N D面数`` 的骰点总和（至少 1），再加
@@ -2092,7 +2092,7 @@ class HPService:
                 f"回复{heal_total}点生命值{note}\n"
             )
         else:
-            # 2014 口径：逐粒「骰值 + 体质调整值」，每粒最低 0
+            # 2014 版规则：逐粒「骰值 + 体质调整值」，每粒最低 0
             roll_exp = f"1D{dice_type}+{con_mod}"
             roll_result_list = []
             roll_result_val = 0
@@ -2151,7 +2151,7 @@ class HPService:
     def apply_damage_factor(value: int, damage_factor: float = 1.0) -> int:
         """按承伤因子折算伤害：抗性减半（向下取整、最少 1）、易伤加倍、全额原样。
 
-        伤害最低为 0（表达式算出负值按 0 计，避免负伤害变回血）。口径与
+        伤害最低为 0（表达式算出负值按 0 计，避免负伤害变回血）。数值与
         ``process_roll_result`` 的伤害结算一致，供「.hp 武器伤害写法」的表头等复用。
         """
         damage = max(0, value)
@@ -2169,7 +2169,7 @@ class HPService:
     ) -> int:
         """本次伤害实际生效的数值（掷骰结果 → 最低 0 → 抗性/易伤折算）。
 
-        供「表头显示的伤害」与「死亡豁免判定用的伤害」共用同一口径：调用方
+        供「表头显示的伤害」与「死亡豁免判定用的伤害」共用：调用方
         **不要**在 ``process_roll_result`` 之后再自行折算一次，否则会二次施加
         抗性/易伤（伤害翻倍或再减半）。
         """

@@ -53,7 +53,7 @@ _UNIT_PAGE = """<html><body>
 </body></html>"""
 
 #: 2024 召唤类法术页形态：法术正文之后紧跟它自带的生物数据卡，
-#: 卡内名称是比法术标题低一级的 H5（切分口径的回归夹具）
+#: 卡内名称是比法术标题低一级的 H5（切分规则的回归夹具）
 _SUMMON_PAGE = """<html><body>
 <H4 id="Summon_Elemental">元素召唤术｜Summon Elemental</H4>
 <P><STRONG>施法时间：</STRONG>动作<BR>你唤来一个元素灵魄，其资料卡见下文。</P>
@@ -130,7 +130,7 @@ def test_slice_summon_spell_keeps_nested_stat_block() -> None:
     assert 'class="stat-block"' in fragment  # 自带的生物卡在后
     assert "灵魄动作段落" in fragment
     assert "火墙术" not in fragment
-    # 按条目名走同一区间（锚点 / 名字两条分支口径一致）
+    # 按条目名走同一区间（锚点 / 名字两条分支一致）
     by_name = decode.slice_entry(_SUMMON_PAGE, name="元素召唤术")
     assert (by_name.start, by_name.end) == (sliced.start, sliced.end)
 

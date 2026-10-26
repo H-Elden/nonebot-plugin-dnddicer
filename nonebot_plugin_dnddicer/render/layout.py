@@ -135,7 +135,7 @@ def _split_lead(text: str) -> Tuple[str, str]:
 
 
 def _char_width(char: str, font_size: float) -> float:
-    """估算单字符宽度（px）——口径集中在 ``card_geometry``。"""
+    """估算单字符宽度（px）——相关常量集中在 ``card_geometry``。"""
     return card_geometry.char_width(char, font_size)
 
 

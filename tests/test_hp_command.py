@@ -86,7 +86,7 @@ async def _create_basic_card(
 
 
 async def _set_rules_version(group_id: int, version: str) -> None:
-    """直接写群级规则版本（供长休生命骰恢复量两版口径用例铺垫）。"""
+    """直接写群级规则版本（供长休生命骰恢复量两版规则用例铺垫）。"""
     from nonebot_plugin_dnddicer.character import rules
     from nonebot_plugin_dnddicer.data.group_config import set_group_config_field
 
@@ -917,7 +917,7 @@ def test_hp_info_zero_with_alive_flag_renders_loss():
     """模型层边界：hp_cur=0 但 is_alive=True（标志不一致）按损失渲染。
 
     命令层设置 0 时已同步 is_alive（见 ``test_hp_set_zero_marks_unconscious``），
-    这里只锁定模型在手工构造不一致状态时的渲染口径。
+    这里只锁定模型在手工构造不一致状态时的渲染方式。
     """
     from nonebot_plugin_dnddicer.character.models import HPInfo
 
@@ -1536,7 +1536,7 @@ async def test_hp_weapon_damage_errors(app: App):
 
 @pytest.mark.asyncio
 async def test_hp_weapon_damage_factor_header(app: App):
-    """表头数字口径：单目标用实际结算值（含抗性/易伤折算）。"""
+    """表头数字规则：单目标用实际结算值（含抗性/易伤折算）。"""
     from nonebot_plugin_dnddicer.commands.character import char_matcher
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
 

@@ -209,7 +209,7 @@ async def _render(
         title=title,
         category=category,
         blocks=prepare_blocks(body),
-        # 未精确定位时在正文顶部加一行说明（与文字模式同口径）
+        # 未精确定位时在正文顶部加一行说明（与文字模式一致）
         fallback_note="" if located else "（未精确定位到词条，以下为页面片段）",
         source_path=source_path,
         css=_css_text("rule_card.css"),
@@ -244,7 +244,7 @@ async def _render_rich(
         title=title,
         category=category,
         body_html=body_html,
-        # 未精确定位时在正文顶部加一行说明（与文字模式同口径）
+        # 未精确定位时在正文顶部加一行说明（与文字模式一致）
         fallback_note="" if located else "（未精确定位到词条，以下为页面片段）",
         source_path=source_path,
         css=_css_text("rich_card.css"),

@@ -13,7 +13,7 @@ body {
   padding: 14px 16px 10px 16px;
   background: #fffdf7;
   border: 1px solid #d8c9a8;
-  /* 中文优先且中西文同源（与规则查询卡片同口径） */
+  /* 中文优先且中西文同源（与规则查询卡片一致） */
   font-family: "Noto Sans CJK SC", "Source Han Sans SC", "Microsoft YaHei",
     "PingFang SC", "WenQuanYi Zen Hei", sans-serif;
   font-size: 11px;

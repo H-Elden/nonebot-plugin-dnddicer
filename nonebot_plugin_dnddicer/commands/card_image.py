@@ -76,7 +76,7 @@ async def render_card_png(
 async def _view_portrait(
     bot: Bot, event: MessageEvent, rest: str
 ) -> None:
-    """``.立绘``：查看自己或他人的立绘（目标解析与 ``.角色卡`` 同口径）。"""
+    """``.立绘``：查看自己或他人的立绘（目标解析与 ``.角色卡`` 一致）。"""
     character, target_name = await card_helpers.resolve_view_target(
         bot, event, portrait_matcher, rest
     )

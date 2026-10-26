@@ -558,7 +558,7 @@ async def test_weapon_attack_mention_target(app: App):
 
 @pytest.mark.asyncio
 async def test_weapon_attack_private_denied(app: App):
-    """私聊使用武器攻击 → 仅群聊提示（同角色卡族口径）。"""
+    """私聊使用武器攻击 → 仅群聊提示（与角色卡族一致）。"""
     from nonebot_plugin_dnddicer.commands.weapon import weapon_matcher
 
     event = fake_private_message_event_v11(message=Message(".短剑攻击"))

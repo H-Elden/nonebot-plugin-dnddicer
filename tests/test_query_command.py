@@ -1093,7 +1093,7 @@ async def test_image_setting_does_not_shadow_query(app: App, enabled_query, imag
 
 
 # ── 图片默认形态 dnddicer_query_image_default（2026-09-30 新增）──────────
-# 口径：显式设置优先；没显式设置过的地方跟随该配置（群聊与私聊同一口径）；
+# 约定：显式设置优先；没显式设置过的地方跟随该配置（群聊与私聊一致）；
 # 总开关与渲染依赖仍单独把关（总闸没开时「默认图片」也出不了图）。
 
 
@@ -1117,7 +1117,7 @@ async def test_image_default_on_query_sends_image_without_setting(
 async def test_image_default_on_applies_to_private_too(
     app: App, enabled_query, image_mode, image_default_on
 ):
-    """群聊与私聊同一口径：私聊同样默认出图（措辞用「你」）。"""
+    """群聊与私聊一致：私聊同样默认出图（措辞用「你」）。"""
     render.set_renderer(_fake_renderer())
     _setup_entry()
     await _expect(
@@ -1374,7 +1374,7 @@ async def test_scope_unknown_and_umbrella_hint(app: App, enabled_query):
 
 @pytest.mark.asyncio
 async def test_scope_requires_query_enabled(app: App):
-    """查询功能未开启：设置被拒（与 .查询 同口径）；「全部」仍可清理。"""
+    """查询功能未开启：设置被拒（与 .查询 一致）；「全部」仍可清理。"""
     await _expect(
         app,
         query_cmd.scope_matcher,

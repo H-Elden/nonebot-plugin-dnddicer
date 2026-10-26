@@ -152,7 +152,7 @@ def parse_dnd_args(rest: str) -> Tuple[int, str]:
 async def _resolve_dnd_args(matcher: Matcher, event: MessageEvent) -> Tuple[int, str]:
     """取命令体并解析为 (次数, 原因)；次数越界时提示并终止（不掷点）。
 
-    ``.dnd`` 与 ``.dndx`` 共用本入口，保证两个命令的次数口径与提示完全一致。
+    ``.dnd`` 与 ``.dndx`` 共用本入口，保证两个命令的次数判定与提示完全一致。
     """
     rest = base.get_command_rest(event) or ""
     try:

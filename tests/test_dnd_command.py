@@ -260,7 +260,7 @@ async def test_dnd_times_zero(app: App):
 
 @pytest.mark.asyncio
 async def test_dnd_times_negative(app: App):
-    """次数为负数：与 0 同口径（提示下限、不掷点）。"""
+    """次数为负数：与 0 一致（提示下限、不掷点）。"""
     runtime = SequenceRuntime([])
     token = set_runtime(runtime)
     try:
@@ -397,7 +397,7 @@ async def test_dndx_private(app: App):
 
 @pytest.mark.asyncio
 async def test_dndx_times_out_of_range(app: App):
-    """.dndx 次数越界与 .dnd 同口径（同一解析入口、同一提示、同样不掷点）。"""
+    """.dndx 次数越界与 .dnd 一致（同一解析入口、同一提示、同样不掷点）。"""
     runtime = SequenceRuntime([])
     token = set_runtime(runtime)
     try:

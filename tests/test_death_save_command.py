@@ -262,7 +262,7 @@ async def test_hp_damage_to_npc_has_no_death_save(app: App):
 
 @pytest.mark.asyncio
 async def test_hp_stun_to_one_hp_in_2024_group(app: App):
-    """5r 群内 .hp -N 击晕 → 改为降到 1 点 HP 并昏迷（2024 口径）。"""
+    """5r 群内 .hp -N 击晕 → 改为降到 1 点 HP 并昏迷（2024 版规则）。"""
     from nonebot_plugin_dnddicer.commands.hp import hp_matcher
 
     uid = 23001
@@ -277,7 +277,7 @@ async def test_hp_stun_to_one_hp_in_2024_group(app: App):
 
 @pytest.mark.asyncio
 async def test_hp_stun_to_zero_stable_in_2014_group(app: App):
-    """5e 群内 .hp -N 击晕 → HP 归 0、昏迷但伤势稳定（2014 口径，截图同「稳定」语义）。"""
+    """5e 群内 .hp -N 击晕 → HP 归 0、昏迷但伤势稳定（2014 版规则，截图同「稳定」语义）。"""
     from nonebot_plugin_dnddicer.commands.hp import ds_matcher, hp_matcher
 
     group, uid = 23002, 23003

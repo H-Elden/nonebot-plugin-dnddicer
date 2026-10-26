@@ -1216,7 +1216,7 @@ rules_version_switch = Scene(
         Step("白鸦", ".规则版本"),
         Step("白鸦", ".规则版本 5e"),
         Step("白鸦", ".规则版本"),
-        # 回到 5r（站点示例统一按 2024 口径讲解），并恢复跟随默认
+        # 回到 5r（站点示例统一按 2024 版规则讲解），并恢复跟随默认
         Step("白鸦", ".规则版本 5r"),
         Step("白鸦", ".规则版本 默认"),
     ],
@@ -1268,7 +1268,7 @@ death_save_instant = Scene(
 
 hp_stun_variant = Scene(
     id="hp_stun_variant",
-    title="击晕（2024 口径）：改为把目标打到 1 点 HP 并昏迷",
+    title="击晕（2024 版规则）：改为把目标打到 1 点 HP 并昏迷",
     steps=[
         Step("白鸦", ".hp 薇拉 20/54"),
         Step("白鸦", ".hp 薇拉 -20 击晕"),
@@ -1278,7 +1278,7 @@ hp_stun_variant = Scene(
 # 击晕两版都有、结果不同：上面的场景是 5r（本群默认），这里显式切到 5e 演示差异。
 hp_stun_2014 = Scene(
     id="hp_stun_2014",
-    title="击晕（2014 口径）：HP 归 0、昏迷但伤势稳定",
+    title="击晕（2014 版规则）：HP 归 0、昏迷但伤势稳定",
     steps=[
         Step("白鸦", ".规则版本 5e"),
         Step("白鸦", ".hp 薇拉 20/54"),

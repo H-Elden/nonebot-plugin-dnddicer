@@ -29,7 +29,7 @@ from nonebot import logger
 from ..version import __version__
 from .models import QueryUnavailableError
 
-#: 请求头：如实标注插件身份（与 source.py 同口径；Accept 面向 HTML 页面）
+#: 请求头：如实标注插件身份（与 source.py 一致；Accept 面向 HTML 页面）
 _HEADERS: Dict[str, str] = {
     "User-Agent": (
         f"nonebot-plugin-dnddicer/{__version__} "
@@ -42,7 +42,7 @@ _HEADERS: Dict[str, str] = {
 #: 页面缓存条数上限（常见页 2~30KB；速查表最大约 400KB）
 _PAGE_CACHE_MAX = 64
 
-#: 抓取并发上限（礼貌原则：不对个人站点并发轰炸；与 source.py 同口径）
+#: 抓取并发上限（礼貌原则：不对个人站点并发轰炸；与 source.py 一致）
 _MAX_CONCURRENCY = 2
 
 #: 传输函数签名：``(url, timeout, headers) -> HTML 文本``（async；测试注入用）

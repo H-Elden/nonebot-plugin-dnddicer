@@ -561,7 +561,7 @@ CARD_SPEC_ENUMS: Dict[str, object] = {
     # 技能/豁免 → 父属性（网页端预览加值与骰娘同一套算法）
     "skill_parent": dict(SKILL_PARENT_DICT),
     "saving_parent": dict(SAVING_PARENT_DICT),
-    # 录入容错：同义词在导入时归一为规范名（与插件解析口径一致）
+    # 录入容错：同义词在导入时归一为规范名（与插件解析一致）
     "skill_synonyms": dict(SKILL_SYNONYM_DICT),
     "class_synonyms": dict(CLASS_SYNONYM_DICT),
     "damage_type_synonyms": dict(DAMAGE_TYPE_SYNONYM_DICT),

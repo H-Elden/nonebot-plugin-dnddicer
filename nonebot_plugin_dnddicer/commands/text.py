@@ -635,7 +635,7 @@ TXT_DS_BAD_MOD = "无效的死亡豁免修饰:{mod}（支持 优势/劣势 与 �
 #: 掷骰回复（{name} 角色名、{result} 掷骰过程、{state} 结算播报、{hp_info} 当前 HP 摘要）
 TXT_DS_RESULT = "{name}的死亡豁免：\n{result}\n{state}\n{hp_info}"
 #: 手动裁决与状态查询（计数统一写「成功X 失败Y」，不写分母——与卡面 `HP:x/y`
-#: 的读写口径一致，避免「1/3」被误读成比例）
+#: 的读写规则一致，避免「1/3」被误读成比例）
 TXT_DS_MANUAL_SUCCESS = "已记死亡豁免成功 +{n}（成功{success} 失败{failure}）"
 TXT_DS_MANUAL_FAILURE = "已记死亡豁免失败 +{n}（成功{success} 失败{failure}）"
 TXT_DS_MANUAL_STABLE = "死亡豁免成功已满 3 次：伤势稳定。"
@@ -1027,7 +1027,7 @@ def format_weapon_attack_hint(attack_bonus: str, advantage: int) -> str:
     """武器攻击检定的过程说明行（单项 ``.X攻击`` 与多武器逐项行共用）。
 
     ``advantage``：1 优势 / -1 劣势 / 0 无。2026-09-27 由单项攻击抽出，
-    保证多武器写法的每项命中行与单项口径逐字一致。
+    保证多武器写法的每项命中行与单项结果逐字一致。
     """
     parts: List[str] = [
         f"武器命中加值:{attack_bonus}" if attack_bonus else "无命中加值"

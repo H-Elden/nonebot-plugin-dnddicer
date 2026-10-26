@@ -211,7 +211,7 @@ async def find_group_characters(
 ) -> List[DNDCharacter]:
     """按角色名匹配本群已绑定卡：精确优先，其次子串。
 
-    与 ``.hp`` 等既有目标搜索同款两级口径（多候选原样返回，由调用方列清单、
+    与 ``.hp`` 等既有目标搜索同款两级匹配（多候选原样返回，由调用方列清单、
     不猜）。空查询返回空列表。
     """
     lowered = (query or "").strip().lower()

@@ -125,7 +125,7 @@ def event_sender_role(event: MessageEvent) -> str:
 
 
 def is_group_manager(event: MessageEvent) -> bool:
-    """判断发送者是否为群主/管理员（.dset 修改与 .bot on/off 共用口径）。"""
+    """判断发送者是否为群主/管理员（.dset 修改与 .bot on/off 共用同一判定）。"""
     return event_sender_role(event) in MANAGER_ROLES
 
 

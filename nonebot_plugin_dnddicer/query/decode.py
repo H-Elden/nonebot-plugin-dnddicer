@@ -184,7 +184,7 @@ def _slice_from_heading(
 ) -> Slice:
     """普通标题分支：切到下一个**同级或更高级**标题（或页尾）。
 
-    口径必须与名字分支一致：2024 召唤类法术自带的数据卡，其名称是低一级的
+    识别规则必须与名字分支一致：2024 召唤类法术自带的数据卡，其名称是低一级的
     ``<H5>``，若按「下一个任意标题」截断就会把法术自带的生物卡丢掉。
     """
     level = int(match.group(1))
@@ -494,7 +494,7 @@ def fragment_to_text(fragment: str) -> str:
 
 # ── 富文本折行（Python 侧避头尾；litehtml 无避头尾规则）──────────────
 
-#: 行首禁则标点（不允许出现在行首；与 render/layout.py 同口径）
+#: 行首禁则标点（不允许出现在行首；与 render/layout.py 一致）
 _LINE_START_FORBIDDEN = set("。，、；：！？）」』】》…·")
 
 #: 块级标签（出现即视为新行开始；折行宽度重新累计）
@@ -503,7 +503,7 @@ _BLOCK_TAGS = {
     "h1", "h2", "h3", "h4", "h5", "h6", "blockquote",
 }
 
-#: 块边界标签（切「折行块」用：块内折行 + 尾行再平衡；与 _BLOCK_TAGS 同口径 + br）
+#: 块边界标签（切「折行块」用：块内折行 + 尾行再平衡；与 _BLOCK_TAGS 一致 + br）
 _TOKEN_RE = re.compile(r"<[^>]+>|\n|.", re.S)
 _BLOCK_BOUNDARY_RE = re.compile(
     r"</?(?:p|div|li|ul|ol|table|tr|td|th|hr|blockquote|h[1-6])\b|^<br\s*/?>$", re.I
@@ -511,7 +511,7 @@ _BLOCK_BOUNDARY_RE = re.compile(
 
 
 def _char_width_px(char: str, font_size: int) -> float:
-    """单字符宽度估算（px）——口径集中在 ``card_geometry``。"""
+    """单字符宽度估算（px）——相关常量集中在 ``card_geometry``。"""
     return card_geometry.char_width(char, font_size)
 
 
