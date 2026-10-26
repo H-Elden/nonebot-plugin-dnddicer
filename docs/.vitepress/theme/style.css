@@ -1319,6 +1319,18 @@ body.cb-modal-open {
   margin: 20px 0 40px;
 }
 
+.pc-name-row {
+  margin-bottom: 10px;
+}
+
+.pc-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--vp-c-text-2);
+  font-size: 13px;
+}
+
 .pc-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -1421,8 +1433,9 @@ body.cb-modal-open {
 
 .pc-preview-block {
   display: flex;
-  gap: 14px;
-  align-items: center;
+  flex-direction: column;
+  gap: 10px;
+  align-items: stretch;
   margin-top: 12px;
   padding: 12px;
   border: 1px solid var(--vp-c-divider);
@@ -1432,6 +1445,7 @@ body.cb-modal-open {
 
 .pc-preview {
   flex: none;
+  align-self: center;
   width: 146px;
   height: 146px;
   overflow: hidden;
@@ -1449,12 +1463,18 @@ body.cb-modal-open {
 
 .pc-preview-info {
   min-width: 0;
+  align-self: stretch;
 }
 
-.pc-preview__label {
-  margin-bottom: 8px;
-  color: var(--vp-c-text-2);
-  font-size: 12px;
+.pc-preview-info .cb-inline {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.pc-preview-info .cb-btn {
+  width: 100%;
+  white-space: nowrap;
 }
 
 .pc-status {
