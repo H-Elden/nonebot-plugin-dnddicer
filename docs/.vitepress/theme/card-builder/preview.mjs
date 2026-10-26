@@ -1,5 +1,5 @@
 /**
- * 角色卡预览：把建卡器表单状态转成与 `character/card_view.py` 同口径的视图，
+ * 角色卡预览：把建卡器表单状态转成与 `character/card_view.py` 一致的视图，
  * 再按 `render/templates/char_card.html` 的结构拼出静态 HTML。
  *
  * 纯函数模块，不依赖 Vue / DOM / 网络；CSS 由调用方传入（构建时从插件

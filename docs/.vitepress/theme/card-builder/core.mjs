@@ -135,6 +135,32 @@ function splitSemicolon(content) {
     .filter((item) => item !== '')
 }
 
+/** 错误提示里的短文本：压成一行，超长截断，避免把整段说明塞进报错。 */
+function excerptOf(value, max = 30) {
+  const text = textOf(value).replace(/\s+/g, ' ').trim()
+  const chars = Array.from(text)
+  return chars.length > max ? `${chars.slice(0, max).join('')}…` : text
+}
+
+/**
+ * 自由文本里不能出现的结构分隔符。
+ *
+ * 卡文本靠固定符号分条、分字段，且没有转义机制；把这些符号写进正文，
+ * 导出后会被拆成多条或改写成别的字段（例如背景里的分号会把「外貌」
+ * 的句子拆成两个背景条目）。在导出前点名「哪个字段、哪个符号」，
+ * 避免用户只看到骰娘侧「条目不完整」却不知道是哪个输入造成的。
+ */
+function ensureNoSeparator(value, label, chars, hint) {
+  const text = textOf(value)
+  for (const char of chars) {
+    if (!text.includes(char)) continue
+    fail(
+      `${label}不能包含符号「${char}」` +
+        `${hint ? `（${hint}）` : ''}: ${excerptOf(text)}`,
+    )
+  }
+}
+
 function partition(text, separator) {
   const index = text.indexOf(separator)
   if (index < 0) return [text, '']
@@ -648,6 +674,21 @@ export function createCardBuilder(spec) {
     if (checkItems.includes(name)) fail(`武器名称不能与检定条目重名: ${name}`)
   }
 
+  function validateFeatureName(name) {
+    if (!name) fail('限定资源名称不能为空')
+    if (charLength(name) > (limits.feature_name_max_len || 20)) {
+      fail(`限定资源名称过长（≤${limits.feature_name_max_len || 20} 字）: ${name}`)
+    }
+    for (const char of [
+      '/', ',', '，', ':', '：', ';', '；', '$', '+', '-', '|', '｜',
+    ]) {
+      if (name.includes(char)) fail(`限定资源名称不能包含符号「${char}」: ${name}`)
+    }
+    for (const word of ['攻击', '命中', '伤害', '检定', '豁免']) {
+      if (name.includes(word)) fail(`限定资源名称不能包含「${word}」字样: ${name}`)
+    }
+  }
+
   function parseFeatures(content) {
     const rows = []
     const seen = new Set()
@@ -663,18 +704,7 @@ export function createCardBuilder(spec) {
       if (!rawValue) {
         fail(`限定资源条目不完整: ${item}（示例：引导神力:2/2短休+1,长休）`)
       }
-      if (!name) fail('限定资源名称不能为空')
-      if (charLength(name) > (limits.feature_name_max_len || 20)) {
-        fail(`限定资源名称过长（≤${limits.feature_name_max_len || 20} 字）: ${name}`)
-      }
-      for (const char of [
-        '/', ',', '，', ':', '：', ';', '；', '$', '+', '-', '|', '｜',
-      ]) {
-        if (name.includes(char)) fail(`限定资源名称不能包含符号「${char}」: ${name}`)
-      }
-      for (const word of ['攻击', '命中', '伤害', '检定', '豁免']) {
-        if (name.includes(word)) fail(`限定资源名称不能包含「${word}」字样: ${name}`)
-      }
+      validateFeatureName(name)
       const matched = /^(\d+)\s*\/\s*(\d+)\s*(.*)$/.exec(rawValue.trim())
       if (!matched) {
         fail(`限定资源次数无效: ${item}（写法：当前/上限恢复档，如 2/2短休+1,长休）`)
@@ -947,10 +977,17 @@ export function createCardBuilder(spec) {
     const result = Object.fromEntries(backgroundKeys.map((key) => [key, '']))
     const seen = new Set()
     for (const item of splitSemicolon(content)) {
-      const [rawKey, rawValue] = partition(withHalfColon(item), ':')
+      const normalized = withHalfColon(item)
+      const [rawKey, rawValue] = partition(normalized, ':')
       const key = rawKey.trim()
       const value = rawValue.trim()
       if (!key || !value) {
+        if (!normalized.includes(':')) {
+          fail(
+            `背景条目「${item}」缺少键名` +
+              '（背景各项用分号分隔，内容里不能出现分号 ; 或 ；）',
+          )
+        }
         fail(`背景条目不完整: ${item}（示例：背景:士兵; 阵营:守序善良）`)
       }
       if (!backgroundKeys.includes(key)) {
@@ -1041,6 +1078,14 @@ export function createCardBuilder(spec) {
       .filter((paragraph) => paragraph !== '')
   }
 
+  function validateMagicItemField(value, label) {
+    for (const char of ['|', ';', '；', '$']) {
+      if (value.includes(char)) {
+        fail(`魔法物品${label}不能包含符号「${char}」: ${value}`)
+      }
+    }
+  }
+
   function parseMagicItems(content) {
     const rows = []
     const seen = new Set()
@@ -1059,11 +1104,8 @@ export function createCardBuilder(spec) {
       if (charLength(tag) > (limits.magic_item_tag_max_len || 60)) {
         fail(`魔法物品标签过长（≤${limits.magic_item_tag_max_len || 60} 字）: ${tag}`)
       }
-      for (const field of [name, tag]) {
-        for (const char of ['|', ';', '；', '$']) {
-          if (field.includes(char)) fail(`魔法物品名称/标签不能包含符号「${char}」: ${field}`)
-        }
-      }
+      validateMagicItemField(name, '名称')
+      validateMagicItemField(tag, '标签')
       if (seen.has(name)) fail(`魔法物品重复: ${name}`)
       seen.add(name)
       const paragraphs = text
@@ -1228,7 +1270,20 @@ export function createCardBuilder(spec) {
     const items = []
     for (const key of allowed) {
       const value = trimOf(values[key])
-      if (value) items.push(`${key}:${value}`)
+      if (!value) continue
+      // 背景各项用 `; ` 连接回卡文本，值里再出现分号会被解析成新条目。
+      for (const char of [';', '；']) {
+        if (value.includes(char)) {
+          fail(
+            `背景「${key}」不能包含分号「${char}」` +
+              `（背景各项用分号分隔，请改用逗号或句号）: ${excerptOf(value)}`,
+          )
+        }
+      }
+      if (value.includes('$')) {
+        fail(`背景「${key}」不能包含符号「$」: ${excerptOf(value)}`)
+      }
+      items.push(`${key}:${value}`)
     }
     return items.join('; ')
   }
@@ -1340,8 +1395,17 @@ export function createCardBuilder(spec) {
     for (const key of ['AC', '速度']) {
       const value = trimOf(combat[key])
       if (!value) continue
-      if (key === '速度') items.push(`${key}:${value}`)
-      else items.push(`${key}:${normalizeIntText(value)}`)
+      if (key === '速度') {
+        ensureNoSeparator(
+          value,
+          '速度',
+          [';', '；'],
+          '战斗条目用分号分隔，速度里的分号请改成逗号',
+        )
+        items.push(`${key}:${value}`)
+      } else {
+        items.push(`${key}:${normalizeIntText(value)}`)
+      }
     }
     return items.join('; ')
   }
@@ -1384,6 +1448,14 @@ export function createCardBuilder(spec) {
         .map((value) => value.trim())
         .filter((value) => value !== '')
       if (values.length === 0) continue
+      for (const value of values) {
+        ensureNoSeparator(
+          value,
+          `熟练分组「${label}」的条目`,
+          ['/'],
+          '熟练各项用 / 分隔，条目里的斜杠请改用全角「／」',
+        )
+      }
       items.push(`${label}:${values.join('·')}`)
     }
     return items.join('/')
@@ -1413,7 +1485,7 @@ export function createCardBuilder(spec) {
       .join('/')
   }
 
-  // ── 派生值预览（与插件 AbilityInfo.get_check_display 同一套口径）─────────
+  // ── 派生值预览（与插件 AbilityInfo.get_check_display 同一套算法）─────────
   // 只用于表单展示：让玩家在点选熟练时直接看到骰娘会算出的加值；导出的卡
   // 文本不写这些派生值，插件仍按 $属性$ / $熟练$ / $额外加值$ 现算。
 
@@ -1574,6 +1646,20 @@ export function createCardBuilder(spec) {
       const name = trimOf(row.name)
       const text = trimOf(row.text)
       if (!name) fail(`${label}要先写名称`)
+      ensureNoSeparator(
+        name,
+        `${label}名称`,
+        ['/', ':', '：'],
+        '名称里不能再出现条目分隔符 / 或字段分隔符冒号',
+      )
+      if (text) {
+        ensureNoSeparator(
+          text,
+          `${label}「${name}」的说明`,
+          ['/'],
+          '多项之间用 / 分隔，说明里请改用全角「／」或其他写法',
+        )
+      }
       items.push(text ? `${name}:${text}` : name)
     }
     return items.join('/')
@@ -1592,7 +1678,8 @@ export function createCardBuilder(spec) {
     for (const row of rows) {
       const name = trimOf(row.name)
       if (!name) fail('武器要先写名称')
-      // 命中加值允许骰子与常数的加减组合（如 +6、+1d4），与插件同口径
+      validateWeaponName(name)
+      // 命中加值允许骰子与常数的加减组合（如 +6、+1d4），与插件一致
       const attack = trimOf(row.attack).replace(/\s+/g, '')
       if (attack && !WEAPON_BONUS_RE.test(attack)) {
         fail(`武器命中加值无效: ${name}${attack}（仅支持骰子与常数的加减组合，如 +6）`)
@@ -1601,7 +1688,14 @@ export function createCardBuilder(spec) {
       if (!damage) fail(`武器「${name}」要写伤害表达式（如 1d8+3）`)
       let text = `${name}${row.noAttack ? 'x' : ''}${attack},${damage}${trimOf(row.type)}`
       const note = trimOf(row.note)
-      if (note) text += `,${note}`
+      if (note) {
+        for (const char of ['/', ',', '，', ';', '；', '$', '|', '｜']) {
+          if (note.includes(char)) {
+            fail(`武器「${name}」的备注不能包含符号「${char}」: ${excerptOf(note)}`)
+          }
+        }
+        text += `,${note}`
+      }
       items.push(text)
     }
     return items.join('/')
@@ -1613,6 +1707,12 @@ export function createCardBuilder(spec) {
     const items = []
     for (const row of rows) {
       const name = trimOf(row.name)
+      ensureNoSeparator(
+        name,
+        '物品名称',
+        [';', '；'],
+        '物品之间用分号分隔，名称里的分号请改成逗号',
+      )
       const qty = trimOf(row.qty) || '1'
       items.push(`${name}x${normalizeIntText(qty)}`)
     }
@@ -1653,12 +1753,21 @@ export function createCardBuilder(spec) {
     for (const row of rows) {
       const name = trimOf(row.name)
       if (!name) fail('限定资源要先写名称')
+      validateFeatureName(name)
       const cur = trimOf(row.cur)
       const max = trimOf(row.max)
       if (!cur || !max) fail(`限定资源「${name}」要写当前/上限（如 1/1）`)
       const recover = recoverText(row.modes)
       if (!recover) fail(`限定资源「${name}」要选恢复方式（短休/长休/两者/手动）`)
       const text = trimOf(row.text)
+      if (text) {
+        ensureNoSeparator(
+          text,
+          `限定资源「${name}」的说明`,
+          [';', '；', '|', '｜'],
+          '资源之间用分号分隔，说明与次数之间用竖线',
+        )
+      }
       items.push(
         `${name}:${normalizeIntText(cur)}/${normalizeIntText(max)}${recover}${text ? `|${text}` : ''}`,
       )
@@ -1682,11 +1791,25 @@ export function createCardBuilder(spec) {
     for (const row of sorted) {
       const name = trimOf(row.name)
       if (!name) fail('职业特性要先写名称')
+      ensureNoSeparator(
+        name,
+        '职业特性名称',
+        ['/', ':', '：'],
+        '名称里不能再出现条目分隔符 / 或字段分隔符冒号',
+      )
       const level = trimOf(row.level) || '1'
       if (!/^\d+$/.test(level) || Number(level) < 1 || Number(level) > 20) {
         fail(`职业特性「${name}」的等级无效: ${level}（写 1~20）`)
       }
       const text = trimOf(row.text)
+      if (text) {
+        ensureNoSeparator(
+          text,
+          `职业特性「${name}」的说明`,
+          ['/'],
+          '多项之间用 / 分隔，说明里请改用全角「／」或其他写法',
+        )
+      }
       items.push(`${Number(level)}|${name}${text ? `:${text}` : ''}`)
     }
     return items.join('/')
@@ -1702,9 +1825,19 @@ export function createCardBuilder(spec) {
       const tag = trimOf(row.tag)
       if (!name) fail('魔法物品要先写名称')
       if (!tag) fail(`魔法物品「${name}」要写标签（如 奇物，非普通）`)
+      validateMagicItemField(name, '名称')
+      validateMagicItemField(tag, '标签')
       const paragraphs = magicParagraphsOf(row.text)
       if (paragraphs.length > (limits.magic_item_paragraph_max || 5)) {
         fail(`魔法物品「${name}」说明最多 ${limits.magic_item_paragraph_max || 5} 段`)
+      }
+      for (const paragraph of paragraphs) {
+        ensureNoSeparator(
+          paragraph,
+          `魔法物品「${name}」的说明`,
+          [';', '；', '|', '｜'],
+          '魔法物品之间用分号分隔，名称、标签与说明之间用竖线',
+        )
       }
       const body = paragraphs.join('//')
       items.push(`${name}|${tag}${body ? `|${body}` : ''}`)
@@ -1747,6 +1880,29 @@ export function createCardBuilder(spec) {
     for (const row of rows) {
       const name = trimOf(row.name)
       if (!name) fail('法术要先写名称')
+      validateSpellName(name)
+      for (const [field, label] of [
+        ['time', '施法时间'],
+        ['range', '施法距离'],
+      ]) {
+        const value = trimOf(row[field])
+        if (!value) continue
+        ensureNoSeparator(
+          value,
+          `法术「${name}」的${label}`,
+          [',', '，', ';', '；', '|', '｜', '$'],
+          '法术详情项用逗号分隔，法术条目之间用分号分隔',
+        )
+      }
+      const note = trimOf(row.note)
+      if (note) {
+        ensureNoSeparator(
+          note,
+          `法术「${name}」的备注`,
+          [',', '，', ';', '；', '|', '｜', '$'],
+          '法术详情项用逗号分隔，法术条目之间用分号分隔',
+        )
+      }
       let text = `${name}:${normalizeIntText(row.level || '0')}${row.prepared ? '*' : ''}`
       const detail = spellDetailText(row)
       if (detail) text += `|${detail}`
@@ -1785,10 +1941,19 @@ export function createCardBuilder(spec) {
   }
 
   function buildNotes(state) {
-    return state[K.COMBAT_NOTES]
-      .map((item) => trimOf(item))
-      .filter((item) => item !== '')
-      .join('; ')
+    const items = []
+    for (const raw of state[K.COMBAT_NOTES]) {
+      const item = trimOf(raw)
+      if (!item) continue
+      ensureNoSeparator(
+        item,
+        '战斗记录',
+        [';', '；'],
+        '多条记录用分号分隔，单条里的分号请改成逗号',
+      )
+      items.push(item)
+    }
+    return items.join('; ')
   }
 
   function buildStory(state) {
