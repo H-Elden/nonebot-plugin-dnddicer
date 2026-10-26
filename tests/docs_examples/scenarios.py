@@ -1373,7 +1373,7 @@ rest_long = Scene(
 # 放在时间线末尾，避免改动洛恩的卡面影响前面的战斗与资源示例。
 card_image_demo = Scene(
     id="card_image_demo",
-    title="角色卡图：图片卡、查看他人、文字卡导出与立绘用法",
+    title="角色卡图：图片卡、查看他人、文字卡导出与立绘查看",
     card_image=True,
     steps=[
         Step("小满", ".角色卡修改 洛恩 $战斗$ AC:15; 速度:30"),
@@ -1381,6 +1381,8 @@ card_image_demo = Scene(
         Step("小满", ".角色卡 @阿茶"),
         Step("小满", ".角色卡导出"),
         Step("小满", ".立绘"),
+        Step("小满", ".立绘 @阿茶"),
+        Step("小满", ".立绘", channel="private"),
     ],
 )
 
