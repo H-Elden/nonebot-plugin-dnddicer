@@ -268,11 +268,11 @@ async def test_cast_errors(app: App):
     from nonebot_plugin_dnddicer.commands.spell import cast_matcher
 
     await _record(app, _CARD_WIZARD)
-    await _expect(app, cast_matcher, _event(".施法"), "用法：.施法 <法术名>[N环|+N环]；或 .施法 <环阶>")
+    await _expect(app, cast_matcher, _event(".施法"), "用法：.施法 法术名[N环|+N环]；或 .施法 环阶")
     await _expect(
         app, cast_matcher, _event(".施法 不存在"),
-        "未录入该法术「不存在」，可用 .设置法术 不存在:<环阶> 录入，"
-        "或直接 .施法 <环阶>",
+        "未录入该法术「不存在」，可用 .设置法术 法术名:环阶 录入"
+        "（例：.设置法术 不存在:3），或直接 .施法 环阶",
     )
     await _expect(
         app, cast_matcher, _event(".施法 火"),
@@ -306,7 +306,7 @@ async def test_cast_errors(app: App):
     )
     await _expect(
         app, cast_matcher, _event(".施法 +1"),
-        "用法：.施法 <法术名>[N环|+N环]；或 .施法 <环阶>",
+        "用法：.施法 法术名[N环|+N环]；或 .施法 环阶",
     )
     # 环位不足：列出当前可用
     await _expect(

@@ -3,7 +3,7 @@
 语义：
 - 仅群聊可用（私聊提示不可用）；仅群主/管理员可修改（查询无权限限制）；
 - 无参数 → 查询当前群默认（未设置时回退全局默认 D20）；
-- ``.dset <表达式>`` → 校验并保存（复用 default_dice.format_default_expr_from_input，
+- ``.dset 表达式`` → 校验并保存（复用 default_dice.format_default_expr_from_input，
   支持纯数字面数 ``.dset 100`` 或表达式 ``.dset 2d6+3``）；
 - 掷骰（.r）时若本群设置了默认骰面则优先使用（见 roll.py）。
 """

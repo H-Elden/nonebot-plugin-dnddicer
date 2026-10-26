@@ -5,8 +5,8 @@
   输出图片，否则输出文字卡；私聊按卡名选，卡库仅一张时可省略卡名；
   群聊只看本群绑定卡；
 - ``.角色卡导出 [卡名]`` / ``.角色卡导出 @玩家|角色名``：始终输出文字卡；
-- ``.角色卡新建 <卡名> <完整卡内容>``：新建；群聊成功后自动绑定本群；
-- ``.角色卡修改 [卡名] <段条目…>``：只覆盖提到的段，空段表示清空；
+- ``.角色卡新建 卡名 完整卡内容``：新建；群聊成功后自动绑定本群；
+- ``.角色卡修改 [卡名] 段条目…``：只覆盖提到的段，空段表示清空；
 - ``.角色卡改名 / 列表 / 绑定 / 解绑 / 清除``：卡库管理；
 - ``.角色卡记录`` 已退役，不再单独处理（按普通未匹配走默认错误）。
 
@@ -71,8 +71,8 @@ _HELP = (
     "  群聊看本群绑定卡；私聊看本人卡（多张需带卡名）\n"
     "  开启角色卡图时发图片，否则发文字\n"
     "  文字卡导出：.角色卡导出\n"
-    "  新建：.角色卡新建 <卡名> <卡内容>（群聊自动绑定）\n"
-    "  修改：.角色卡修改 [卡名] <段条目>（空段清空）"
+    "  新建：.角色卡新建 卡名 完整卡内容（群聊自动绑定）\n"
+    "  修改：.角色卡修改 [卡名] 段条目（空段清空）"
 )
 char_matcher = base.on_dnd_command("角色卡", _HELP, doc="guide/character-card")
 
@@ -173,7 +173,7 @@ check_matcher = _make_check_matcher()
 
 
 async def _handle_new(event: MessageEvent, args: str) -> None:
-    """``.角色卡新建 <卡名> <完整卡内容>``。"""
+    """``.角色卡新建 卡名 完整卡内容``。"""
     card_name, content = card_helpers.split_name_content(args)
     if not card_name or not content:
         await char_matcher.finish(text.TXT_CHAR_NEW_USAGE)
@@ -244,7 +244,7 @@ async def _handle_modify(event: MessageEvent, args: str) -> None:
 
 
 async def _handle_rename(event: MessageEvent, args: str) -> None:
-    """``.角色卡改名 <旧名> <新名>``。"""
+    """``.角色卡改名 旧名 新名``。"""
     parts = args.split()
     if len(parts) != 2:
         await char_matcher.finish(text.TXT_CHAR_RENAME_USAGE)
@@ -295,7 +295,7 @@ def _multi_group_bind_warning(bound_before: list[str], group_id: int | str) -> s
 async def _handle_bind(
     bot: Bot, event: MessageEvent, args: str
 ) -> None:
-    """``.角色卡绑定 <卡名>``（群聊） / ``.角色卡绑定 <卡名> <群号>``（私聊）。"""
+    """``.角色卡绑定 卡名``（群聊） / ``.角色卡绑定 卡名 群号``（私聊）。"""
     owner = _owner(event)
     if _is_group(event):
         parts = args.split()
@@ -366,7 +366,7 @@ async def _handle_bind(
 
 
 async def _handle_unbind(event: MessageEvent, args: str) -> None:
-    """``.角色卡解绑``（群聊） / ``.角色卡解绑 <群号>``（私聊）。"""
+    """``.角色卡解绑``（群聊） / ``.角色卡解绑 群号``（私聊）。"""
     owner = _owner(event)
     if _is_group(event):
         if args:
@@ -388,7 +388,7 @@ async def _handle_unbind(event: MessageEvent, args: str) -> None:
 
 
 async def _handle_delete(event: MessageEvent, args: str) -> None:
-    """``.角色卡清除 <卡名> [确认]``。"""
+    """``.角色卡清除 卡名 确认``。"""
     parts = args.split()
     if not parts:
         await char_matcher.finish(text.TXT_CHAR_DELETE_USAGE)

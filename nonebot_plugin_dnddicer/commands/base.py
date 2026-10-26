@@ -53,10 +53,10 @@ def register_command(
     """注册一条命令名（重复注册同名时保留先注册者）。
 
     ``hidden=True`` 的命令照常参与匹配，但 ``get_registered_commands`` 不返回，
-    因此不出现在 ``.帮助`` 列表与 ``.help <名>`` 详情里（骰主命令等内部命令用）。
+    因此不出现在 ``.帮助`` 列表与 ``.help 命令名`` 详情里（骰主命令等内部命令用）。
 
     ``doc`` 为该命令对应文档站页面的**站内相对路径**（如 ``guide/hp``），
-    ``.help <名>`` 详情末尾的链接行据此生成深链；留空表示没有对应页、
+    ``.help 命令名`` 详情末尾的链接行据此生成深链；留空表示没有对应页、
     链接行回落到站点首页（见 ``commands/help.py``）。
     """
     if name not in _REGISTRY:
@@ -84,7 +84,7 @@ def get_registered_commands(*, include_hidden: bool = False) -> dict[str, str]:
     """返回命令名 → 说明文案的副本。
 
     默认不含隐藏命令（``.help`` 的清单与目录据此渲染）；``include_hidden=True``
-    时连隐藏命令一起返回（``.help <骰主命令>`` 查详情用，见 commands/help.py）。
+    时连隐藏命令一起返回（``.help 骰主命令`` 查详情用，见 commands/help.py）。
     """
     if include_hidden:
         return dict(_REGISTRY)

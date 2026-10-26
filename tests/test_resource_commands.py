@@ -159,7 +159,7 @@ async def test_ability_fuzzy_match_and_errors(app: App):
     )
     await _expect(
         app, ability_matcher, _event(".能力 +1"),
-        "用法：.能力 [名称[±N]]；录入用 .设置能力 名称:当前/上限恢复，删除用 .删除能力 名称",
+        "用法：.能力 [名称] [±N]；录入用 .设置能力 名称:当前/上限恢复，删除用 .删除能力 名称",
     )
 
 

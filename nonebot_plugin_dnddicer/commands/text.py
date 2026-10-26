@@ -75,7 +75,7 @@ TXT_UNKNOWN_ERROR = "骰娘内部发生了错误，请联系管理员反馈。"
 TXT_DOCS_LINK = "详细帮助文档：https://dnddicer.netlify.app"
 
 # ── 帮助体系 .help（2026-09-28 重做；版式表见 commands/help_layout.py）──────
-# 入口：无参数总览 / `命令` 分组目录 / `<组名>` 组清单 / `<命令>` 详情 /
+# 入口：无参数总览 / `命令` 分组目录 / `组名` 组清单 / `命令名` 详情 /
 #       `链接`（含 on/off 开关）/ `关于` / `骰主` / `联系`；未命中给一行提示。
 # 回复末尾的文档站链接行由 `.help 链接 on/off` 控制（群聊默认关、私聊默认开）。
 #: 文档站基址（帮助回复用它拼链接；.bot 的链接行仍是 TXT_DOCS_LINK）
@@ -185,39 +185,39 @@ TXT_CHAR_VIEW_MISS_PRIVATE = (
     "您还没有角色卡，推荐到网页建卡器建卡：{url}"
 )
 #: 角色卡库（2026-10-23 卡库化）
-TXT_CHAR_NO_CARD_PRIVATE = "你还没有角色卡，可发 .角色卡新建 <卡名> <完整卡内容> 建卡"
+TXT_CHAR_NO_CARD_PRIVATE = "你还没有角色卡，可发 .角色卡新建 卡名 完整卡内容 建卡"
 TXT_CHAR_NEED_NAME = "你有 {count} 张角色卡，请带上卡名；可发 .角色卡列表 查看"
 TXT_CHAR_NAME_MISS = "找不到角色卡「{name}」"
 TXT_CHAR_NAME_MULTI = "卡名「{name}」匹配到多张：{names}，请写完整卡名"
-TXT_CHAR_NEW_USAGE = "用法：.角色卡新建 <卡名> <完整卡内容>（卡名最多 20 字，不能包含空格、$、@）"
-TXT_CHAR_MODIFY_USAGE = "用法：.角色卡修改 [卡名] <段条目>（例：.角色卡修改 薇拉 $物品$ 治疗药水x2）"
+TXT_CHAR_NEW_USAGE = "用法：.角色卡新建 卡名 完整卡内容（卡名最多 20 字，不能包含空格、$、@）"
+TXT_CHAR_MODIFY_USAGE = "用法：.角色卡修改 [卡名] 段条目（例：.角色卡修改 薇拉 $物品$ 治疗药水x2）"
 TXT_CHAR_NEW_GROUP = "已新建角色卡「{name}」并绑定到本群。"
 TXT_CHAR_NEW_GROUP_REPLACED = "已新建角色卡「{name}」并绑定到本群，原绑定「{old}」已解除。"
-TXT_CHAR_NEW_PRIVATE = "已新建角色卡「{name}」。可发 .角色卡绑定 {name} <群号> 绑定到跑团群。"
+TXT_CHAR_NEW_PRIVATE = "已新建角色卡「{name}」。可发 .角色卡绑定 {name} 群号 绑定到跑团群。"
 TXT_CHAR_BIND_FAILED_CREATED = "角色卡「{name}」已创建，但绑定本群失败：{error}"
 TXT_CHAR_MODIFY_OK = "角色卡「{name}」已修改"
-TXT_CHAR_RENAME_USAGE = "用法：.角色卡改名 <旧卡名> <新卡名>"
+TXT_CHAR_RENAME_USAGE = "用法：.角色卡改名 旧卡名 新卡名"
 TXT_CHAR_RENAME_OK = "角色卡「{old}」已改名为「{new}」"
 TXT_CHAR_LIST_TITLE = "你的角色卡："
-TXT_CHAR_LIST_EMPTY = "你还没有角色卡，可发 .角色卡新建 <卡名> <完整卡内容> 建卡"
+TXT_CHAR_LIST_EMPTY = "你还没有角色卡，可发 .角色卡新建 卡名 完整卡内容 建卡"
 TXT_CHAR_LIST_ITEM = "{name}（{character}，{level}级{class_name}）"
 TXT_CHAR_LIST_BOUND = "｜已绑定：{groups}"
 TXT_CHAR_LIST_CURRENT = "｜本群绑定"
-TXT_CHAR_BIND_USAGE_GROUP = "用法：.角色卡绑定 <卡名>"
-TXT_CHAR_BIND_USAGE_PRIVATE = "用法：.角色卡绑定 <卡名> <群号>"
+TXT_CHAR_BIND_USAGE_GROUP = "用法：.角色卡绑定 卡名"
+TXT_CHAR_BIND_USAGE_PRIVATE = "用法：.角色卡绑定 卡名 群号"
 TXT_CHAR_BIND_OK = "角色卡「{name}」已绑定到群 {group}"
 TXT_CHAR_BIND_REPLACED = "角色卡「{name}」已绑定到群 {group}，原绑定「{old}」已解除"
 TXT_CHAR_BIND_MULTI_GROUP_WARNING = "注意：同一张卡绑定多个群聊可能造成数据冲突！"
-TXT_CHAR_BIND_PRIVATE_HINT = "若你不在该群，绑定暂不生效，可在群内发 .角色卡绑定 <卡名> 重新绑定。"
+TXT_CHAR_BIND_PRIVATE_HINT = "若你不在该群，绑定暂不生效，可在群内发 .角色卡绑定 卡名 重新绑定。"
 TXT_CHAR_BIND_GROUP_MISSING = "骰娘不在该群（{group}），请先把骰娘请进群再绑定"
 TXT_CHAR_BIND_GROUP_UNKNOWN = "（未能确认骰娘是否在该群，绑定后请在该群发 .角色卡 验证）"
 TXT_CHAR_UNBIND_OK = "已解除本群的角色卡绑定"
 TXT_CHAR_UNBIND_NONE = "本群没有绑定角色卡"
 TXT_CHAR_UNBIND_PRIVATE_OK = "已解除角色卡在群 {group} 的绑定"
 TXT_CHAR_UNBIND_PRIVATE_NONE = "该群没有绑定你的角色卡"
-TXT_CHAR_UNBIND_USAGE = "用法：.角色卡解绑 <群号>"
+TXT_CHAR_UNBIND_USAGE = "用法：.角色卡解绑 群号"
 TXT_CHAR_UNBIND_USAGE_GROUP = "用法：.角色卡解绑"
-TXT_CHAR_DELETE_USAGE = "用法：.角色卡清除 <卡名> 确认"
+TXT_CHAR_DELETE_USAGE = "用法：.角色卡清除 卡名 确认（例：.角色卡清除 薇拉 确认）"
 TXT_CHAR_DELETE_CONFIRM = "确认删除角色卡「{name}」吗？请发送 .角色卡清除 {name} 确认"
 TXT_CHAR_DELETE_BOUND = "角色卡「{name}」已绑定到群 {groups}，请先解绑再删除"
 TXT_CHAR_DELETE_OK = "角色卡「{name}」已删除"
@@ -347,7 +347,7 @@ TXT_FEATURE_MOD = "{name}：{old}/{max} → {new}/{max}{note}"
 TXT_FEATURE_MOD_EXHAUSTED = "（已用尽）"
 TXT_FEATURE_MOD_FULL = "（已满）"
 TXT_FEATURE_USAGE = (
-    "用法：.能力 [名称[±N]]；"
+    "用法：.能力 [名称] [±N]；"
     "录入用 .设置能力 名称:当前/上限恢复，删除用 .删除能力 名称"
 )
 TXT_FEATURE_AMOUNT_INVALID = "次数至少为 1"
@@ -456,7 +456,7 @@ TXT_SLOTS_SET_TARGET = "已设置{name}的法术位：{names}\n当前法术位�
 TXT_SLOTS_RESET_TARGET = "已恢复{name}的全部法术位：\n{items}"
 
 # ── 施法 .施法 / .cast（2026-10-20 批③）────────────────────────────────
-TXT_CAST_USAGE = "用法：.施法 <法术名>[N环|+N环]；或 .施法 <环阶>"
+TXT_CAST_USAGE = "用法：.施法 法术名[N环|+N环]；或 .施法 环阶"
 #: 法术施放标题（{level} 为「3环」或「戏法」）
 TXT_CAST_HEAD = "{name}施展了「{spell}」（{level}）"
 #: 只指定环阶的施法（普通位 / 契约位两种写法）
@@ -474,8 +474,8 @@ TXT_CAST_WEAPON_HINT = "可用 .{weapon}伤害 掷伤害。"
 #: 未标记准备时的柔性提醒（按版本/职业/开关判定）
 TXT_CAST_PREP_HINT = "（未标记为已准备，如需标记：.法术 准备 {name}）"
 TXT_CAST_NOT_FOUND = (
-    "未录入该法术「{name}」，可用 .设置法术 {name}:<环阶> 录入，"
-    "或直接 .施法 <环阶>"
+    "未录入该法术「{name}」，可用 .设置法术 法术名:环阶 录入"
+    "（例：.设置法术 {name}:3），或直接 .施法 环阶"
 )
 TXT_CAST_VAGUE = "名称不明确「{name}」：候选 {names}（请写更完整的名称）"
 TXT_CAST_TOO_LOW = "「{name}」最低为 {min}环，不能用 {level}环施展。"
@@ -574,7 +574,7 @@ TXT_NPC_PC_TARGET = "「{name}」是玩家角色卡，不是NPC"
 # ── 长休 .长休 ─────────────────────────────────────────────────────────────
 TXT_LONG_REST_MISS = "找不到{name}的角色卡信息"
 #: 长休末尾的重新准备提示（只在卡上有法术时追加；不自动改 * 标记）
-TXT_LONG_REST_PREPARE_HINT = "可重新准备法术（.法术 准备 <名称>）。"
+TXT_LONG_REST_PREPARE_HINT = "可重新准备法术（.法术 准备 名称）。"
 
 # ── 休息闭环：.生命骰 / .短休（2026-10-20 批③）──────────────────────────
 TXT_HD_USAGE = "用法：.生命骰 [数量] [@玩家]（缺省 1 颗）"
@@ -719,8 +719,8 @@ TXT_BR_ERROR_TOO_MUCH_FOUND = "找到复数回合，请换一个关键词。"
 TXT_QUERY_DISABLED = "规则查询功能未开启，请联系骰主解决。"
 #: 用法提示（{usage} 为两条命令各自的用法片段）
 TXT_QUERY_USAGE = "用法：{usage}"
-TXT_QUERY_USAGE_NAME = ".查询 <关键词>（如 .查询 火球术）；全文检索用 .搜索"
-TXT_QUERY_USAGE_FULL = ".搜索 <关键词>（如 .搜索 借机攻击）；按名称查用 .查询"
+TXT_QUERY_USAGE_NAME = ".查询 关键词（如 .查询 火球术）；全文检索用 .搜索"
+TXT_QUERY_USAGE_FULL = ".搜索 关键词（如 .搜索 借机攻击）；按名称查用 .查询"
 TXT_QUERY_TOO_MANY_KEYWORDS = "关键词过多（最多 {max} 个；空格分隔表示同时满足，| 表示或）。"
 TXT_QUERY_UNAVAILABLE = (
     "规则查询服务暂不可用（已尝试 {count} 个地址）。请稍后再试；"
@@ -754,7 +754,7 @@ TXT_SUPERUSER_ONLY = "该命令仅骰主可用。"
 TXT_INDEX_HELP = (
     ".查询索引 [刷新 [类型…]]（.qatlas，仅骰主私聊）\n"
     "  无参数：查看各类速查索引状态\n"
-    "  刷新：重建全部；刷新 <类型>：只重建该类\n"
+    "  刷新：重建全部；刷新 类型：只重建该类（如 刷新 法术）\n"
     "  类型：法术/怪物/物品/专长/职业/起源/术语/单位"
 )
 TXT_INDEX_STATUS_HEAD = "速查索引状态（构建于 {built_at}）："
@@ -779,7 +779,7 @@ TXT_MASTER_SOURCE_PRIVATE = "私聊（QQ {qq}）"
 #: 正文超长时的截断标注（接在被截断的正文末尾）
 TXT_MASTER_TRUNCATED = "（已截断）"
 #: 空参数用法
-TXT_MASTER_USAGE = "用法：.master <消息>（把你的意见发给骰主）"
+TXT_MASTER_USAGE = "用法：.master 消息（把你的意见发给骰主）"
 #: 发送成功；骰主未配置 QQ；投递失败；频率限制（{seconds} 为剩余秒数）
 TXT_MASTER_SENT = "已发送给骰主，感谢反馈。"
 TXT_MASTER_NOT_CONFIGURED = "骰主未配置，暂时发不出去。"
@@ -788,10 +788,10 @@ TXT_MASTER_RATE_LIMITED = "发送太频繁了，请 {seconds} 秒后再试。"
 
 # ── 速查子命令（.查询法术 / .查询怪物 / …，2026-09-26）────────────────
 #: 子命令用法提示（{kind} 类型名、{example} 示例）
-TXT_ATLAS_USAGE = "用法：.查询{kind} <名称>（如 {example}）"
+TXT_ATLAS_USAGE = "用法：.查询{kind} 名称（如 {example}）"
 #: 子命令帮助全文
 TXT_ATLAS_HELP = (
-    ".查询{kind} <名称>\n"
+    ".查询{kind} 名称\n"
     "  在《5e不全书》速查中按名称查找（中文 / 英文名均可）\n"
     "  同类速查：怪物/物品/专长/职业/起源/术语/单位\n"
     "  受 .查询范围 限制；多候选回复数字查看\n"
@@ -849,7 +849,7 @@ TXT_QUERY_IMAGE_NOT_READY = (
 # 语义：范围默认「全部开放」；设置只接受书目缩写（大小写不敏感）与整目录键，
 # 未设置即不筛选。{where} 为「本群」（群聊）或「你」（私聊）。
 TXT_QUERY_SCOPE_USAGE = (
-    "用法：.查询范围 <书目缩写>（逗号或空格分隔，如 .查询范围 PHB24,MM25）；"
+    "用法：.查询范围 书目缩写（逗号或空格分隔，如 .查询范围 PHB24,MM25）；"
     "无参数查看当前，.查询范围 全部 恢复全部书目。"
 )
 TXT_QUERY_SCOPE_CURRENT_ALL = (
@@ -880,7 +880,7 @@ TXT_QUERY_BOOKS_HEAD = "《5E不全书》可查询书目（.查询范围 用缩�
 TXT_QUERY_BOOKS_SECTION = "【{title}】"
 TXT_QUERY_BOOKS_ROW = "{key}  {name}"
 TXT_QUERY_BOOKS_NOTE = "    {note}"
-TXT_QUERY_BOOKS_TAIL = "共 {count} 项可设置；发送 .查询范围 <缩写> 收窄本处的查询范围。"
+TXT_QUERY_BOOKS_TAIL = "共 {count} 项可设置；发送 .查询范围 书目缩写 收窄本处的查询范围。"
 #: .规则书 图片形态的标题与说明行（正文内容与文字形态同源）
 TXT_QUERY_BOOKS_CARD_TITLE = "《5E不全书》可查询书目"
 TXT_QUERY_BOOKS_CARD_HINT = "发送 .查询范围 PHB24,MM25 设置本处可查的书；未设置 = 全部开放。"

@@ -23,7 +23,7 @@ from . import base, text
 from .hp import search_target
 
 _HELP = (
-    ".npc 持久/临时 <名称>\n"
+    ".npc 持久/临时 名称\n"
     "  持久：跨战斗保持血量（新入先攻表不回满）\n"
     "  临时：恢复默认（每次新入先攻表自动回满）\n"
     "  名称可写一部分；血量先用 .hp 名称 当前/最大 建立"

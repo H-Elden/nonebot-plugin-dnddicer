@@ -340,7 +340,7 @@ async def test_long_rest_restores_features_slots_and_hint(app: App):
         "恢复能力：圣疗 0/25 → 25/25\n"
         "恢复法术位：1环 0/2 → 2/2；2环 1/3 → 3/3；"
         "契约魔法（3环） 0/2 → 2/2\n"
-        "可重新准备法术（.法术 准备 <名称>）。",
+        "可重新准备法术（.法术 准备 名称）。",
     )
     # 长休不改短休类能力（奥术回想仍是 0/1）
     from nonebot_plugin_dnddicer.commands.feature import ability_matcher
@@ -377,7 +377,7 @@ async def test_long_rest_prepare_hint_depends_on_class(app: App):
     await _expect(
         app, long_rest_matcher,
         _event(".长休", user_id=24070, group_id=group_wizard),
-        base_text + "\n可重新准备法术（.法术 准备 <名称>）。",
+        base_text + "\n可重新准备法术（.法术 准备 名称）。",
     )
     await _record(
         app, card_template.format(char_class="吟游诗人"),

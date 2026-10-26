@@ -1,4 +1,4 @@
-"""反馈命令：``.master <消息>``（把你的意见转发给骰主）。
+"""反馈命令：``.master 消息``（把你的意见转发给骰主）。
 
 语义（2026-09-30 定稿）：
 
@@ -30,7 +30,7 @@ from ..platform import onebot_v11
 from . import base, text
 
 _HELP = (
-    ".master <消息>\n"
+    ".master 消息\n"
     "  给骰主发送消息（反馈问题或建议）\n"
     "  群聊、私聊都可以用；骰娘私聊转达\n"
     "  骰主会看到你的 QQ 号与群号\n"
@@ -101,7 +101,7 @@ def master_qq() -> str:
 
 @master_matcher.handle()
 async def handle_master(bot: Bot, event: MessageEvent) -> None:
-    """处理 .master <消息>。"""
+    """处理 .master 消息。"""
     body = (base.get_command_rest(event) or "").strip()
     if not body:
         await master_matcher.finish(text.TXT_MASTER_USAGE)

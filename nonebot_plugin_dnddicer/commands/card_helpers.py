@@ -36,7 +36,7 @@ def split_name_content(args: str) -> Tuple[str, str]:
 
 
 def split_optional_card(args: str) -> Tuple[Optional[str], str]:
-    """解析 ``[卡名] <段条目>``；段条目以 ``$`` 开头时视为省略卡名。"""
+    """解析 ``[卡名] 段条目``；段条目以 ``$`` 开头时视为省略卡名。"""
     arg_str = args.strip()
     if not arg_str:
         return None, ""
