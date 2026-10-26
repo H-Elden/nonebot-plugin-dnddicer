@@ -21,10 +21,10 @@ features:
     details: D20 优势/劣势、保留最高、重掷、爆炸骰、连掷、暗骰与原因后缀；仅 D20 播报大成功/大失败
     link: /guide/roll-basics
     linkText: 掷骰基础
-  - title: 角色卡与属性
-    details: 用 $…$ 模板建卡，或 .dnd/.dndx 以 4D6K3 掷点；.角色卡 在骰主开启后出图，.角色卡导出 取文字卡，.立绘 上传头像
+  - title: 角色卡录入
+    details: .dnd/.dndx 以 4D6K3 掷点，网页建卡器一键生成命令；卡库管理、快速记录与卡图立绘
     link: /guide/character-card
-    linkText: 角色卡与属性
+    linkText: 角色卡录入
   - title: 网页建卡器
     details: 在浏览器里填表生成 .角色卡新建 / .角色卡修改 命令，纯本地不上传；内置立绘裁切与角色卡预览，整卡超长自动拆块
     link: /guide/card-builder

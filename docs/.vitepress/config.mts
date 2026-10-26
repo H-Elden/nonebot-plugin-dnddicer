@@ -12,7 +12,7 @@ export default defineConfig({
   lang: 'zh-CN',
   title: '屠龙骰 DNDDicer',
   description:
-    '专精 DND5e/5r 的 QQ 跑团骰娘插件使用文档：掷骰表达式、角色卡与属性、检定与豁免、生命值管理、先攻列表与战斗轮、规则查询、DM 进阶与最佳实践',
+    '专精 DND5e/5r 的 QQ 跑团骰娘插件使用文档：掷骰表达式、角色卡录入与字段、检定与豁免、生命值管理、先攻列表与战斗轮、规则查询、DM 进阶与最佳实践',
   base: process.env.DOCS_BASE ?? '/nonebot-plugin-dnddicer/',
   cleanUrls: true,
   lastUpdated: true,
@@ -55,8 +55,7 @@ export default defineConfig({
       {
         text: '第二章 · 玩家进阶',
         items: [
-          { text: '角色卡与属性', link: '/guide/character-card' },
-          { text: '角色卡图与立绘', link: '/guide/card-image' },
+          { text: '角色卡录入', link: '/guide/character-card' },
           { text: '检定与豁免', link: '/guide/checks' },
           { text: '武器与攻击', link: '/guide/weapons' },
           { text: '休息与资源', link: '/guide/resources' },
@@ -81,6 +80,7 @@ export default defineConfig({
         text: '参考与工具',
         items: [
           { text: '网页建卡器', link: '/guide/card-builder' },
+          { text: '角色卡字段', link: '/guide/card-fields' },
           { text: '群管理与 FAQ', link: '/guide/faq' },
           { text: '自建查询服务（可选）', link: '/guide/self-host' },
           { text: '更新日志', link: '/guide/changelog' },

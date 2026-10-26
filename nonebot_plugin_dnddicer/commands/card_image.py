@@ -31,7 +31,7 @@ _HELP_PORTRAIT = (
     "  原图保存，建议方形；仅支持 PNG/JPG/WebP，≤4 MB"
 )
 portrait_matcher = base.on_dnd_command(
-    "立绘", _HELP_PORTRAIT, doc="guide/card-image"
+    "立绘", _HELP_PORTRAIT, doc="guide/character-card"
 )
 
 

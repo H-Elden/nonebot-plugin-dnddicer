@@ -25,10 +25,10 @@ DNDDicer 的目标是填补「NoneBot 商店中缺少 **DND5e/5r 专业 + 现代
 
 - 开始：[快速开始](./docs/guide/quickstart.md) · [示例团与人物](./docs/guide/cast.md)
 - 第一章 · 基础操作：[掷骰基础](./docs/guide/roll-basics.md) · [掷骰进阶](./docs/guide/roll-advanced.md) · [生命值管理](./docs/guide/hp.md) · [先攻列表](./docs/guide/initiative.md) · [战斗轮](./docs/guide/battle.md) · [规则查询](./docs/guide/query.md)
-- 第二章 · 玩家进阶：[角色卡与属性](./docs/guide/character-card.md) · [角色卡图与立绘](./docs/guide/card-image.md) · [检定与豁免](./docs/guide/checks.md) · [武器与攻击](./docs/guide/weapons.md) · [休息与资源](./docs/guide/resources.md) · [HP 进阶](./docs/guide/hp-advanced.md)
+- 第二章 · 玩家进阶：[角色卡录入](./docs/guide/character-card.md) · [检定与豁免](./docs/guide/checks.md) · [武器与攻击](./docs/guide/weapons.md) · [休息与资源](./docs/guide/resources.md) · [HP 进阶](./docs/guide/hp-advanced.md)
 - 第三章 · DM 进阶：[代掷与代操作](./docs/guide/dm-proxy.md) · [血量与伤害结算](./docs/guide/dm-settlement.md) · [查询范围](./docs/guide/query-scope.md)
 - 第四章 · 最佳实践：[最佳实践](./docs/guide/best-practices.md)
-- 参考：[命令总览](./docs/guide/overview.md) · [群管理与 FAQ](./docs/guide/faq.md) · [自建查询服务](./docs/guide/self-host.md)
+- 参考：[命令总览](./docs/guide/overview.md) · [网页建卡器](./docs/guide/card-builder.md) · [角色卡字段](./docs/guide/card-fields.md) · [群管理与 FAQ](./docs/guide/faq.md) · [自建查询服务](./docs/guide/self-host.md)
 
 ## 📦 安装
 

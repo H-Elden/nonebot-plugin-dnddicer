@@ -1610,7 +1610,7 @@ TIMELINE = [
     cast_resources,
     rest_short,
     rest_long,
-    # 第十二幕：角色卡图与立绘（《角色卡图与立绘》页）
+    # 第十二幕：角色卡图与立绘（《角色卡录入》的卡图与立绘节）
     card_image_demo,
     # 第十三幕：角色卡体验补强（2026-10-24）
     inspiration_flow,
