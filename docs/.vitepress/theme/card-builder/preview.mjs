@@ -347,18 +347,21 @@ export function buildPreviewView(builder, state, options = {}, portraitDataUrl =
 
 function featurePanel(title, items) {
   return `<div class="panel"><div class="panel-title">${escapeHtml(title)}</div>${items
-    .map(
-      (item) =>
-        `<div class="feature"><table class="f-head"><tr><td class="f-title">${
-          item.level ? `<span class="f-level">${item.level}级</span>` : ''
-        }<span class="f-name">${escapeHtml(item.name)}</span></td>${
-          item.uses
-            ? `<td class="f-uses-cell"><span class="f-uses">${escapeHtml(item.uses)}</span></td>`
-            : ''
-        }</tr></table>${
-          item.text ? `<div class="f-text">${escapeHtml(item.text)}</div>` : ''
-        }</div>`,
-    )
+    .map((item) => {
+      const paragraphs = textOf(item.text)
+        .split('\n')
+        .map((paragraph) => paragraph.trim())
+        .filter((paragraph) => paragraph !== '')
+      return `<div class="feature"><table class="f-head"><tr><td class="f-title">${
+        item.level ? `<span class="f-level">${item.level}级</span>` : ''
+      }<span class="f-name">${escapeHtml(item.name)}</span></td>${
+        item.uses
+          ? `<td class="f-uses-cell"><span class="f-uses">${escapeHtml(item.uses)}</span></td>`
+          : ''
+      }</tr></table>${paragraphs
+        .map((paragraph) => `<div class="f-text">${escapeHtml(paragraph)}</div>`)
+        .join('')}</div>`
+    })
     .join('')}</div>`
 }
 

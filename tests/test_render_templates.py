@@ -202,6 +202,19 @@ def test_char_card_story_keeps_paragraph_lines() -> None:
     assert "此后伊瑟兰离开书斋" in html
 
 
+def test_char_card_feature_text_paragraphs() -> None:
+    """四段卡面长说明按段渲染成独立的 .f-text，段首缩进不跨段。"""
+    pytest.importorskip("jinja2", reason="模板渲染需要可选的 [render] 依赖（含 Jinja2）")
+    from nonebot_plugin_dnddicer.character.card_view import build_card_view
+    from nonebot_plugin_dnddicer.character.services import gen_template_char, parse_feats
+
+    character = gen_template_char()
+    character.feats = parse_feats("战法师:第一段//第二段")
+    html = _render_char(build_card_view(character))
+    assert '<div class="f-text">第一段</div>' in html
+    assert '<div class="f-text">第二段</div>' in html
+
+
 def test_char_card_layout_panel_order() -> None:
     """右栏：武器表 → 两列（左限定资源/装备/魔法物品/钱币/背景与个性，
     右专长/种族特性/职业特性）→ 背景故事；熟练与语言、战斗记录留在左栏。"""
@@ -325,6 +338,10 @@ def test_char_card_stylesheet_geometry() -> None:
     assert css.index('"Noto Sans CJK SC"') < css.index('"Microsoft YaHei"')
     assert "Georgia" not in css
     assert ".story-line {" in css and "text-indent: 2em;" in css
+    f_text_block = css.split(".f-text {", 1)[1].split("}", 1)[0]
+    assert "text-indent: 2em;" in f_text_block
+    m_text_block = css.split(".m-text {", 1)[1].split("}", 1)[0]
+    assert "text-indent: 2em;" in m_text_block
     assert "white-space: pre-wrap;" in css
     assert ".m-tag" in css and ".bg-grid" in css and ".item-grid" in css
     # 故事折行预算与样式表的故事区宽度同源

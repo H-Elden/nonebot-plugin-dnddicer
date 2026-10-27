@@ -328,6 +328,7 @@ def test_multiline_descriptions_keep_line_breaks() -> None:
     character.features = parse_feature_list(f"奥术回想:1/1短休|{card_text}")
     view = build_card_view(character)
     assert view.feats[0].text == text
+    assert view.feats[0].paragraphs == ("第一段", "第二段")
     assert view.race_traits[0].text == text
     assert view.class_traits[0].text == text
     assert view.resources[0].text == text

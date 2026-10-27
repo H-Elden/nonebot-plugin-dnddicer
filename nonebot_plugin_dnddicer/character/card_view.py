@@ -99,6 +99,11 @@ class FeatureView:
     text: str = ""
     level: int = 0
 
+    @property
+    def paragraphs(self) -> Tuple[str, ...]:
+        """说明段落（卡文本 ``//`` 已在构造时转成换行）。"""
+        return tuple(part for part in self.text.split("\n") if part)
+
 
 @dataclass(frozen=True)
 class MagicItemView:

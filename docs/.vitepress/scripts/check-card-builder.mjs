@@ -925,7 +925,16 @@ function main() {
     '',
   )
   const multilineHtml = renderPreviewHtml(multilinePreview, cardCss)
-  check('多段说明在预览中保留换行', multilineHtml.includes(multiline))
+  check(
+    '多段说明在预览中按段渲染',
+    multilineHtml.includes('<div class="f-text">第一段</div>') &&
+      multilineHtml.includes('<div class="f-text">第二段</div>'),
+  )
+  check(
+    '卡面长说明段首缩进',
+    /\.f-text\s*\{[^}]*text-indent:\s*2em/.test(cardCss) &&
+      /\.m-text\s*\{[^}]*text-indent:\s*2em/.test(cardCss),
+  )
   check(
     '卡面长说明按行渲染',
     /\.f-text\s*\{[^}]*white-space:\s*pre-wrap/.test(cardCss),
