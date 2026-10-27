@@ -137,7 +137,8 @@ function loadExample() {
     return
   }
   Object.assign(state, parsed.state)
-  if (autoName) cardName.value = parsed.state[K.NAME] || '示例卡'
+  // 卡名是卡库标识，示例卡固定用「矿坑」，不与卡内 $姓名$ 相同
+  if (autoName) cardName.value = '矿坑'
   showNotice('已载入示例卡（5 级高等精灵法师），可以直接改；也可以从「导入卡文本」粘自己的卡。')
 }
 
