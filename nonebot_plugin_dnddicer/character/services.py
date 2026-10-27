@@ -85,7 +85,6 @@ from .constants import (
     ITEM_QUANTITY_MAX,
     MAGIC_ITEM_MAX_COUNT,
     MAGIC_ITEM_NAME_MAX_LEN,
-    MAGIC_ITEM_PARAGRAPH_MAX,
     MAGIC_ITEM_TAG_MAX_LEN,
     MAGIC_ITEM_TEXT_MAX_LEN,
     PREPARED_CASTERS_2014,
@@ -357,6 +356,20 @@ def _ensure_free_text(text: str, label: str) -> None:
             raise AssertionError(f"{label}不能包含符号「{char}」: {text}")
 
 
+def _normalize_description_text(
+    text: str, label: str, max_len: int, *, echo: str = ""
+) -> str:
+    """卡面长说明：``//`` 或换行分段，去空段、只限总字数；回写统一用 ``//``。"""
+    paragraphs = [
+        part.strip() for part in re.split(r"//|\r?\n", text)
+    ]
+    paragraphs = [part for part in paragraphs if part]
+    total = sum(len(part) for part in paragraphs)
+    if total > max_len:
+        raise AssertionError(f"{label}过长（≤{max_len} 字）: {echo or text}")
+    return "//".join(paragraphs)
+
+
 def validate_feature_name(name: str) -> None:
     """限定资源名称基础校验（解析与 .设置能力 共用；失败抛 AssertionError）。"""
     if not name:
@@ -446,9 +459,8 @@ def parse_feature_item(item: str) -> CharacterFeature:
         raise AssertionError(f"限定资源说明不能为空: {raw}")
     if text:
         _ensure_free_text(text, "限定资源说明")
-    if len(text) > FEATURE_TEXT_MAX_LEN:
-        raise AssertionError(
-            f"限定资源说明过长（≤{FEATURE_TEXT_MAX_LEN} 字）: {raw}"
+        text = _normalize_description_text(
+            text, "限定资源说明", FEATURE_TEXT_MAX_LEN, echo=raw
         )
     name_part, separator, value_part = body.partition(":")
     if not separator:
@@ -480,6 +492,7 @@ def parse_feature_item(item: str) -> CharacterFeature:
 
 def parse_feature_list(content: str) -> List[CharacterFeature]:
     """解析 ``$限定资源$`` 段全文（分号分条；名称卡内唯一、数量 ≤ 上限）。"""
+    _ensure_no_dollar(content, "限定资源", allow_newline=True)
     items = _split_semicolon_items(content)
     if len(items) > FEATURE_MAX_COUNT:
         raise AssertionError(f"限定资源数量最多 {FEATURE_MAX_COUNT} 项")
@@ -743,8 +756,9 @@ def parse_spell_slots(content: str) -> SpellSlots:
 def _ensure_no_dollar(content: str, label: str, *, allow_newline: bool = False) -> None:
     """卡面段内容不得含 ``$``（模板解析按它分段）；默认也不得换行。
 
-    ``allow_newline=True`` 只给 ``$故事$`` 使用：故事可以多行多段，其余段
-    仍保持「一段一行」，避免与模板关键字切分混淆。
+    ``allow_newline=True`` 用于允许分段的字段：``$故事$`` 与只用于卡面的
+    长说明（专长 / 种族特性 / 职业特性 / 限定资源）。长说明的硬换行在
+    回写时统一转成 ``//`` 分段；其余段仍保持「一段一行」。
     """
     if "$" in content:
         raise AssertionError(f"{label}内容不能包含符号「$」")
@@ -891,9 +905,9 @@ def parse_combat(content: str) -> Dict[str, str]:
 def parse_feats(content: str) -> List[str]:
     """解析 ``$专长$`` 段（``;`` 分条，可写 ``名称:说明``，名称唯一）。
 
-    说明（2026-10-21 批②）只用于卡面，最长 60 字；不写说明时回写保持原名。
+    说明（2026-10-21 批②）只用于卡面，最长 400 字；不写说明时回写保持原名。
     """
-    _ensure_no_dollar(content, "专长")
+    _ensure_no_dollar(content, "专长", allow_newline=True)
     items = [item.strip() for item in content.split(";") if item.strip()]
     if len(items) > FEAT_MAX_COUNT:
         raise AssertionError(f"专长最多 {FEAT_MAX_COUNT} 项")
@@ -904,15 +918,14 @@ def parse_feats(content: str) -> List[str]:
         name, text = name.strip(), text.strip()
         if text:
             _ensure_free_text(text, f"专长「{name}」的说明")
+            text = _normalize_description_text(
+                text, "专长说明", FEAT_TEXT_MAX_LEN
+            )
         if not name:
             raise AssertionError(f"专长名称不能为空: {item}")
         if len(name) > FEAT_NAME_MAX_LEN:
             raise AssertionError(
                 f"专长名称过长（≤{FEAT_NAME_MAX_LEN} 字）: {name}"
-            )
-        if len(text) > FEAT_TEXT_MAX_LEN:
-            raise AssertionError(
-                f"专长说明过长（≤{FEAT_TEXT_MAX_LEN} 字）: {text}"
             )
         if name in seen:
             raise AssertionError(f"专长重复: {name}")
@@ -923,7 +936,7 @@ def parse_feats(content: str) -> List[str]:
 
 def parse_race_traits(content: str) -> List[str]:
     """解析 ``$种族特性$`` 段（``;`` 分条，``名称:说明``，名称唯一）。"""
-    _ensure_no_dollar(content, "种族特性")
+    _ensure_no_dollar(content, "种族特性", allow_newline=True)
     items = [item.strip() for item in content.split(";") if item.strip()]
     if len(items) > RACE_TRAIT_MAX_COUNT:
         raise AssertionError(f"种族特性最多 {RACE_TRAIT_MAX_COUNT} 项")
@@ -934,15 +947,14 @@ def parse_race_traits(content: str) -> List[str]:
         name, text = name.strip(), text.strip()
         if text:
             _ensure_free_text(text, f"种族特性「{name}」的说明")
+            text = _normalize_description_text(
+                text, "种族特性说明", RACE_TRAIT_TEXT_MAX_LEN
+            )
         if not name:
             raise AssertionError(f"种族特性名称不能为空: {item}")
         if len(name) > RACE_TRAIT_NAME_MAX_LEN:
             raise AssertionError(
                 f"种族特性名称过长（≤{RACE_TRAIT_NAME_MAX_LEN} 字）: {name}"
-            )
-        if len(text) > RACE_TRAIT_TEXT_MAX_LEN:
-            raise AssertionError(
-                f"种族特性说明过长（≤{RACE_TRAIT_TEXT_MAX_LEN} 字）: {text}"
             )
         if name in seen:
             raise AssertionError(f"种族特性重复: {name}")
@@ -953,7 +965,7 @@ def parse_race_traits(content: str) -> List[str]:
 
 def parse_class_features(content: str) -> List[ClassFeature]:
     """解析 ``$职业特性$`` 段（``;`` 分条，``等级|名称:说明``，名称唯一）。"""
-    _ensure_no_dollar(content, "职业特性")
+    _ensure_no_dollar(content, "职业特性", allow_newline=True)
     items = [item.strip() for item in content.split(";") if item.strip()]
     if len(items) > CLASS_FEATURE_MAX_COUNT:
         raise AssertionError(f"职业特性最多 {CLASS_FEATURE_MAX_COUNT} 项")
@@ -978,9 +990,8 @@ def parse_class_features(content: str) -> List[ClassFeature]:
             )
         if text:
             _ensure_free_text(text, f"职业特性「{name}」的说明")
-        if len(text) > CLASS_FEATURE_TEXT_MAX_LEN:
-            raise AssertionError(
-                f"职业特性说明过长（≤{CLASS_FEATURE_TEXT_MAX_LEN} 字）: {text}"
+            text = _normalize_description_text(
+                text, "职业特性说明", CLASS_FEATURE_TEXT_MAX_LEN
             )
         if name in seen:
             raise AssertionError(f"职业特性重复: {name}")
@@ -1029,19 +1040,10 @@ def parse_items(content: str) -> List[str]:
 
 
 def _parse_magic_item_paragraphs(text: str, item: str) -> str:
-    """魔法物品说明：``//`` 分段，去空段、限段数与总字数。"""
-    paragraphs = [part.strip() for part in text.split("//")]
-    paragraphs = [part for part in paragraphs if part]
-    if len(paragraphs) > MAGIC_ITEM_PARAGRAPH_MAX:
-        raise AssertionError(
-            f"魔法物品说明最多 {MAGIC_ITEM_PARAGRAPH_MAX} 段: {item}"
-        )
-    total = sum(len(part) for part in paragraphs)
-    if total > MAGIC_ITEM_TEXT_MAX_LEN:
-        raise AssertionError(
-            f"魔法物品说明过长（≤{MAGIC_ITEM_TEXT_MAX_LEN} 字）: {item}"
-        )
-    return "//".join(paragraphs)
+    """魔法物品说明：``//`` 分段，去空段、限总字数（段落数不设限）。"""
+    return _normalize_description_text(
+        text, "魔法物品说明", MAGIC_ITEM_TEXT_MAX_LEN, echo=item
+    )
 
 
 def parse_magic_items(content: str) -> List[MagicItem]:

@@ -19,6 +19,7 @@ from nonebot_plugin_dnddicer.character.services import (
     parse_combat,
     parse_combat_notes,
     parse_feature_item,
+    parse_feature_list,
     parse_feats,
     parse_items,
     parse_magic_items,
@@ -200,8 +201,8 @@ def test_magic_items_parsing() -> None:
         parse_magic_items("防护斗篷||说明")
     with pytest.raises(AssertionError, match="名称过长"):
         parse_magic_items("长" * 31 + "|奇物")
-    with pytest.raises(AssertionError, match="最多 .* 段"):
-        parse_magic_items("防护斗篷|奇物|" + "//".join(["段"] * 6))
+    many = parse_magic_items("防护斗篷|奇物|" + "//".join(["段"] * 6))
+    assert many[0].get_paragraphs() == ["段"] * 6
     with pytest.raises(AssertionError, match="说明过长"):
         parse_magic_items("防护斗篷|奇物|" + "长" * 501)
 
@@ -405,8 +406,9 @@ def test_feature_and_feat_description() -> None:
     feature = parse_feature_item("奥术回想:1/1短休|短休时回复一个法术位")
     assert feature.text == "短休时回复一个法术位"
     assert feature.get_info() == "奥术回想:1/1短休|短休时回复一个法术位"
+    assert parse_feature_item("奥术回想:1/1短休|" + "长" * 400).text == "长" * 400
     with pytest.raises(AssertionError, match="限定资源说明过长"):
-        parse_feature_item("奥术回想:1/1短休|" + "长" * 81)
+        parse_feature_item("奥术回想:1/1短休|" + "长" * 401)
 
     assert parse_feats("战法师:专注豁免具有优势; 幸运") == [
         "战法师:专注豁免具有优势",
@@ -415,8 +417,48 @@ def test_feature_and_feat_description() -> None:
     assert parse_race_traits("黑暗视觉:60 尺内微光视为明亮") == [
         "黑暗视觉:60 尺内微光视为明亮"
     ]
+    assert parse_feats("战法师:" + "长" * 400) == ["战法师:" + "长" * 400]
     with pytest.raises(AssertionError, match="专长说明过长"):
-        parse_feats("战法师:" + "长" * 61)
+        parse_feats("战法师:" + "长" * 401)
+    assert parse_race_traits("黑暗视觉:" + "长" * 400) == [
+        "黑暗视觉:" + "长" * 400
+    ]
+    with pytest.raises(AssertionError, match="种族特性说明过长"):
+        parse_race_traits("黑暗视觉:" + "长" * 401)
+    assert parse_class_features("1|仪式学家:" + "长" * 400)[0].text == "长" * 400
+    with pytest.raises(AssertionError, match="职业特性说明过长"):
+        parse_class_features("1|仪式学家:" + "长" * 401)
+
+
+def test_multiline_descriptions_roundtrip() -> None:
+    raw = "第一段\n第二段"
+    normalized = "第一段//第二段"
+    assert parse_feats(f"战法师:{raw}") == [f"战法师:{normalized}"]
+    assert parse_race_traits(f"黑暗视觉:{raw}") == [f"黑暗视觉:{normalized}"]
+    assert parse_class_features(f"1|仪式学家:{raw}")[0].text == normalized
+    assert parse_feature_item(f"奥术回想:1/1短休|{raw}").text == normalized
+
+    character = gen_template_char()
+    character.feats = parse_feats(f"战法师:{normalized}")
+    character.race_traits = parse_race_traits(f"黑暗视觉:{normalized}")
+    character.class_traits = parse_class_features(f"1|仪式学家:{normalized}")
+    character.features = parse_feature_list(f"奥术回想:1/1短休|{normalized}")
+    exported = character.get_char_info()
+    assert f"$专长$ 战法师:{normalized}" in exported
+    assert f"$种族特性$ 黑暗视觉:{normalized}" in exported
+    assert f"$职业特性$ 1|仪式学家:{normalized}" in exported
+    assert f"$限定资源$ 奥术回想:1/1短休|{normalized}" in exported
+
+    reparsed = CharacterService.parse(exported, "g", "u", existing=character)
+    assert reparsed.feats == [f"战法师:{normalized}"]
+    assert reparsed.race_traits == [f"黑暗视觉:{normalized}"]
+    assert reparsed.class_traits[0].text == normalized
+    assert reparsed.features[0].text == normalized
+
+    paragraphs = "长" * 200 + "//" + "长" * 200
+    assert parse_feats(f"战法师:{paragraphs}") == [f"战法师:{paragraphs}"]
+    with pytest.raises(AssertionError, match="专长说明过长"):
+        parse_feats("战法师:" + "长" * 200 + "//" + "长" * 201)
 
 
 def test_single_segment_merge_new_segments() -> None:

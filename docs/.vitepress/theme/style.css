@@ -469,6 +469,13 @@
 .cb-textarea {
   resize: vertical;
   min-height: 72px;
+  overflow-y: auto;
+}
+
+.cb-longtext {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .cb-grid {

@@ -216,8 +216,9 @@
         :state="state"
         :field-key="K.FEATS"
         :max="limits.feat_max_count || 20"
+        :text-max="limits.feat_text_max_len || 400"
         name-placeholder="战法师"
-        text-placeholder="专注豁免具有优势（≤60 字）"
+        text-placeholder="专注豁免具有优势"
         add-label="添加专长"
       />
 
@@ -226,8 +227,9 @@
         :state="state"
         :field-key="K.RACE_TRAITS"
         :max="limits.race_trait_max_count || 20"
+        :text-max="limits.race_trait_text_max_len || 400"
         name-placeholder="黑暗视觉"
-        text-placeholder="60 尺内微光视为明亮（≤80 字）"
+        text-placeholder="60 尺内微光视为明亮"
         add-label="添加种族特性"
       />
 

@@ -6,7 +6,7 @@
  * `char_card.css` 同步）。所有用户文本都经过 HTML 转义。
  */
 
-import { K } from './core.mjs'
+import { K, splitParagraphs } from './core.mjs'
 
 function textOf(value) {
   return value === undefined || value === null ? '' : String(value)
@@ -211,10 +211,7 @@ export function buildPreviewView(builder, state, options = {}, portraitDataUrl =
     .map((row) => ({
       name: trimOf(row.name),
       tag: trimOf(row.tag),
-      paragraphs: trimOf(row.text)
-        .split(/\n\s*\n/)
-        .map((item) => item.replace(/\n/g, ' ').trim())
-        .filter((item) => item !== ''),
+      paragraphs: splitParagraphs(row.text),
     }))
 
   const items = (state[K.ITEMS] || [])

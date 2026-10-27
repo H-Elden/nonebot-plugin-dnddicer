@@ -487,6 +487,8 @@ body {
   line-height: 1.4;
   color: #3b3a36;
   margin-top: 1px;
+  /* 四段卡面长说明支持多段：换行按行渲染，长行仍自动折行 */
+  white-space: pre-wrap;
 }
 
 .plain-line {

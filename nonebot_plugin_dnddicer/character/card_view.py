@@ -423,7 +423,11 @@ def _resource_views(character: DNDCharacter) -> Tuple[FeatureView, ...]:
             if recover:
                 uses += f" {recover}"
         rows.append(
-            FeatureView(name=feature.name, uses=uses, text=feature.text)
+            FeatureView(
+                name=feature.name,
+                uses=uses,
+                text=feature.text.replace("//", "\n"),
+            )
         )
     return tuple(rows)
 
@@ -434,7 +438,7 @@ def _class_trait_views(character: DNDCharacter) -> Tuple[FeatureView, ...]:
         FeatureView(
             name=item.name,
             level=item.level,
-            text=item.text,
+            text=item.text.replace("//", "\n"),
         )
         for item in sorted(character.class_traits, key=lambda item: item.level)
     ]
@@ -552,7 +556,9 @@ def _named_features(items: Tuple[str, ...]) -> Tuple[FeatureView, ...]:
     rows = []
     for item in items:
         name, text = _split_name_text(item)
-        rows.append(FeatureView(name=name or item, text=text))
+        rows.append(
+            FeatureView(name=name or item, text=text.replace("//", "\n"))
+        )
     return tuple(rows)
 
 

@@ -128,6 +128,14 @@ function normalizeNewlines(value) {
   return textOf(value).replace(/\r\n?/g, '\n')
 }
 
+/** 换行分段：每个非空行是一段（空行忽略），导出为卡文本的 `//` 段落。 */
+export function splitParagraphs(value) {
+  return normalizeNewlines(value)
+    .split('\n')
+    .map((paragraph) => paragraph.trim())
+    .filter((paragraph) => paragraph !== '')
+}
+
 function splitSemicolon(content) {
   return content
     .split(';')
@@ -560,18 +568,29 @@ export function createCardBuilder(spec) {
       if (!raw) continue
       const [rawName, rawText] = partition(raw, ':')
       const name = rawName.trim()
-      const text = rawText.trim()
+      const cardText = rawText.trim()
+      const paragraphs = cardText
+        .split(/\/\/|\r?\n/)
+        .map((paragraph) => paragraph.trim())
+        .filter((paragraph) => paragraph !== '')
+      const text = paragraphs.join('\n')
       if (!name) fail(`${label}名称不能为空: ${item}`)
-      for (const char of [';', '|', '$']) {
-        if (text.includes(char)) {
-          fail(`${label}「${name}」的说明不能包含符号「${char}」: ${text}`)
+      for (const paragraph of paragraphs) {
+        for (const char of [';', '|', '$']) {
+          if (paragraph.includes(char)) {
+            fail(`${label}「${name}」的说明不能包含符号「${char}」: ${excerptOf(paragraph)}`)
+          }
         }
       }
       if (charLength(name) > nameMax) {
         fail(`${label}名称过长（≤${nameMax} 字）: ${name}`)
       }
-      if (charLength(text) > textMax) {
-        fail(`${label}说明过长（≤${textMax} 字）: ${text}`)
+      const total = paragraphs.reduce(
+        (sum, paragraph) => sum + charLength(paragraph),
+        0,
+      )
+      if (total > textMax) {
+        fail(`${label}说明过长（≤${textMax} 字）: ${excerptOf(cardText)}`)
       }
       if (seen.has(name)) fail(`${label}重复: ${name}`)
       seen.add(name)
@@ -691,14 +710,27 @@ export function createCardBuilder(spec) {
     const seen = new Set()
     for (const item of splitSemicolon(content)) {
       const [body, textRaw] = partition(item, '|')
-      const text = textRaw.trim()
-      if (text) {
+      const cardText = textRaw.trim()
+      const paragraphs = cardText
+        .split(/\/\/|\r?\n/)
+        .map((paragraph) => paragraph.trim())
+        .filter((paragraph) => paragraph !== '')
+      const text = paragraphs.join('\n')
+      for (const paragraph of paragraphs) {
         for (const char of [';', '|', '$']) {
-          if (text.includes(char)) fail(`限定资源说明不能包含符号「${char}」: ${item}`)
+          if (paragraph.includes(char)) {
+            fail(`限定资源说明不能包含符号「${char}」: ${excerptOf(paragraph)}`)
+          }
         }
       }
-      if (charLength(text) > (limits.feature_text_max_len || 80)) {
-        fail(`限定资源说明过长（≤${limits.feature_text_max_len || 80} 字）: ${item}`)
+      const total = paragraphs.reduce(
+        (sum, paragraph) => sum + charLength(paragraph),
+        0,
+      )
+      if (total > (limits.feature_text_max_len || 400)) {
+        fail(
+          `限定资源说明过长（≤${limits.feature_text_max_len || 400} 字）: ${excerptOf(cardText)}`,
+        )
       }
       const [rawName, rawValue] = partition(body, ':')
       const name = rawName.trim()
@@ -1053,29 +1085,37 @@ export function createCardBuilder(spec) {
       }
       const [rawName, rawText] = partition(body, ':')
       const name = rawName.trim()
-      const text = rawText.trim()
+      const cardText = rawText.trim()
+      const paragraphs = cardText
+        .split(/\/\/|\r?\n/)
+        .map((paragraph) => paragraph.trim())
+        .filter((paragraph) => paragraph !== '')
+      const text = paragraphs.join('\n')
       if (!name) fail(`职业特性名称不能为空: ${raw}`)
-      for (const char of [';', '|', '$']) {
-        if (text.includes(char)) fail(`职业特性「${name}」的说明不能包含符号「${char}」: ${text}`)
+      for (const paragraph of paragraphs) {
+        for (const char of [';', '|', '$']) {
+          if (paragraph.includes(char)) {
+            fail(`职业特性「${name}」的说明不能包含符号「${char}」: ${excerptOf(paragraph)}`)
+          }
+        }
       }
       if (charLength(name) > (limits.class_feature_name_max_len || 30)) {
         fail(`职业特性名称过长（≤${limits.class_feature_name_max_len || 30} 字）: ${name}`)
       }
-      if (charLength(text) > (limits.class_feature_text_max_len || 80)) {
-        fail(`职业特性说明过长（≤${limits.class_feature_text_max_len || 80} 字）: ${text}`)
+      const total = paragraphs.reduce(
+        (sum, paragraph) => sum + charLength(paragraph),
+        0,
+      )
+      if (total > (limits.class_feature_text_max_len || 400)) {
+        fail(
+          `职业特性说明过长（≤${limits.class_feature_text_max_len || 400} 字）: ${excerptOf(cardText)}`,
+        )
       }
       if (seen.has(name)) fail(`职业特性重复: ${name}`)
       seen.add(name)
       rows.push({ level: String(Number(level)), name, text })
     }
     return rows
-  }
-
-  function magicParagraphsOf(text) {
-    return normalizeNewlines(text)
-      .split(/\n\s*\n/)
-      .map((paragraph) => paragraph.replace(/\n/g, ' ').trim())
-      .filter((paragraph) => paragraph !== '')
   }
 
   function validateMagicItemField(value, label) {
@@ -1109,7 +1149,7 @@ export function createCardBuilder(spec) {
       if (seen.has(name)) fail(`魔法物品重复: ${name}`)
       seen.add(name)
       const paragraphs = text
-        .split('//')
+        .split(/\/\/|\r?\n/)
         .map((paragraph) => paragraph.trim())
         .filter((paragraph) => paragraph !== '')
       for (const paragraph of paragraphs) {
@@ -1119,14 +1159,11 @@ export function createCardBuilder(spec) {
           }
         }
       }
-      if (paragraphs.length > (limits.magic_item_paragraph_max || 5)) {
-        fail(`魔法物品说明最多 ${limits.magic_item_paragraph_max || 5} 段: ${item}`)
-      }
       const total = paragraphs.reduce((sum, paragraph) => sum + charLength(paragraph), 0)
       if (total > (limits.magic_item_text_max_len || 500)) {
         fail(`魔法物品说明过长（≤${limits.magic_item_text_max_len || 500} 字）: ${item}`)
       }
-      rows.push({ name, tag, text: paragraphs.join('\n\n') })
+      rows.push({ name, tag, text: paragraphs.join('\n') })
     }
     return rows
   }
@@ -1168,14 +1205,14 @@ export function createCardBuilder(spec) {
           content,
           '专长',
           limits.feat_name_max_len || 20,
-          limits.feat_text_max_len || 60,
+          limits.feat_text_max_len || 400,
         )
       case 'raceTraits':
         return parseNamedRows(
           content,
           '种族特性',
           limits.race_trait_name_max_len || 30,
-          limits.race_trait_text_max_len || 80,
+          limits.race_trait_text_max_len || 400,
         )
       case 'classTraits':
         return parseClassTraits(content)
@@ -1647,6 +1684,17 @@ export function createCardBuilder(spec) {
     return items.join('; ')
   }
 
+  /** 卡面长说明：状态里的换行转成 // 分段；正文里禁止出现 //。 */
+  function descriptionParagraphs(text, label) {
+    const paragraphs = splitParagraphs(text)
+    for (const paragraph of paragraphs) {
+      if (paragraph.includes('//')) {
+        fail(`${label}不能包含「//」（它专用于卡文本分段，换行即分段）`)
+      }
+    }
+    return paragraphs
+  }
+
   function buildNamedRows(state, key, label) {
     const rows = state[key].filter(
       (row) => trimOf(row.name) || trimOf(row.text),
@@ -1662,15 +1710,20 @@ export function createCardBuilder(spec) {
         [':', ';', '|', '$'],
         '名称里不能再出现冒号、分号或竖线',
       )
+      let body = ''
       if (text) {
-        ensureNoSeparator(
+        body = descriptionParagraphs(
           text,
+          `${label}「${name}」的说明`,
+        ).join('//')
+        ensureNoSeparator(
+          body,
           `${label}「${name}」的说明`,
           [';', '|', '$'],
           '多条之间用分号分隔，说明里不能出现分号、竖线或 $',
         )
       }
-      items.push(text ? `${name}:${text}` : name)
+      items.push(body ? `${name}:${body}` : name)
     }
     return items.join('; ')
   }
@@ -1770,16 +1823,21 @@ export function createCardBuilder(spec) {
       const recover = recoverText(row.modes)
       if (!recover) fail(`限定资源「${name}」要选恢复方式（短休/长休/两者/手动）`)
       const text = trimOf(row.text)
+      let body = ''
       if (text) {
-        ensureNoSeparator(
+        body = descriptionParagraphs(
           text,
+          `限定资源「${name}」的说明`,
+        ).join('//')
+        ensureNoSeparator(
+          body,
           `限定资源「${name}」的说明`,
           [';', '|', '$'],
           '资源之间用分号分隔，说明与次数之间用竖线',
         )
       }
       items.push(
-        `${name}:${normalizeIntText(cur)}/${normalizeIntText(max)}${recover}${text ? `|${text}` : ''}`,
+        `${name}:${normalizeIntText(cur)}/${normalizeIntText(max)}${recover}${body ? `|${body}` : ''}`,
       )
     }
     return items.join('; ')
@@ -1812,15 +1870,20 @@ export function createCardBuilder(spec) {
         fail(`职业特性「${name}」的等级无效: ${level}（写 1~20）`)
       }
       const text = trimOf(row.text)
+      let body = ''
       if (text) {
-        ensureNoSeparator(
+        body = descriptionParagraphs(
           text,
+          `职业特性「${name}」的说明`,
+        ).join('//')
+        ensureNoSeparator(
+          body,
           `职业特性「${name}」的说明`,
           [';', '|', '$'],
           '多条之间用分号分隔，说明里不能出现分号、竖线或 $',
         )
       }
-      items.push(`${Number(level)}|${name}${text ? `:${text}` : ''}`)
+      items.push(`${Number(level)}|${name}${body ? `:${body}` : ''}`)
     }
     return items.join('; ')
   }
@@ -1837,19 +1900,26 @@ export function createCardBuilder(spec) {
       if (!tag) fail(`魔法物品「${name}」要写标签（如 奇物，非普通）`)
       validateMagicItemField(name, '名称')
       validateMagicItemField(tag, '标签')
-      const paragraphs = magicParagraphsOf(row.text)
-      if (paragraphs.length > (limits.magic_item_paragraph_max || 5)) {
-        fail(`魔法物品「${name}」说明最多 ${limits.magic_item_paragraph_max || 5} 段`)
-      }
-      for (const paragraph of paragraphs) {
-        ensureNoSeparator(
-          paragraph,
-          `魔法物品「${name}」的说明`,
-          [';', '|', '$'],
-          '魔法物品之间用分号分隔，名称、标签与说明之间用竖线',
+      const paragraphs = descriptionParagraphs(
+        row.text,
+        `魔法物品「${name}」的说明`,
+      )
+      const total = paragraphs.reduce(
+        (sum, paragraph) => sum + charLength(paragraph),
+        0,
+      )
+      if (total > (limits.magic_item_text_max_len || 500)) {
+        fail(
+          `魔法物品「${name}」说明过长（≤${limits.magic_item_text_max_len || 500} 字）`,
         )
       }
       const body = paragraphs.join('//')
+      ensureNoSeparator(
+        body,
+        `魔法物品「${name}」的说明`,
+        [';', '|', '$'],
+        '魔法物品之间用分号分隔，名称、标签与说明之间用竖线',
+      )
       items.push(`${name}|${tag}${body ? `|${body}` : ''}`)
     }
     return items.join('; ')

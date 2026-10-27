@@ -317,6 +317,39 @@ function main() {
     '防护斗篷|奇物，非普通（需同调）|AC 和豁免 +1。//这件斗篷由银线织成。',
   )
 
+  // 魔法物品说明：换行分段，段落数不设限，只限 500 字
+  const manyParagraphState = builder.createState()
+  manyParagraphState[K.MAGIC_ITEMS] = [
+    { name: '防护斗篷', tag: '奇物', text: ['一', '二', '三', '四', '五', '六'].join('\n') },
+  ]
+  checkEqual(
+    '魔法物品 6 段可导出',
+    builder.contentFor(manyParagraphState, K.MAGIC_ITEMS),
+    '防护斗篷|奇物|一//二//三//四//五//六',
+  )
+  manyParagraphState[K.MAGIC_ITEMS][0].text = '第一段\n第二段'
+  checkEqual(
+    '魔法物品换行分段',
+    builder.contentFor(manyParagraphState, K.MAGIC_ITEMS),
+    '防护斗篷|奇物|第一段//第二段',
+  )
+  manyParagraphState[K.MAGIC_ITEMS][0].text = '第一段\n\n第二段'
+  checkEqual(
+    '魔法物品空行忽略',
+    builder.contentFor(manyParagraphState, K.MAGIC_ITEMS),
+    '防护斗篷|奇物|第一段//第二段',
+  )
+  manyParagraphState[K.MAGIC_ITEMS][0].text = '长'.repeat(501)
+  checkThrows(
+    '魔法物品超过 500 字被拒绝',
+    () => builder.contentFor(manyParagraphState, K.MAGIC_ITEMS),
+  )
+  manyParagraphState[K.MAGIC_ITEMS][0].text = '说明里不能有 // 双斜杠'
+  checkThrows(
+    '魔法物品说明双斜杠被拒绝',
+    () => builder.contentFor(manyParagraphState, K.MAGIC_ITEMS),
+  )
+
   // 装备不再有 [装备]
   check('物品无装备标记', !editedText.includes('[装备]'))
   checkThrows('物品 [装备] 被拒绝', () => builder.parseSegment(K.ITEMS, '长剑[装备]'))
@@ -818,6 +851,84 @@ function main() {
   check(
     '预览半熟练的半标记在加值后',
     halfHtml.includes('<span class="skv">+1</span><span class="half-mark">半</span>'),
+  )
+
+  // ── 卡面长说明支持多段 ──────────────────────────────────────────────
+  const multiline = '第一段\n第二段'
+  const multilineState = builder.createState()
+  multilineState[K.NAME] = '多段测试'
+  multilineState[K.LEVEL] = '5'
+  multilineState[K.ABILITY] = ['10', '10', '10', '10', '10', '10']
+  multilineState[K.FEATS] = [{ name: '巨武器大师', text: multiline }]
+  multilineState[K.RACE_TRAITS] = [{ name: '黑暗视觉', text: multiline }]
+  multilineState[K.CLASS_TRAITS] = [{ level: '3', name: '战斗大师', text: multiline }]
+  multilineState[K.FEATURE] = [
+    {
+      name: '动作如潮',
+      cur: '1',
+      max: '1',
+      modes: {
+        短休: { on: true, amount: '1' },
+        长休: { on: true, amount: '' },
+        两者: { on: false, amount: '' },
+        手动: { on: false, amount: '' },
+      },
+      text: multiline,
+    },
+  ]
+  const multilineText = builder.serializeCard(multilineState)
+  const multilineParsed = builder.parseCardText(multilineText)
+  check('多段说明可再次解析', multilineParsed.errors.length === 0)
+  check(
+    '多段专长导出为 // 分段',
+    multilineText.includes('$专长$ 巨武器大师:第一段//第二段'),
+  )
+  check(
+    '多段种族特性导出为 // 分段',
+    multilineText.includes('$种族特性$ 黑暗视觉:第一段//第二段'),
+  )
+  check(
+    '多段职业特性导出为 // 分段',
+    multilineText.includes('$职业特性$ 3|战斗大师:第一段//第二段'),
+  )
+  check(
+    '多段限定资源导出为 // 分段',
+    multilineText.includes('$限定资源$ 动作如潮:1/1短休+1,长休|第一段//第二段'),
+  )
+  checkEqual('多段专长说明往返', multilineParsed.state[K.FEATS][0].text, multiline)
+  checkEqual('多段种族特性说明往返', multilineParsed.state[K.RACE_TRAITS][0].text, multiline)
+  checkEqual('多段职业特性说明往返', multilineParsed.state[K.CLASS_TRAITS][0].text, multiline)
+  checkEqual('多段限定资源说明往返', multilineParsed.state[K.FEATURE][0].text, multiline)
+  const markerState = builder.parseCardText(multilineText).state
+  for (const key of [K.FEATS, K.RACE_TRAITS, K.CLASS_TRAITS, K.FEATURE]) {
+    markerState[key][0].text = '第一段//第二段'
+    checkThrows(`${key} 说明双斜杠被拒绝`, () => builder.contentFor(markerState, key))
+    markerState[key][0].text = multiline
+  }
+  const rawNewlineParsed = builder.parseCardText(
+    '$姓名$ 测试\n$专长$ 战法师:第一段\n第二段',
+  )
+  checkEqual(
+    '卡文本裸换行按分段导入',
+    rawNewlineParsed.state[K.FEATS][0].text,
+    multiline,
+  )
+  checkEqual(
+    '卡文本裸换行回写为 //',
+    builder.contentFor(rawNewlineParsed.state, K.FEATS),
+    '战法师:第一段//第二段',
+  )
+  const multilinePreview = buildPreviewView(
+    builder,
+    multilineParsed.state,
+    { rulesVersion: '5r' },
+    '',
+  )
+  const multilineHtml = renderPreviewHtml(multilinePreview, cardCss)
+  check('多段说明在预览中保留换行', multilineHtml.includes(multiline))
+  check(
+    '卡面长说明按行渲染',
+    /\.f-text\s*\{[^}]*white-space:\s*pre-wrap/.test(cardCss),
   )
 
   // ── 汇总 ────────────────────────────────────────────────────────────

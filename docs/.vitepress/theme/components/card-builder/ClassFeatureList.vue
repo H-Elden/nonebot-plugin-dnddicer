@@ -24,14 +24,16 @@
           <input v-model="item.name" class="cb-input" placeholder="仪式学家" />
         </label>
       </div>
-      <label class="cb-grid__cell">
+      <div class="cb-grid__cell">
         <span class="cb-grid__label">说明（可选，只用于卡面）</span>
-        <input
+        <LongTextarea
           v-model="item.text"
-          class="cb-input"
-          :placeholder="`法术书中的仪式法术可直接以仪式施展（≤${limits.class_feature_text_max_len || 80} 字）`"
+          count-mode="paragraph"
+          :max="limits.class_feature_text_max_len || 400"
+          placeholder="法术书中的仪式法术可直接以仪式施展"
+          aria-label="职业特性说明"
         />
-      </label>
+      </div>
     </template>
   </RepeaterRows>
 </template>
@@ -39,6 +41,7 @@
 <script setup>
 import { K } from '../../card-builder/core.mjs'
 import HintDot from './HintDot.vue'
+import LongTextarea from './LongTextarea.vue'
 import RepeaterRows from './RepeaterRows.vue'
 
 // $职业特性$：获得等级 + 名称 + 说明。

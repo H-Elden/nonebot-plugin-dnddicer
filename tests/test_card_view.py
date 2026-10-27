@@ -18,6 +18,8 @@ from nonebot_plugin_dnddicer.character.models import DNDCharacter
 from nonebot_plugin_dnddicer.character.services import (
     CharacterService,
     gen_template_char,
+    parse_class_features,
+    parse_feature_list,
 )
 
 _PNG = b"\x89PNG\r\n\x1a\n" + b"fake-portrait-bytes"
@@ -313,6 +315,22 @@ def test_card_face_extensions_are_wired() -> None:
         "着装此斗篷期间，你的 AC 和豁免获得 +1 加值。",
     )
     assert (view.spell_dc, view.spell_attack) == ("15", "+8")
+
+
+def test_multiline_descriptions_keep_line_breaks() -> None:
+    """四段卡面长说明的 ``//`` 分段在视图里转成换行，由卡面 CSS 按行渲染。"""
+    card_text = "第一段//第二段"
+    text = "第一段\n第二段"
+    character = gen_template_char()
+    character.feats = [f"战法师:{card_text}"]
+    character.race_traits = [f"黑暗视觉:{card_text}"]
+    character.class_traits = parse_class_features(f"1|仪式学家:{card_text}")
+    character.features = parse_feature_list(f"奥术回想:1/1短休|{card_text}")
+    view = build_card_view(character)
+    assert view.feats[0].text == text
+    assert view.race_traits[0].text == text
+    assert view.class_traits[0].text == text
+    assert view.resources[0].text == text
 
 
 def test_coins_fill_missing_denominations() -> None:

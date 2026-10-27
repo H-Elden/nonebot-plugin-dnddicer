@@ -38,10 +38,16 @@
           />
         </span>
       </div>
-      <label class="cb-grid__cell">
+      <div class="cb-grid__cell">
         <span class="cb-grid__label">说明（只用于卡面）</span>
-        <input v-model="item.text" class="cb-input" placeholder="短休时回复一个已消耗的法术位" />
-      </label>
+        <LongTextarea
+          v-model="item.text"
+          count-mode="paragraph"
+          :max="limits.feature_text_max_len || 400"
+          placeholder="短休时回复一个已消耗的法术位"
+          aria-label="限定资源说明"
+        />
+      </div>
     </template>
   </RepeaterRows>
 </template>
@@ -50,6 +56,7 @@
 import { computed } from 'vue'
 import { K } from '../../card-builder/core.mjs'
 import HintDot from './HintDot.vue'
+import LongTextarea from './LongTextarea.vue'
 import RepeaterRows from './RepeaterRows.vue'
 import ToggleChip from './ToggleChip.vue'
 

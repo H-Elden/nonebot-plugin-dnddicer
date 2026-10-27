@@ -20,28 +20,26 @@
           />
         </label>
       </div>
-      <label class="cb-grid__cell">
-        <span class="cb-grid__label">
-          说明
-          <HintDot text="空行分段，最多 5 段；卡面会单独显示名称、标签与说明段落。" />
-        </span>
-        <textarea
+      <div class="cb-grid__cell">
+        <span class="cb-grid__label">说明</span>
+        <LongTextarea
           v-model="item.text"
-          class="cb-textarea"
-          rows="3"
-          placeholder="着装此斗篷期间，你的 AC 和豁免获得 +1 加值。&#10;&#10;这件斗篷由银线织成，边缘绣着古老的守护符文。"
-        ></textarea>
-      </label>
+          :max="limits.magic_item_text_max_len || 500"
+          count-mode="paragraph"
+          placeholder="着装此斗篷期间，你的 AC 和豁免获得 +1 加值。&#10;这件斗篷由银线织成，边缘绣着古老的守护符文。"
+          aria-label="魔法物品说明"
+        />
+      </div>
     </template>
   </RepeaterRows>
 </template>
 
 <script setup>
 import { K } from '../../card-builder/core.mjs'
-import HintDot from './HintDot.vue'
+import LongTextarea from './LongTextarea.vue'
 import RepeaterRows from './RepeaterRows.vue'
 
-// $魔法物品$：名称 + 标签 + 多段说明（空行分段，导出时转成 //）。
+// $魔法物品$：名称 + 标签 + 多段说明（每行一段，导出时转成 //）。
 defineProps({
   state: { type: Object, required: true },
   limits: { type: Object, required: true },
