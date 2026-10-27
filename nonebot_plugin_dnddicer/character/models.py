@@ -524,7 +524,7 @@ class AbilityInfo(BaseModel):
                 pair[0],
             ),
         )
-        text = "/".join(f"{rule.scope}:{rule.rounding}" for _, rule in rules)
+        text = "; ".join(f"{rule.scope}:{rule.rounding}" for _, rule in rules)
         return f"{CHAR_INFO_KEY_HALF_PROF} {text}"
 
     def get_prof_info(self) -> str:
@@ -538,10 +538,10 @@ class AbilityInfo(BaseModel):
             prof_parts.append(name if scale == 1 else f"{scale}*{name}")
         # $熟练$ 的扩展分组与技能/豁免条目共用同一段：条目在前，分组在后
         prof_parts.extend(
-            f"{label}:{'·'.join(items)}" for label, items in self.get_prof_groups()
+            f"{label}:{','.join(items)}" for label, items in self.get_prof_groups()
         )
         if prof_parts:
-            info += f"{CHAR_INFO_KEY_PROF} {'/'.join(prof_parts)}\n"
+            info += f"{CHAR_INFO_KEY_PROF} {'; '.join(prof_parts)}\n"
         half_info = self.get_half_prof_info()
         if half_info:
             info += f"{half_info}\n"
@@ -561,7 +561,7 @@ class AbilityInfo(BaseModel):
                 prefix = "劣势"
             ext_parts.append(f"{name}:{prefix}{ext_str}")
         if ext_parts:
-            info += f"{CHAR_INFO_KEY_EXT} {'/'.join(ext_parts)}\n"
+            info += f"{CHAR_INFO_KEY_EXT} {'; '.join(ext_parts)}\n"
 
         return info.strip()
 
@@ -576,9 +576,9 @@ class WeaponInfo(BaseModel):
     """自定义武器/法术项（玩家自行填写，机器人不做规则判断）。
 
     录入格式与展示格式一致（可复制回 ``$武器$`` 段）：
-    ``名称±命中加值,伤害表达式+类型``，如 ``短剑+6,1d4+4穿刺``；
-    名称尾部 ``x`` 为「不可攻击检定」标记（如 ``火球术x,8d6火焰``）；
-    第三个逗号字段为卡面备注（2026-10-21 批②），如 ``匕首+5,1d4+2穿刺,灵巧·轻型``。
+    ``名称±命中加值|伤害表达式+类型[|备注]``，如 ``短剑+6|1d4+4穿刺``；
+    名称尾部 ``x`` 为「不可攻击检定」标记（如 ``火球术x|8d6火焰``）；
+    第三个竖线字段为卡面备注，如 ``匕首+5|1d4+2穿刺|灵巧, 轻型``。
     解析与校验见 ``character/services.py`` 的 ``parse_weapon_item``。
     """
 
@@ -587,16 +587,16 @@ class WeaponInfo(BaseModel):
     damage_expr: str = ""     # 伤害表达式（骰子与常数的加减组合，如 "1d4+4"）
     damage_type: str = ""     # 伤害类型（规范名，如 "穿刺"；空 = 不提示类型）
     no_attack: bool = False   # x 标记：不可进行攻击检定（纯伤害法术，如 火球术）
-    note: str = ""            # 卡面备注（如 "灵巧·轻型"；空 = 不显示）
+    note: str = ""            # 卡面备注（如 "灵巧, 轻型"；空 = 不显示）
 
     def get_info(self) -> str:
-        """展示/回写文本，如 ``短剑+6,1d4+4穿刺``、``匕首+5,1d4+2穿刺,灵巧·轻型``。"""
+        """展示/回写文本，如 ``短剑+6|1d4+4穿刺``、``匕首+5|1d4+2穿刺|灵巧, 轻型``。"""
         mark = "x" if self.no_attack else ""
-        text = f"{self.name}{mark}{self.attack_bonus},{self.damage_expr}"
+        text = f"{self.name}{mark}{self.attack_bonus}|{self.damage_expr}"
         if self.damage_type:
             text += self.damage_type
         if self.note:
-            text += f",{self.note}"
+            text += f"|{self.note}"
         return text
 
 
@@ -683,7 +683,7 @@ class SpellEntry(BaseModel):
 
     卡面展示用的五项元数据与备注（2026-10-21 批②）：
     ``cast_time`` / ``range`` / ``concentration`` / ``ritual`` / ``material`` /
-    ``note``，写在条目末尾的 ``|`` 之后（``时间=1动作,距离=150尺,专注=是``），
+    ``note``，写在条目末尾的 ``|`` 之后（``时间:1动作|距离:150尺|专注:是``），
     只用于渲染卡面图，不参与施法与结算。
     """
 
@@ -701,21 +701,21 @@ class SpellEntry(BaseModel):
         """详情的回写片段（只输出已填项，固定键序）。"""
         parts: List[str] = []
         if self.cast_time:
-            parts.append(f"时间={self.cast_time}")
+            parts.append(f"时间:{self.cast_time}")
         if self.range:
-            parts.append(f"距离={self.range}")
+            parts.append(f"距离:{self.range}")
         if self.concentration:
-            parts.append("专注=是")
+            parts.append("专注:是")
         if self.ritual:
-            parts.append("仪式=是")
+            parts.append("仪式:是")
         if self.material:
-            parts.append("材料=是")
+            parts.append("材料:是")
         if self.note:
-            parts.append(f"备注={self.note}")
-        return ",".join(parts)
+            parts.append(f"备注:{self.note}")
+        return "|".join(parts)
 
     def get_info(self) -> str:
-        """展示/回写文本，如 ``火球术:3*|时间=1动作,距离=150尺,材料=是``。"""
+        """展示/回写文本，如 ``火球术:3*|时间:1动作|距离:150尺|材料:是``。"""
         mark = "*" if self.prepared else ""
         text = f"{self.name}:{self.level}{mark}"
         detail = self.get_detail_text()
@@ -876,16 +876,16 @@ class DNDCharacter(BaseModel):
         if prof_part:
             parts.append(prof_part)
         if self.feats:
-            parts.append(f"{CHAR_INFO_KEY_FEATS} {'/'.join(self.feats)}")
+            parts.append(f"{CHAR_INFO_KEY_FEATS} {'; '.join(self.feats)}")
         if self.race_traits:
             parts.append(
-                f"{CHAR_INFO_KEY_RACE_TRAITS} {'/'.join(self.race_traits)}"
+                f"{CHAR_INFO_KEY_RACE_TRAITS} {'; '.join(self.race_traits)}"
             )
         if self.class_traits:
-            class_str = "/".join(item.get_info() for item in self.class_traits)
+            class_str = "; ".join(item.get_info() for item in self.class_traits)
             parts.append(f"{CHAR_INFO_KEY_CLASS_TRAITS} {class_str}")
         if self.weapons:
-            weapon_str = "/".join(weapon.get_info() for weapon in self.weapons)
+            weapon_str = "; ".join(weapon.get_info() for weapon in self.weapons)
             parts.append(f"{CHAR_INFO_KEY_WEAPON} {weapon_str}")
         if self.items:
             parts.append(f"{CHAR_INFO_KEY_ITEMS} {'; '.join(self.items)}")

@@ -16,8 +16,8 @@ $等级$ 5
 $生命值$ 20/30(5)
 $生命骰$ 3/4 D8
 $属性$ 15/14/13/12/10/8
-$熟练$ 力量/2*隐匿/奥秘
-$额外加值$ 隐匿:优势+2/游说:-2"""
+$熟练$ 力量; 2*隐匿; 奥秘
+$额外加值$ 隐匿:优势+2; 游说:-2"""
 
 
 def _roll(seq: SequenceRuntime):
@@ -34,7 +34,7 @@ def test_parse_template_to_dict():
     assert data["$姓名$"] == "伊丽莎白"
     assert data["$等级$"] == "5"
     assert data["$属性$"] == "15/14/13/12/10/8"
-    assert data["$熟练$"] == "力量/2*隐匿/奥秘"
+    assert data["$熟练$"] == "力量; 2*隐匿; 奥秘"
 
 
 def test_parse_character():
@@ -70,7 +70,7 @@ def test_parse_character_attack_entries_rejected():
 
 
 def test_parse_character_attack_ext_rejected():
-    """攻击条目退役：$额外加值$ 的 力量攻击 / 全局 攻击 键均按无效条目拒收。"""
+    """攻击条目退役：$额外加值$ 的 力量攻击; 全局 攻击 键均按无效条目拒收。"""
     for ext in ("力量攻击:+1", "攻击:优势"):
         with pytest.raises(AssertionError, match="为无效条目"):
             CharacterService.parse(

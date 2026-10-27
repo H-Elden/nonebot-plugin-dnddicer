@@ -22,8 +22,8 @@ def _parse(extra: str) -> DNDCharacter:
 
 
 def test_parse_half_prof_valid_and_sorted():
-    """全角冒号可解析；规则按固定顺序回写。"""
-    rules = parse_half_prof("力敏体：向上 / 全部:向下")
+    """多条用半角分号分隔；规则按固定顺序回写。"""
+    rules = parse_half_prof("力敏体:向上; 全部:向下")
     assert [(rule.scope, rule.rounding) for rule in rules] == [
         ("全部", "向下"),
         ("力敏体", "向上"),
@@ -36,7 +36,7 @@ def test_parse_half_prof_valid_and_sorted():
         ("全部", "不完整"),
         ("全部:随便", "取整方式无效"),
         ("身体:向下", "范围无效"),
-        ("全部:向下/全部:向下", "重复"),
+        ("全部:向下; 全部:向下", "重复"),
         ("全部:向下:向上", "不完整"),
     ],
 )
@@ -84,7 +84,7 @@ def test_2024_joat_skills_only_excludes_initiative_and_raw_checks():
 
 def test_full_proficiency_and_expertise_disable_half():
     """已有熟练/专精时半熟练不叠加。"""
-    char = _parse("$熟练$ 先攻/运动/察觉/2*隐匿\n$半熟练$ 全部:向下")
+    char = _parse("$熟练$ 先攻; 运动; 察觉; 2*隐匿\n$半熟练$ 全部:向下")
     info = char.ability_info
     assert info.get_half_prof_bonus("先攻") == 0
     assert info.get_check_display("先攻") == "+5"  # 敏捷 +2 + 熟练 3
@@ -96,7 +96,7 @@ def test_full_proficiency_and_expertise_disable_half():
 
 def test_multiple_rules_take_highest_half_bonus():
     """诗人/勇士兼职：重叠时取较高的半熟练。"""
-    char = _parse("$半熟练$ 全部:向下/力敏体:向上")
+    char = _parse("$半熟练$ 全部:向下; 力敏体:向上")
     info = char.ability_info
     assert info.get_half_prof_bonus("先攻") == 2
     assert info.get_check_display("先攻") == "+4"
@@ -151,11 +151,11 @@ def test_perform_check_hint_and_roll_include_half():
 def test_half_prof_round_trip_and_merge_segments():
     """卡文本回写顺序稳定，分段修改时半熟练不丢。"""
     char = _parse(
-        "$熟练$ 运动\n$半熟练$ 力敏体:向上/全部:向下\n$额外加值$ 运动:+1"
+        "$熟练$ 运动\n$半熟练$ 力敏体:向上; 全部:向下\n$额外加值$ 运动:+1"
     )
     text = char.get_char_info()
     assert text.index("$熟练$") < text.index("$半熟练$") < text.index("$额外加值$")
-    assert "$半熟练$ 全部:向下/力敏体:向上" in text
+    assert "$半熟练$ 全部:向下; 力敏体:向上" in text
 
     merged = CharacterService.merge_segments(char, {"$姓名$": "改名"})
     assert merged.name == "改名"
@@ -163,7 +163,7 @@ def test_half_prof_round_trip_and_merge_segments():
         ("全部", "向下"),
         ("力敏体", "向上"),
     ]
-    assert "$半熟练$ 全部:向下/力敏体:向上" in merged.get_char_info()
+    assert "$半熟练$ 全部:向下; 力敏体:向上" in merged.get_char_info()
 
 
 def test_old_card_without_half_prof_is_unchanged():

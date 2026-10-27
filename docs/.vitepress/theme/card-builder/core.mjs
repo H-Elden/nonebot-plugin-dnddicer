@@ -130,7 +130,7 @@ function normalizeNewlines(value) {
 
 function splitSemicolon(content) {
   return content
-    .split(/[;；]/)
+    .split(';')
     .map((item) => item.trim())
     .filter((item) => item !== '')
 }
@@ -165,10 +165,6 @@ function partition(text, separator) {
   const index = text.indexOf(separator)
   if (index < 0) return [text, '']
   return [text.slice(0, index), text.slice(index + separator.length)]
-}
-
-function withHalfColon(text) {
-  return text.replace(/：/g, ':')
 }
 
 function integerOf(value, label) {
@@ -359,8 +355,7 @@ export function createCardBuilder(spec) {
     const result = { AC: '', 速度: '' }
     const derivedKeys = new Set(['先攻', '被动察觉'])
     for (const item of splitSemicolon(content)) {
-      const normalized = withHalfColon(item)
-      const [rawKey, rawValue] = partition(normalized, ':')
+      const [rawKey, rawValue] = partition(item, ':')
       let key = rawKey.trim()
       const value = rawValue.trim()
       if (key.toLowerCase() === 'ac') key = 'AC'
@@ -388,7 +383,7 @@ export function createCardBuilder(spec) {
   function parseProgress(content) {
     const result = { xp: '', xpNext: '', inspiration: '' }
     for (const item of splitSemicolon(content)) {
-      const [rawKey, rawValue] = partition(withHalfColon(item), ':')
+      const [rawKey, rawValue] = partition(item, ':')
       const key = rawKey.trim()
       const value = rawValue.trim()
       if (!key || !value) {
@@ -435,19 +430,18 @@ export function createCardBuilder(spec) {
   function parseProf(content) {
     const checks = Object.fromEntries(checkItems.map((name) => [name, 0]))
     const groups = Object.fromEntries(proficiencyGroups.map((name) => [name, '']))
-    for (const rawItem of content.split('/')) {
+    for (const rawItem of content.split(';')) {
       const item = rawItem.trim()
       if (!item) continue
-      const normalized = withHalfColon(item)
-      const [rawPrefix, rawRest] = partition(normalized, ':')
+      const [rawPrefix, rawRest] = partition(item, ':')
       const prefix = rawPrefix.trim()
-      if (normalized.includes(':') && proficiencyGroups.includes(prefix)) {
+      if (item.includes(':') && proficiencyGroups.includes(prefix)) {
         const values = rawRest
-          .split(/[·、,，]/)
+          .split(',')
           .map((value) => value.trim())
           .filter((value) => value !== '')
         if (values.length === 0) {
-          fail(`熟练分组「${prefix}」不能为空（示例：${prefix}:轻甲·中甲）`)
+          fail(`熟练分组「${prefix}」不能为空（示例：${prefix}:轻甲,中甲）`)
         }
         const maxLen = limits.proficiency_group_item_max_len || 20
         const current = groups[prefix]
@@ -504,14 +498,13 @@ export function createCardBuilder(spec) {
   function parseHalfProf(content) {
     const rules = []
     const seen = new Set()
-    for (const rawItem of content.split('/')) {
+    for (const rawItem of content.split(';')) {
       const item = rawItem.trim()
       if (!item) continue
-      const normalized = withHalfColon(item)
-      const [rawScope, rawRounding] = partition(normalized, ':')
+      const [rawScope, rawRounding] = partition(item, ':')
       const scope = rawScope.trim()
       const rounding = rawRounding.trim()
-      if (!normalized.includes(':') || !scope || !rounding || rounding.includes(':')) {
+      if (!item.includes(':') || !scope || !rounding || rounding.includes(':')) {
         fail(`半熟练条目不完整: ${item}（示例：全部:向下）`)
       }
       if (!halfProfScopes.includes(scope)) {
@@ -531,10 +524,10 @@ export function createCardBuilder(spec) {
   function parseExt(content) {
     const rows = []
     const indexByName = new Map()
-    for (const item of content.split('/')) {
+    for (const item of content.split(';')) {
       const raw = item.trim()
       if (!raw) continue
-      const [rawName, rawValue] = partition(withHalfColon(raw), ':')
+      const [rawName, rawValue] = partition(raw, ':')
       const name = normalizeSkillName(rawName.trim())
       let value = rawValue.trim()
       if (!value) continue
@@ -562,13 +555,18 @@ export function createCardBuilder(spec) {
   function parseNamedRows(content, label, nameMax, textMax) {
     const rows = []
     const seen = new Set()
-    for (const item of content.split('/')) {
+    for (const item of content.split(';')) {
       const raw = item.trim()
       if (!raw) continue
-      const [rawName, rawText] = partition(withHalfColon(raw), ':')
+      const [rawName, rawText] = partition(raw, ':')
       const name = rawName.trim()
       const text = rawText.trim()
       if (!name) fail(`${label}名称不能为空: ${item}`)
+      for (const char of [';', '|', '$']) {
+        if (text.includes(char)) {
+          fail(`${label}「${name}」的说明不能包含符号「${char}」: ${text}`)
+        }
+      }
       if (charLength(name) > nameMax) {
         fail(`${label}名称过长（≤${nameMax} 字）: ${name}`)
       }
@@ -585,19 +583,18 @@ export function createCardBuilder(spec) {
   function parseWeapons(content) {
     const rows = []
     const seen = new Set()
-    for (const rawItem of content.split('/')) {
+    for (const rawItem of content.split(';')) {
       const item = rawItem.trim()
       if (!item) continue
-      const normalized = item.replace(/，/g, ',')
-      const parts = normalized.split(',')
+      const parts = item.split('|')
       if (parts.length > 3) {
-        fail(`武器条目最多三段: ${item}（名称+命中,伤害+类型,备注）`)
+        fail(`武器条目最多三段: ${item}（名称+命中|伤害+类型|备注）`)
       }
       const namePart = parts[0].trim()
       const damagePart = parts[1] === undefined ? '' : parts[1].trim()
       const note = parts[2] === undefined ? '' : parts[2].trim()
       if (!namePart || !damagePart) {
-        fail(`武器条目不完整: ${item}（示例：短剑+6,1d4+4穿刺）`)
+        fail(`武器条目不完整: ${item}（示例：短剑+6|1d4+4穿刺）`)
       }
       const signIndex = namePart.search(/[+-]/)
       let name = signIndex < 0 ? namePart.trim() : namePart.slice(0, signIndex).trim()
@@ -623,7 +620,7 @@ export function createCardBuilder(spec) {
         if (charLength(note) > (limits.weapon_note_max_len || 30)) {
           fail(`武器备注过长（≤${limits.weapon_note_max_len || 30} 字）: ${note}`)
         }
-        for (const char of ['/', ';', '；', '$', '|', '｜']) {
+        for (const char of [';', '|', '$']) {
           if (note.includes(char)) fail(`武器备注不能包含符号「${char}」: ${note}`)
         }
       }
@@ -665,7 +662,7 @@ export function createCardBuilder(spec) {
     if (charLength(name) > (limits.weapon_name_max_len || 20)) {
       fail(`武器名称过长（≤${limits.weapon_name_max_len || 20} 字）: ${name}`)
     }
-    for (const char of ['/', ',', '，', '$', '+', '-']) {
+    for (const char of ['/', ',', '，', '$', '+', '-', ';', '|']) {
       if (name.includes(char)) fail(`武器名称不能包含符号「${char}」: ${name}`)
     }
     for (const word of ['攻击', '命中', '伤害', '检定', '豁免']) {
@@ -693,9 +690,13 @@ export function createCardBuilder(spec) {
     const rows = []
     const seen = new Set()
     for (const item of splitSemicolon(content)) {
-      const [body, textRaw] = partition(withHalfColon(item), '|')
+      const [body, textRaw] = partition(item, '|')
       const text = textRaw.trim()
-      if (text.includes('|')) fail(`限定资源说明不能包含符号「|」: ${item}`)
+      if (text) {
+        for (const char of [';', '|', '$']) {
+          if (text.includes(char)) fail(`限定资源说明不能包含符号「${char}」: ${item}`)
+        }
+      }
       if (charLength(text) > (limits.feature_text_max_len || 80)) {
         fail(`限定资源说明过长（≤${limits.feature_text_max_len || 80} 字）: ${item}`)
       }
@@ -726,7 +727,7 @@ export function createCardBuilder(spec) {
       recoverModes.map((mode) => [mode, { on: false, amount: '' }]),
     )
     let found = 0
-    for (const piece of source.split(/[,，]/)) {
+    for (const piece of source.split(',')) {
       const token = piece.trim()
       if (!token) continue
       const mode = recoverModes.find((item) => token.startsWith(item))
@@ -770,17 +771,17 @@ export function createCardBuilder(spec) {
   function parseSpellDetail(source) {
     const detail = emptySpellDetail()
     const seen = new Set()
-    for (const piece of source.split(',')) {
+    for (const piece of source.split('|')) {
       const text = piece.trim()
       if (!text) {
-        fail('法术详情中有空项（用逗号分隔，如 时间=1动作,距离=150尺）')
+        fail('法术详情中有空项（用竖线分隔，如 时间:1动作|距离:150尺）')
       }
-      const [rawKey, rawValue] = partition(text, '=')
+      const [rawKey, rawValue] = partition(text, ':')
       const key = rawKey.trim()
       const value = rawValue.trim()
       if (!spellDetailKeys.includes(key)) {
         fail(
-          `法术详情写法无效: ${text}（可用：${spellDetailKeys.join('/')}，如 时间=1动作）`,
+          `法术详情写法无效: ${text}（可用：${spellDetailKeys.join('/')}，如 时间:1动作）`,
         )
       }
       if (seen.has(key)) fail(`法术详情重复: ${key}`)
@@ -805,7 +806,7 @@ export function createCardBuilder(spec) {
         if (charLength(value) < 1 || charLength(value) > (limits.spell_note_max_len || 40)) {
           fail(`法术备注过长（≤${limits.spell_note_max_len || 40} 字）: ${value}`)
         }
-        for (const char of [',', '，', ';', '；', '|', '｜', '$']) {
+        for (const char of [';', '|', '$']) {
           if (value.includes(char)) fail(`法术备注不能包含符号「${char}」: ${value}`)
         }
         detail.note = value
@@ -821,7 +822,7 @@ export function createCardBuilder(spec) {
   }
 
   function parseSpellEntry(item) {
-    const [entryText, detailText] = partition(withHalfColon(item), '|')
+    const [entryText, detailText] = partition(item, '|')
     const [rawName, rawLevel] = partition(entryText, ':')
     const name = rawName.trim()
     if (!rawLevel) fail(`法术条目不完整: ${item}（示例：火球术:3*）`)
@@ -857,8 +858,7 @@ export function createCardBuilder(spec) {
     const result = { ability: '', dc: '', attack: '', list: [] }
     const seen = new Set()
     for (const item of splitSemicolon(content)) {
-      const normalized = withHalfColon(item)
-      const [rawKey, rawValue] = partition(normalized, ':')
+      const [rawKey, rawValue] = partition(item, ':')
       const key = rawKey.trim()
       if (key === '施法属性') {
         const value = rawValue.trim()
@@ -895,12 +895,10 @@ export function createCardBuilder(spec) {
     const levels = Array.from({ length: 9 }, () => ({ cur: '', max: '' }))
     const pact = { level: '', cur: '', max: '' }
     const seen = new Set()
-    for (const raw of content.split(/[;；,，]/)) {
+    for (const raw of content.split(';')) {
       const item = raw.trim()
       if (!item) continue
-      const matched = /^(契约)?\s*(\d+)\s*:\s*(\d+)\s*\/\s*(\d+)$/.exec(
-        withHalfColon(item),
-      )
+      const matched = /^(契约)?\s*(\d+)\s*:\s*(\d+)\s*\/\s*(\d+)$/.exec(item)
       if (!matched) {
         fail(`法术位条目不完整: ${item}（示例：1:4/4; 契约3:2/2）`)
       }
@@ -936,7 +934,7 @@ export function createCardBuilder(spec) {
       if (raw.includes('[') || raw.includes(']')) {
         fail(`物品条目写法无效: ${item}（只写 名称x数量，不再支持 [装备]）`)
       }
-      const matched = /^(.+?)(?:[xX×](\d+))?$/.exec(raw)
+      const matched = /^(.+?)(?:[xX](\d+))?$/.exec(raw)
       if (!matched) fail(`物品条目写法无效: ${item}`)
       const name = matched[1].trim()
       const quantity = matched[2] === undefined ? 1 : Number(matched[2])
@@ -956,7 +954,7 @@ export function createCardBuilder(spec) {
     const result = Object.fromEntries(coinKeys.map((key) => [key, '']))
     const seen = new Set()
     for (const item of splitSemicolon(content)) {
-      const [rawKey, rawValue] = partition(withHalfColon(item), ':')
+      const [rawKey, rawValue] = partition(item, ':')
       const key = rawKey.trim().toUpperCase()
       const value = rawValue.trim()
       if (!coinKeys.includes(key)) {
@@ -977,21 +975,17 @@ export function createCardBuilder(spec) {
     const result = Object.fromEntries(backgroundKeys.map((key) => [key, '']))
     const seen = new Set()
     for (const item of splitSemicolon(content)) {
-      const normalized = withHalfColon(item)
-      const [rawKey, rawValue] = partition(normalized, ':')
+      const [rawKey, rawValue] = partition(item, ':')
       const key = rawKey.trim()
       const value = rawValue.trim()
       if (!key || !value) {
-        if (!normalized.includes(':')) {
-          fail(
-            `背景条目「${item}」缺少键名` +
-              '（背景各项用分号分隔，内容里不能出现分号 ; 或 ；）',
-          )
-        }
         fail(`背景条目不完整: ${item}（示例：背景:士兵; 阵营:守序善良）`)
       }
       if (!backgroundKeys.includes(key)) {
         fail(`背景键无效: ${key}（可用：${backgroundKeys.join('/')}）`)
+      }
+      for (const char of [';', '|', '$']) {
+        if (value.includes(char)) fail(`背景「${key}」的内容不能包含符号「${char}」: ${value}`)
       }
       if (charLength(value) > (limits.background_value_max_len || 100)) {
         fail(`背景内容过长（≤${limits.background_value_max_len || 100} 字）: ${key}`)
@@ -1006,6 +1000,9 @@ export function createCardBuilder(spec) {
   function parseNotes(content) {
     const rows = []
     for (const item of splitSemicolon(content)) {
+      for (const char of [';', '|', '$']) {
+        if (item.includes(char)) fail(`战斗记录不能包含符号「${char}」: ${item}`)
+      }
       if (charLength(item) > (limits.combat_note_max_len || 60)) {
         fail(`战斗记录条目过长（≤${limits.combat_note_max_len || 60} 字）: ${item}`)
       }
@@ -1045,10 +1042,10 @@ export function createCardBuilder(spec) {
   function parseClassTraits(content) {
     const rows = []
     const seen = new Set()
-    for (const item of content.split('/')) {
+    for (const item of content.split(';')) {
       const raw = item.trim()
       if (!raw) continue
-      const [levelText, body] = partition(withHalfColon(raw), '|')
+      const [levelText, body] = partition(raw, '|')
       if (!body) fail(`职业特性缺少等级: ${raw}（示例：3|塑能学者:说明）`)
       const level = trimOf(levelText)
       if (!/^\d+$/.test(level) || Number(level) < 1 || Number(level) > 20) {
@@ -1058,6 +1055,9 @@ export function createCardBuilder(spec) {
       const name = rawName.trim()
       const text = rawText.trim()
       if (!name) fail(`职业特性名称不能为空: ${raw}`)
+      for (const char of [';', '|', '$']) {
+        if (text.includes(char)) fail(`职业特性「${name}」的说明不能包含符号「${char}」: ${text}`)
+      }
       if (charLength(name) > (limits.class_feature_name_max_len || 30)) {
         fail(`职业特性名称过长（≤${limits.class_feature_name_max_len || 30} 字）: ${name}`)
       }
@@ -1079,7 +1079,7 @@ export function createCardBuilder(spec) {
   }
 
   function validateMagicItemField(value, label) {
-    for (const char of ['|', ';', '；', '$']) {
+    for (const char of ['|', ';', '$']) {
       if (value.includes(char)) {
         fail(`魔法物品${label}不能包含符号「${char}」: ${value}`)
       }
@@ -1112,6 +1112,13 @@ export function createCardBuilder(spec) {
         .split('//')
         .map((paragraph) => paragraph.trim())
         .filter((paragraph) => paragraph !== '')
+      for (const paragraph of paragraphs) {
+        for (const char of [';', '|', '$']) {
+          if (paragraph.includes(char)) {
+            fail(`魔法物品「${name}」的说明不能包含符号「${char}」: ${paragraph}`)
+          }
+        }
+      }
       if (paragraphs.length > (limits.magic_item_paragraph_max || 5)) {
         fail(`魔法物品说明最多 ${limits.magic_item_paragraph_max || 5} 段: ${item}`)
       }
@@ -1271,17 +1278,14 @@ export function createCardBuilder(spec) {
     for (const key of allowed) {
       const value = trimOf(values[key])
       if (!value) continue
-      // 背景各项用 `; ` 连接回卡文本，值里再出现分号会被解析成新条目。
-      for (const char of [';', '；']) {
+      // 背景各项用 `; ` 连接回卡文本；字段 / 条目分隔符与 $ 都不能出现在值里。
+      for (const char of [';', '|', '$']) {
         if (value.includes(char)) {
           fail(
-            `背景「${key}」不能包含分号「${char}」` +
+            `背景「${key}」不能包含符号「${char}」` +
               `（背景各项用分号分隔，请改用逗号或句号）: ${excerptOf(value)}`,
           )
         }
-      }
-      if (value.includes('$')) {
-        fail(`背景「${key}」不能包含符号「$」: ${excerptOf(value)}`)
       }
       items.push(`${key}:${value}`)
     }
@@ -1399,7 +1403,7 @@ export function createCardBuilder(spec) {
         ensureNoSeparator(
           value,
           '速度',
-          [';', '；'],
+          [';', '|', '$'],
           '战斗条目用分号分隔，速度里的分号请改成逗号',
         )
         items.push(`${key}:${value}`)
@@ -1444,7 +1448,7 @@ export function createCardBuilder(spec) {
       const raw = trimOf(prof.groups[label])
       if (!raw) continue
       const values = raw
-        .split(/[·、,，]/)
+        .split(/[·,]/)
         .map((value) => value.trim())
         .filter((value) => value !== '')
       if (values.length === 0) continue
@@ -1452,13 +1456,13 @@ export function createCardBuilder(spec) {
         ensureNoSeparator(
           value,
           `熟练分组「${label}」的条目`,
-          ['/'],
-          '熟练各项用 / 分隔，条目里的斜杠请改用全角「／」',
+          [',', ';', '|', '$'],
+          '熟练分组里各项用逗号分隔，条目里不能再出现逗号、分号或竖线',
         )
       }
-      items.push(`${label}:${values.join('·')}`)
+      items.push(`${label}:${values.join(',')}`)
     }
-    return items.join('/')
+    return items.join('; ')
   }
 
   function buildHalfProf(state) {
@@ -1482,7 +1486,7 @@ export function createCardBuilder(spec) {
     }
     return sortHalfProfRules(normalized)
       .map((rule) => `${rule.scope}:${rule.rounding}`)
-      .join('/')
+      .join('; ')
   }
 
   // ── 派生值预览（与插件 AbilityInfo.get_check_display 同一套算法）─────────
@@ -1632,9 +1636,15 @@ export function createCardBuilder(spec) {
       if (bonus && !WEAPON_BONUS_RE.test(bonus)) {
         fail(`额外加值无效: ${key}:${value}（只能写 优势/劣势 或 +/- 开头的骰子与常数组合）`)
       }
+      ensureNoSeparator(
+        key,
+        '额外加值条目',
+        [':', ';', '|', '$'],
+        '条目写成 名称:加值，名称里不能再出现冒号、分号或竖线',
+      )
       items.push(`${key}:${value}`)
     }
-    return items.join('/')
+    return items.join('; ')
   }
 
   function buildNamedRows(state, key, label) {
@@ -1649,20 +1659,20 @@ export function createCardBuilder(spec) {
       ensureNoSeparator(
         name,
         `${label}名称`,
-        ['/', ':', '：'],
-        '名称里不能再出现条目分隔符 / 或字段分隔符冒号',
+        [':', ';', '|', '$'],
+        '名称里不能再出现冒号、分号或竖线',
       )
       if (text) {
         ensureNoSeparator(
           text,
           `${label}「${name}」的说明`,
-          ['/'],
-          '多项之间用 / 分隔，说明里请改用全角「／」或其他写法',
+          [';', '|', '$'],
+          '多条之间用分号分隔，说明里不能出现分号、竖线或 $',
         )
       }
       items.push(text ? `${name}:${text}` : name)
     }
-    return items.join('/')
+    return items.join('; ')
   }
 
   function buildWeapons(state) {
@@ -1686,19 +1696,19 @@ export function createCardBuilder(spec) {
       }
       const damage = trimOf(row.damage)
       if (!damage) fail(`武器「${name}」要写伤害表达式（如 1d8+3）`)
-      let text = `${name}${row.noAttack ? 'x' : ''}${attack},${damage}${trimOf(row.type)}`
+      let text = `${name}${row.noAttack ? 'x' : ''}${attack}|${damage}${trimOf(row.type)}`
       const note = trimOf(row.note)
       if (note) {
-        for (const char of ['/', ',', '，', ';', '；', '$', '|', '｜']) {
+        for (const char of [';', '|', '$']) {
           if (note.includes(char)) {
             fail(`武器「${name}」的备注不能包含符号「${char}」: ${excerptOf(note)}`)
           }
         }
-        text += `,${note}`
+        text += `|${note}`
       }
       items.push(text)
     }
-    return items.join('/')
+    return items.join('; ')
   }
 
   function buildItems(state) {
@@ -1710,8 +1720,8 @@ export function createCardBuilder(spec) {
       ensureNoSeparator(
         name,
         '物品名称',
-        [';', '；'],
-        '物品之间用分号分隔，名称里的分号请改成逗号',
+        [';', '|', '$'],
+        '物品之间用分号分隔，名称里不能出现分号、竖线或 $',
       )
       const qty = trimOf(row.qty) || '1'
       items.push(`${name}x${normalizeIntText(qty)}`)
@@ -1764,7 +1774,7 @@ export function createCardBuilder(spec) {
         ensureNoSeparator(
           text,
           `限定资源「${name}」的说明`,
-          [';', '；', '|', '｜'],
+          [';', '|', '$'],
           '资源之间用分号分隔，说明与次数之间用竖线',
         )
       }
@@ -1794,8 +1804,8 @@ export function createCardBuilder(spec) {
       ensureNoSeparator(
         name,
         '职业特性名称',
-        ['/', ':', '：'],
-        '名称里不能再出现条目分隔符 / 或字段分隔符冒号',
+        [':', ';', '|', '$'],
+        '名称里不能再出现冒号、分号或竖线',
       )
       const level = trimOf(row.level) || '1'
       if (!/^\d+$/.test(level) || Number(level) < 1 || Number(level) > 20) {
@@ -1806,13 +1816,13 @@ export function createCardBuilder(spec) {
         ensureNoSeparator(
           text,
           `职业特性「${name}」的说明`,
-          ['/'],
-          '多项之间用 / 分隔，说明里请改用全角「／」或其他写法',
+          [';', '|', '$'],
+          '多条之间用分号分隔，说明里不能出现分号、竖线或 $',
         )
       }
       items.push(`${Number(level)}|${name}${text ? `:${text}` : ''}`)
     }
-    return items.join('/')
+    return items.join('; ')
   }
 
   function buildMagicItems(state) {
@@ -1835,7 +1845,7 @@ export function createCardBuilder(spec) {
         ensureNoSeparator(
           paragraph,
           `魔法物品「${name}」的说明`,
-          [';', '；', '|', '｜'],
+          [';', '|', '$'],
           '魔法物品之间用分号分隔，名称、标签与说明之间用竖线',
         )
       }
@@ -1847,13 +1857,13 @@ export function createCardBuilder(spec) {
 
   function spellDetailText(spell) {
     const parts = []
-    if (trimOf(spell.time)) parts.push(`时间=${trimOf(spell.time)}`)
-    if (trimOf(spell.range)) parts.push(`距离=${trimOf(spell.range)}`)
-    if (spell.concentration) parts.push('专注=是')
-    if (spell.ritual) parts.push('仪式=是')
-    if (spell.material) parts.push('材料=是')
-    if (trimOf(spell.note)) parts.push(`备注=${trimOf(spell.note)}`)
-    return parts.join(',')
+    if (trimOf(spell.time)) parts.push(`时间:${trimOf(spell.time)}`)
+    if (trimOf(spell.range)) parts.push(`距离:${trimOf(spell.range)}`)
+    if (spell.concentration) parts.push('专注:是')
+    if (spell.ritual) parts.push('仪式:是')
+    if (spell.material) parts.push('材料:是')
+    if (trimOf(spell.note)) parts.push(`备注:${trimOf(spell.note)}`)
+    return parts.join('|')
   }
 
   function buildSpells(state) {
@@ -1890,8 +1900,8 @@ export function createCardBuilder(spec) {
         ensureNoSeparator(
           value,
           `法术「${name}」的${label}`,
-          [',', '，', ';', '；', '|', '｜', '$'],
-          '法术详情项用逗号分隔，法术条目之间用分号分隔',
+          [';', '|', '$'],
+          '法术详情项用竖线分隔，法术条目之间用分号分隔',
         )
       }
       const note = trimOf(row.note)
@@ -1899,8 +1909,8 @@ export function createCardBuilder(spec) {
         ensureNoSeparator(
           note,
           `法术「${name}」的备注`,
-          [',', '，', ';', '；', '|', '｜', '$'],
-          '法术详情项用逗号分隔，法术条目之间用分号分隔',
+          [';', '|', '$'],
+          '法术详情项用竖线分隔，法术条目之间用分号分隔',
         )
       }
       let text = `${name}:${normalizeIntText(row.level || '0')}${row.prepared ? '*' : ''}`
@@ -1948,8 +1958,8 @@ export function createCardBuilder(spec) {
       ensureNoSeparator(
         item,
         '战斗记录',
-        [';', '；'],
-        '多条记录用分号分隔，单条里的分号请改成逗号',
+        [';', '|', '$'],
+        '多条记录用分号分隔，单条里不能出现分号、竖线或 $',
       )
       items.push(item)
     }

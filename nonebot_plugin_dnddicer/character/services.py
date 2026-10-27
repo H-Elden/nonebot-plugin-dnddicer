@@ -236,42 +236,37 @@ def validate_weapon_name(name: str, reserved_names: Iterable[str] = ()) -> None:
 
 
 def parse_weapon_item(item: str, reserved_names: Iterable[str] = ()) -> WeaponInfo:
-    """解析自定义武器项：``名称±命中加值,伤害表达式+类型``。
+    """解析自定义武器项：``名称±命中加值|伤害表达式+类型[|备注]``。
 
-    例：``短剑+6,1d4+4穿刺``——名称段以首个 ± 切出命中加值（名称本身禁含
+    例：``短剑+6|1d4+4穿刺``——名称段以首个 ± 切出命中加值（名称本身禁含
     ±）；伤害段尾部可带 13 种伤害类型之一（含「斩击→挥砍」容错），剩余为
     伤害表达式（骰子与常数的加减组合）。校验失败抛 AssertionError（消息面向用户）。
 
-    兼容性（2026-09-24 补强）：逗号前后空格任意（``长剑+8, 1d8+5挥砍``）、
-    全角逗号（``长剑+8，1d8+5挥砍``）、表达式与加值内部空白（``1d8 + 5``、
-    ``+ 6``）均按等价处理。名称尾部可写 **x 标记**表示「不可进行攻击检定」
-    （如 ``火球术x,8d6火焰``，纯伤害法术专用；x 仅在无命中加值时识别，
-    且前一个字符须为非 ASCII 字母数字——英文武器名如 ``Box`` 不会误判）。
+    名称尾部可写 **x 标记**表示「不可进行攻击检定」（如 ``火球术x|8d6火焰``，
+    纯伤害法术专用；x 仅在无命中加值时识别，且前一个字符须为非 ASCII 字母
+    数字——英文武器名如 ``Box`` 不会误判）。
 
-    卡面备注（2026-10-21 批②）：第三个逗号字段，如
-    ``匕首+5,1d4+2穿刺,灵巧·轻型``，只用于出图，最长 30 字、不含分隔符号。
+    卡面备注（格式 v2）：第三个竖线字段，如 ``匕首+5|1d4+2穿刺|灵巧, 轻型``，
+    只用于出图，最长 30 字、不含 ``$`` ``;`` ``|``。
     """
     raw = item.strip()
-    normalized = raw.replace("，", ",")
-    if not normalized or "," not in normalized:
-        raise AssertionError(f"武器条目不完整: {raw}（示例：短剑+6,1d4+4穿刺）")
-    parts = normalized.split(",")
+    if not raw or "|" not in raw:
+        raise AssertionError(f"武器条目不完整: {raw}（示例：短剑+6|1d4+4穿刺）")
+    parts = [part.strip() for part in raw.split("|")]
     if len(parts) > 3:
         raise AssertionError(
-            f"武器条目最多三段: {raw}（名称+命中,伤害+类型,备注）"
+            f"武器条目最多三段: {raw}（名称+命中|伤害+类型|备注）"
         )
-    name_part, damage_part = parts[0].strip(), parts[1].strip()
-    note = parts[2].strip() if len(parts) == 3 else ""
+    name_part, damage_part = parts[0], parts[1]
+    note = parts[2] if len(parts) == 3 else ""
     if not name_part or not damage_part:
-        raise AssertionError(f"武器条目不完整: {raw}（示例：短剑+6,1d4+4穿刺）")
+        raise AssertionError(f"武器条目不完整: {raw}（示例：短剑+6|1d4+4穿刺）")
     if note:
         if len(note) > WEAPON_NOTE_MAX_LEN:
             raise AssertionError(
                 f"武器备注过长（≤{WEAPON_NOTE_MAX_LEN} 字）: {note}"
             )
-        for ch in ("/", ";", "；", "$", "|", "｜"):
-            if ch in note:
-                raise AssertionError(f"武器备注不能包含符号「{ch}」: {note}")
+        _ensure_free_text(note, "武器备注")
 
     match = re.search(r"[+-]", name_part)
     if match:
@@ -328,8 +323,8 @@ def parse_weapon_item(item: str, reserved_names: Iterable[str] = ()) -> WeaponIn
 
 
 def parse_weapon_list(content: str, reserved_names: Iterable[str] = ()) -> List[WeaponInfo]:
-    """解析 ``$武器$`` 段全文（``/`` 分隔多项；名称卡内唯一、数量 ≤ 上限）。"""
-    items = [item for item in content.split("/") if item.strip()]
+    """解析 ``$武器$`` 段全文（``;`` 分隔多项；名称卡内唯一、数量 ≤ 上限）。"""
+    items = [item for item in content.split(";") if item.strip()]
     if len(items) > WEAPON_MAX_COUNT:
         raise AssertionError(f"武器数量最多 {WEAPON_MAX_COUNT} 件")
     weapons: List[WeaponInfo] = []
@@ -347,8 +342,19 @@ def parse_weapon_list(content: str, reserved_names: Iterable[str] = ()) -> List[
 
 
 def _split_semicolon_items(content: str) -> List[str]:
-    """按半角/全角分号切分段内容（新增三段统一处理）。"""
-    return [item.strip() for item in re.split(r"[;；]", content) if item.strip()]
+    """按半角分号切分段内容（卡格式 v2：条目一律用 ``;``）。"""
+    return [item.strip() for item in content.split(";") if item.strip()]
+
+
+def _ensure_free_text(text: str, label: str) -> None:
+    """自由文本（备注/说明/名称）不得含卡格式分隔符 ``$`` ``;`` ``|``。
+
+    卡格式 v2 只用半角分隔符；全角标点（``；`` ``｜`` ``：`` ``，``）按普通
+    文字处理，不在此拦截。
+    """
+    for char in ("$", ";", "|"):
+        if char in text:
+            raise AssertionError(f"{label}不能包含符号「{char}」: {text}")
 
 
 def validate_feature_name(name: str) -> None:
@@ -396,7 +402,7 @@ def normalize_feature_recover(spec: str) -> str:
             "（可选：短休/长休/两者/手动，可加 +N 或 满）"
         )
     amounts: Dict[str, str] = {}
-    for piece in re.split(r"[,，]", raw):
+    for piece in raw.split(","):
         token = piece.strip()
         if not token:
             continue
@@ -434,13 +440,12 @@ def parse_feature_item(item: str) -> CharacterFeature:
     只展示、不参与结算）。校验失败抛 AssertionError（消息面向用户）。
     """
     raw = item.strip()
-    normalized = raw.replace("：", ":")
-    body, pipe, text = normalized.partition("|")
+    body, pipe, text = raw.partition("|")
     text = text.strip()
     if pipe and not text:
         raise AssertionError(f"限定资源说明不能为空: {raw}")
-    if "|" in text:
-        raise AssertionError(f"限定资源说明不能包含符号「|」: {raw}")
+    if text:
+        _ensure_free_text(text, "限定资源说明")
     if len(text) > FEATURE_TEXT_MAX_LEN:
         raise AssertionError(
             f"限定资源说明过长（≤{FEATURE_TEXT_MAX_LEN} 字）: {raw}"
@@ -511,25 +516,25 @@ def _parse_spell_flag(value: str, label: str) -> bool:
 
 
 def _parse_spell_details(text: str) -> Dict[str, object]:
-    """解析法术条目 ``|`` 之后的详情：``时间=1动作,距离=150尺,专注=是``。
+    """解析法术条目 ``|`` 之后的详情：``时间:1动作|距离:150尺|专注:是``。
 
     键固定为时间/距离/专注/仪式/材料/备注，顺序不限、缺项不写；返回可直接
     展开给 ``SpellEntry`` 的字段字典。校验失败抛 AssertionError。
     """
     result: Dict[str, object] = {}
     seen: set[str] = set()
-    for piece in text.split(","):
+    for piece in text.split("|"):
         piece = piece.strip()
         if not piece:
             raise AssertionError(
-                "法术详情中有空项（用逗号分隔，如 时间=1动作,距离=150尺）"
+                "法术详情中有空项（用竖线分隔，如 时间:1动作|距离:150尺）"
             )
-        key, separator, value = piece.partition("=")
+        key, separator, value = piece.partition(":")
         key, value = key.strip(), value.strip()
         if not separator or key not in SPELL_DETAIL_KEYS:
             raise AssertionError(
                 f"法术详情写法无效: {piece}"
-                f"（可用：{'/'.join(SPELL_DETAIL_KEYS)}，如 时间=1动作）"
+                f"（可用：{'/'.join(SPELL_DETAIL_KEYS)}，如 时间:1动作）"
             )
         if key in seen:
             raise AssertionError(f"法术详情重复: {key}")
@@ -557,9 +562,7 @@ def _parse_spell_details(text: str) -> Dict[str, object]:
                 raise AssertionError(
                     f"法术备注过长（≤{SPELL_NOTE_MAX_LEN} 字）: {value}"
                 )
-            for ch in (",", "，", ";", "；", "|", "｜", "$"):
-                if ch in value:
-                    raise AssertionError(f"法术备注不能包含符号「{ch}」: {value}")
+            _ensure_free_text(value, "法术备注")
             result["note"] = value
     return result
 
@@ -567,13 +570,13 @@ def _parse_spell_details(text: str) -> Dict[str, object]:
 def parse_spell_item(item: str) -> SpellEntry:
     """解析单条法术：``名称:环阶[*已准备][|详情]``。
 
-    例：``火球术:3*``、``火焰箭:0``、``火球术:3*|时间=1动作,距离=150尺,材料=是``。
+    例：``火球术:3*``、``火焰箭:0``、
+    ``火球术:3*|时间:1动作|距离:150尺|材料:是``。
     环阶 0 = 戏法；``*`` = 今日已准备；``|`` 之后为卡面展示用的详情
     （时间/距离/专注/仪式/材料/备注，2026-10-21 批②）。校验失败抛 AssertionError。
     """
     raw = item.strip()
-    normalized = raw.replace("：", ":")
-    entry_text, pipe, detail_text = normalized.partition("|")
+    entry_text, pipe, detail_text = raw.partition("|")
     name_part, separator, level_part = entry_text.partition(":")
     if not separator:
         raise AssertionError(f"法术条目不完整: {raw}（示例：火球术:3*）")
@@ -609,8 +612,7 @@ def parse_spell_setting(
     spells: List[SpellEntry] = []
     seen: set[str] = set()
     for item in items:
-        normalized = item.replace("：", ":")
-        key, separator, value = normalized.partition(":")
+        key, separator, value = item.partition(":")
         stripped_key = key.strip()
         if stripped_key == SPELLCASTING_ABILITY_KEY:
             if not separator:
@@ -671,19 +673,18 @@ def parse_spell_slot_entries(
 
     ``allow_omitted_max=False``（卡面 ``$法术位$``）要求写全 ``当前/上限``；
     ``True``（``.法术位 set``）允许只写 ``环阶:当前``，此时上限 = 当前。
-    分号或逗号分条；环阶 1~9、数量 0~99、当前 ≤ 上限。失败抛 AssertionError。
+    分号分条；环阶 1~9、数量 0~99、当前 ≤ 上限。失败抛 AssertionError。
     """
     items = [
         item.strip()
-        for item in re.split(r"[;；,，]", content)
+        for item in content.split(";")
         if item.strip()
     ]
     entries: List[Tuple[bool, int, int, int]] = []
     seen: set[Tuple[bool, int]] = set()
     for raw in items:
-        normalized = raw.replace("：", ":")
         matched = re.match(
-            r"^(契约)?\s*(\d+)\s*:\s*(\d+)(?:\s*/\s*(\d+))?$", normalized
+            r"^(契约)?\s*(\d+)\s*:\s*(\d+)(?:\s*/\s*(\d+))?$", raw
         )
         if not matched:
             raise AssertionError(
@@ -751,38 +752,32 @@ def _ensure_no_dollar(content: str, label: str, *, allow_newline: bool = False) 
         raise AssertionError(f"{label}内容不能换行，多条请用分号分隔")
 
 
-def _normalize_colon(text: str) -> str:
-    """全角冒号归一为半角（新段统一处理）。"""
-    return text.replace("：", ":")
-
-
 def parse_prof_entries(content: str) -> Tuple[List[str], Dict[str, List[str]]]:
     """解析 ``$熟练$`` 段，拆成（检定条目列表, 扩展分组）。
 
-    - 旧条目沿用 ``/`` 分隔，如 ``运动/2*隐匿/力量豁免``；
-    - 新分组写成 ``护甲:轻甲·中甲``、``武器:军用武器``、``工具:盗贼工具``、
-      ``语言:通用语·精灵语``，组内用 ``·``（也接受 ``、`` 与逗号）分隔；
+    - 条目用 ``;`` 分隔，如 ``运动; 2*隐匿; 力量豁免``；
+    - 分组写成 ``护甲:轻甲,中甲``、``武器:军用武器``、``工具:盗贼工具``、
+      ``语言:通用语,精灵语``，组内用 ``,`` 分隔；
     - 扩展分组只用于展示，不进入 ``check_prof``。
     """
     _ensure_no_dollar(content, "熟练")
     checks: List[str] = []
     groups: Dict[str, List[str]] = {}
-    for raw_item in content.split("/"):
+    for raw_item in content.split(";"):
         item = raw_item.strip()
         if not item:
             continue
-        normalized = _normalize_colon(item)
-        prefix, separator, rest = normalized.partition(":")
+        prefix, separator, rest = item.partition(":")
         label = prefix.strip()
         if separator and label in PROFICIENCY_GROUP_LIST:
             values = [
                 value.strip()
-                for value in re.split(r"[·、,，]", rest)
+                for value in rest.split(",")
                 if value.strip()
             ]
             if not values:
                 raise AssertionError(
-                    f"熟练分组「{label}」不能为空（示例：{label}:轻甲·中甲）"
+                    f"熟练分组「{label}」不能为空（示例：{label}:轻甲,中甲）"
                 )
             bucket = groups.setdefault(label, [])
             for value in values:
@@ -805,7 +800,7 @@ def parse_prof_entries(content: str) -> Tuple[List[str], Dict[str, List[str]]]:
 
 
 def parse_half_prof(content: str) -> List[HalfProfRule]:
-    """解析 ``$半熟练$`` 段：``范围:取整``，多条用 ``/`` 分隔。
+    """解析 ``$半熟练$`` 段：``范围:取整``，多条用 ``;`` 分隔。
 
     范围：``全部``（任意属性检定）/ ``技能``（18 个正式技能，不含先攻）/
     ``力敏体``（力量、敏捷、体质检定）；取整：``向下`` / ``向上``。
@@ -813,12 +808,11 @@ def parse_half_prof(content: str) -> List[HalfProfRule]:
     _ensure_no_dollar(content, "半熟练")
     rules: List[HalfProfRule] = []
     seen: set[tuple[str, str]] = set()
-    for raw_item in content.split("/"):
+    for raw_item in content.split(";"):
         item = raw_item.strip()
         if not item:
             continue
-        normalized = _normalize_colon(item)
-        scope, separator, rounding = normalized.partition(":")
+        scope, separator, rounding = item.partition(":")
         scope, rounding = scope.strip(), rounding.strip()
         if not separator or not scope or not rounding or ":" in rounding:
             raise AssertionError(
@@ -868,8 +862,7 @@ def parse_combat(content: str) -> Dict[str, str]:
     _ensure_no_dollar(content, "战斗")
     result: Dict[str, str] = {}
     for item in _split_semicolon_items(content):
-        normalized = _normalize_colon(item)
-        key, separator, value = normalized.partition(":")
+        key, separator, value = item.partition(":")
         key = key.strip()
         if key.lower() == "ac":
             key = "AC"
@@ -896,20 +889,21 @@ def parse_combat(content: str) -> Dict[str, str]:
 
 
 def parse_feats(content: str) -> List[str]:
-    """解析 ``$专长$`` 段（``/`` 分条，可写 ``名称:说明``，名称唯一）。
+    """解析 ``$专长$`` 段（``;`` 分条，可写 ``名称:说明``，名称唯一）。
 
     说明（2026-10-21 批②）只用于卡面，最长 60 字；不写说明时回写保持原名。
     """
     _ensure_no_dollar(content, "专长")
-    items = [item.strip() for item in content.split("/") if item.strip()]
+    items = [item.strip() for item in content.split(";") if item.strip()]
     if len(items) > FEAT_MAX_COUNT:
         raise AssertionError(f"专长最多 {FEAT_MAX_COUNT} 项")
     result: List[str] = []
     seen: set[str] = set()
     for item in items:
-        normalized = _normalize_colon(item)
-        name, _, text = normalized.partition(":")
+        name, _, text = item.partition(":")
         name, text = name.strip(), text.strip()
+        if text:
+            _ensure_free_text(text, f"专长「{name}」的说明")
         if not name:
             raise AssertionError(f"专长名称不能为空: {item}")
         if len(name) > FEAT_NAME_MAX_LEN:
@@ -928,17 +922,18 @@ def parse_feats(content: str) -> List[str]:
 
 
 def parse_race_traits(content: str) -> List[str]:
-    """解析 ``$种族特性$`` 段（``/`` 分条，``名称:说明``，名称唯一）。"""
+    """解析 ``$种族特性$`` 段（``;`` 分条，``名称:说明``，名称唯一）。"""
     _ensure_no_dollar(content, "种族特性")
-    items = [item.strip() for item in content.split("/") if item.strip()]
+    items = [item.strip() for item in content.split(";") if item.strip()]
     if len(items) > RACE_TRAIT_MAX_COUNT:
         raise AssertionError(f"种族特性最多 {RACE_TRAIT_MAX_COUNT} 项")
     result: List[str] = []
     seen: set[str] = set()
     for item in items:
-        normalized = _normalize_colon(item)
-        name, _, text = normalized.partition(":")
+        name, _, text = item.partition(":")
         name, text = name.strip(), text.strip()
+        if text:
+            _ensure_free_text(text, f"种族特性「{name}」的说明")
         if not name:
             raise AssertionError(f"种族特性名称不能为空: {item}")
         if len(name) > RACE_TRAIT_NAME_MAX_LEN:
@@ -957,16 +952,15 @@ def parse_race_traits(content: str) -> List[str]:
 
 
 def parse_class_features(content: str) -> List[ClassFeature]:
-    """解析 ``$职业特性$`` 段（``/`` 分条，``等级|名称:说明``，名称唯一）。"""
+    """解析 ``$职业特性$`` 段（``;`` 分条，``等级|名称:说明``，名称唯一）。"""
     _ensure_no_dollar(content, "职业特性")
-    items = [item.strip() for item in content.split("/") if item.strip()]
+    items = [item.strip() for item in content.split(";") if item.strip()]
     if len(items) > CLASS_FEATURE_MAX_COUNT:
         raise AssertionError(f"职业特性最多 {CLASS_FEATURE_MAX_COUNT} 项")
     result: List[ClassFeature] = []
     seen: set[str] = set()
     for item in items:
-        normalized = _normalize_colon(item)
-        level_str, pipe, body = normalized.partition("|")
+        level_str, pipe, body = item.partition("|")
         if not pipe:
             raise AssertionError(
                 f"职业特性缺少等级: {item}（示例：3|塑能学者:说明）"
@@ -982,6 +976,8 @@ def parse_class_features(content: str) -> List[ClassFeature]:
             raise AssertionError(
                 f"职业特性名称过长（≤{CLASS_FEATURE_NAME_MAX_LEN} 字）: {name}"
             )
+        if text:
+            _ensure_free_text(text, f"职业特性「{name}」的说明")
         if len(text) > CLASS_FEATURE_TEXT_MAX_LEN:
             raise AssertionError(
                 f"职业特性说明过长（≤{CLASS_FEATURE_TEXT_MAX_LEN} 字）: {text}"
@@ -1012,13 +1008,14 @@ def parse_items(content: str) -> List[str]:
             raise AssertionError(
                 f"物品条目写法无效: {item}（物品只写 名称x数量，不再支持 [装备]）"
             )
-        matched = re.match(r"^(.+?)(?:[xX×](\d+))?$", raw)
+        matched = re.match(r"^(.+?)(?:[xX](\d+))?$", raw)
         if matched is None:
             raise AssertionError(f"物品条目写法无效: {item}")
         name = matched.group(1).strip()
         quantity = int(matched.group(2)) if matched.group(2) else 1
         if not name:
             raise AssertionError(f"物品名称不能为空: {item}")
+        _ensure_free_text(name, "物品名称")
         if len(name) > ITEM_NAME_MAX_LEN:
             raise AssertionError(
                 f"物品名称过长（≤{ITEM_NAME_MAX_LEN} 字）: {name}"
@@ -1071,6 +1068,9 @@ def parse_magic_items(content: str) -> List[MagicItem]:
             raise AssertionError(f"魔法物品名称不能为空: {item}")
         if not tag:
             raise AssertionError(f"魔法物品标签不能为空: {item}")
+        _ensure_free_text(name, "魔法物品名称")
+        _ensure_free_text(tag, "魔法物品标签")
+        _ensure_free_text(text, "魔法物品说明")
         if len(name) > MAGIC_ITEM_NAME_MAX_LEN:
             raise AssertionError(
                 f"魔法物品名称过长（≤{MAGIC_ITEM_NAME_MAX_LEN} 字）: {name}"
@@ -1098,8 +1098,7 @@ def parse_background(content: str) -> Dict[str, str]:
     items = _split_semicolon_items(content)
     result: Dict[str, str] = {}
     for item in items:
-        normalized = _normalize_colon(item)
-        key, separator, value = normalized.partition(":")
+        key, separator, value = item.partition(":")
         key = key.strip()
         value = value.strip()
         if not separator or not key or not value:
@@ -1110,6 +1109,7 @@ def parse_background(content: str) -> Dict[str, str]:
             raise AssertionError(
                 f"背景键无效: {key}（可用：{'/'.join(BACKGROUND_KEY_LIST)}）"
             )
+        _ensure_free_text(value, f"背景「{key}」的内容")
         if len(value) > BACKGROUND_VALUE_MAX_LEN:
             raise AssertionError(
                 f"背景内容过长（≤{BACKGROUND_VALUE_MAX_LEN} 字）: {key}"
@@ -1128,6 +1128,7 @@ def parse_combat_notes(content: str) -> List[str]:
         raise AssertionError(f"战斗记录最多 {COMBAT_NOTE_MAX_COUNT} 项")
     result: List[str] = []
     for item in items:
+        _ensure_free_text(item, "战斗记录")
         if len(item) > COMBAT_NOTE_MAX_LEN:
             raise AssertionError(
                 f"战斗记录条目过长（≤{COMBAT_NOTE_MAX_LEN} 字）: {item}"
@@ -1167,8 +1168,7 @@ def parse_progress(content: str) -> Dict[str, str]:
     _ensure_no_dollar(content, "进度")
     result: Dict[str, str] = {}
     for item in _split_semicolon_items(content):
-        normalized = _normalize_colon(item)
-        key, separator, value = normalized.partition(":")
+        key, separator, value = item.partition(":")
         key, value = key.strip(), value.strip()
         if not separator or key not in ("经验", "激励"):
             raise AssertionError(
@@ -1203,8 +1203,7 @@ def parse_coins(content: str) -> Dict[str, int]:
     _ensure_no_dollar(content, "钱币")
     result: Dict[str, int] = {}
     for item in _split_semicolon_items(content):
-        normalized = _normalize_colon(item)
-        key, separator, value = normalized.partition(":")
+        key, separator, value = item.partition(":")
         key = key.strip().upper()
         value = value.strip()
         if not separator or key not in COIN_KEY_LIST:
@@ -1595,10 +1594,10 @@ class CharacterService:
         $生命值$ 5/10(4)
         $生命骰$ 4/10 D6
         $属性$ 10/11/12/15/12/8
-        $熟练$ 力量/2*隐匿/奥秘
-        $额外加值$ 运动:优势/隐匿:优势+2/游说:-2
+        $熟练$ 力量; 2*隐匿; 奥秘
+        $额外加值$ 运动:优势; 隐匿:优势+2; 游说:-2
         $限定资源$ 奥术回想:1/1短休
-        $武器$ 短剑+6,1d4+4穿刺/长弓+5,1d8+3穿刺
+        $武器$ 短剑+6|1d4+4穿刺; 长弓+5|1d8+3穿刺
         $法术$ 施法属性:智力; 火球术:3*; 火焰箭:0
         $法术位$ 1:4/4; 2:3/3; 契约3:2/2
 
@@ -1686,11 +1685,14 @@ class CharacterService:
         half_prof_rules = parse_half_prof(half_prof_str) if half_prof_str else []
         ext_dict: Dict[str, str] = {}
         if ext_str:
-            for item in ext_str.split("/"):
+            for raw_item in ext_str.split(";"):
+                item = raw_item.strip()
+                if not item:
+                    continue
                 if ":" not in item or item.endswith(":"):
                     raise AssertionError("必须使用冒号(:)分割额外加值条目和内容")
                 key, _, content = item.partition(":")
-                ext_dict[key] = content
+                ext_dict[key.strip()] = content.strip()
 
         AbilityService.initialize(
             ability_info,
@@ -1819,19 +1821,19 @@ def gen_template_char(group_id: str = "", user_id: str = "") -> DNDCharacter:
     character.weapons = [
         WeaponInfo(
             name="火焰箭", attack_bonus="+8", damage_expr="2d10",
-            damage_type="火焰", note="法术攻击 · 120尺",
+            damage_type="火焰", note="法术攻击, 120尺",
         ),
         WeaponInfo(
             name="冷冻射线", attack_bonus="+8", damage_expr="2d8",
-            damage_type="寒冷", note="法术攻击 · 60尺 · 速度-10",
+            damage_type="寒冷", note="法术攻击, 60尺, 速度-10",
         ),
         WeaponInfo(
             name="匕首", attack_bonus="+5", damage_expr="1d4+2",
-            damage_type="穿刺", note="灵巧 · 轻型",
+            damage_type="穿刺", note="灵巧, 轻型",
         ),
         WeaponInfo(
             name="长棍", attack_bonus="+2", damage_expr="1d6-1",
-            damage_type="钝击", note="奥术法器 · 两用(1d8)",
+            damage_type="钝击", note="奥术法器, 两用(1d8)",
         ),
     ]
     character.features = [

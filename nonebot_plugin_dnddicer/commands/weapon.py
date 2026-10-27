@@ -223,7 +223,7 @@ def multi_weapon_error(segment: str) -> MultiWeaponError:
 def has_multi_weapon_separator(body: str) -> bool:
     """命令体是否含多武器分隔符（供 ``.hp`` 的伤害位置判断是否尝试多项写法）。
 
-    只作「是否值得一试」的判断：分隔符可以落在武器名里（如 ``.设置武器 短剑,匕首+4,1d6``
+    只作「是否值得一试」的判断：分隔符可以落在武器名里（如 ``.设置武器 短剑; 匕首+4|1d6``
     的伤害执行写法），真正的判定是逐项能否解析成功（见 resolve_weapon_damage_entries）。
     """
     return _MULTI_WEAPON_SEPARATOR_PATTERN.search(body) is not None
@@ -955,11 +955,11 @@ async def handle_weapon(bot: Bot, event: MessageEvent) -> None:
 # =========================================================================
 
 _HELP_SET_WEAPON = (
-    ".设置武器 名称+命中,伤害表达式[,备注] （多项用 / 分隔）\n"
+    ".设置武器 名称+命中|伤害表达式[|备注] （多项用 ; 分隔）\n"
     "  无参数：列出当前武器与用法\n"
     "  同名会覆盖；名称尾部加 x 表示不做攻击检定\n"
-    "  备注只用于卡面图，如 匕首+5,1d4+2穿刺,灵巧·轻型\n"
-    "  示例：.设置武器 短剑+6,1d4+4穿刺"
+    "  备注只用于卡面图，如 匕首+5|1d4+2穿刺|灵巧, 轻型\n"
+    "  示例：.设置武器 短剑+6|1d4+4穿刺"
 )
 set_weapon_matcher = base.on_dnd_command(
     "设置武器", _HELP_SET_WEAPON, doc="guide/weapons"

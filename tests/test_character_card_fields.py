@@ -43,7 +43,7 @@ $等级$ 5
 $生命值$ 20/30(5)
 $生命骰$ 3/4 D8
 $属性$ 15/14/13/12/10/8
-$熟练$ 力量/2*隐匿/奥秘
+$熟练$ 力量; 2*隐匿; 奥秘
 $额外加值$ 隐匿:优势+2"""
 
 
@@ -59,7 +59,7 @@ def test_old_card_output_unchanged() -> None:
         assert key not in text
     assert "$姓名$ 伊丽莎白" in text
     assert "$属性$ 15/14/13/12/10/8" in text
-    assert "$熟练$ 力量/2*隐匿/奥秘" in text
+    assert "$熟练$ 力量; 2*隐匿; 奥秘" in text
     assert "$额外加值$ 隐匿:优势+2" in text
 
 
@@ -67,10 +67,10 @@ def test_extra_advantage_only_roundtrip() -> None:
     """只有 优势/劣势、没有数值的额外加值也要原样回写（否则再记录会丢）。"""
     char = _parse(
         "$等级$ 5\n$属性$ 10/10/10/10/10/10\n"
-        "$额外加值$ 隐匿:优势/游说:劣势/豁免:优势+2"
+        "$额外加值$ 隐匿:优势; 游说:劣势; 豁免:优势+2"
     )
     text = char.get_char_info()
-    assert "$额外加值$ 隐匿:优势/游说:劣势/豁免:优势+2" in text
+    assert "$额外加值$ 隐匿:优势; 游说:劣势; 豁免:优势+2" in text
     again = _parse(text)
     assert again.get_char_info() == text
     assert again.ability_info.check_adv[EXT_ITEM_INDEX_DICT["隐匿"]] == 1
@@ -126,7 +126,7 @@ def test_template_roundtrip() -> None:
     assert parsed.story.startswith("伊瑟兰出身于银月城的学者世家")
     assert parsed.story.count("\n") == 2
     assert (parsed.spell_dc, parsed.spell_attack) == ("15", "+8")
-    assert parsed.weapons[2].note == "灵巧 · 轻型"
+    assert parsed.weapons[2].note == "灵巧, 轻型"
     assert parsed.ability_info.check_ext[EXT_ITEM_INDEX_DICT["豁免"]] == "+1"
 
 
@@ -143,7 +143,7 @@ def test_combat_validation() -> None:
 
 def test_prof_groups_and_check_entries() -> None:
     checks, groups = parse_prof_entries(
-        "运动/2*隐匿/护甲:轻甲·中甲/武器:军用武器/语言:通用语·精灵语"
+        "运动; 2*隐匿; 护甲:轻甲,中甲; 武器:军用武器; 语言:通用语,精灵语"
     )
     assert checks == ["运动", "2*隐匿"]
     assert groups == {
@@ -154,16 +154,16 @@ def test_prof_groups_and_check_entries() -> None:
     with pytest.raises(AssertionError, match="不能为空"):
         parse_prof_entries("护甲:")
     with pytest.raises(AssertionError, match="条目重复"):
-        parse_prof_entries("护甲:轻甲·轻甲")
+        parse_prof_entries("护甲:轻甲,轻甲")
 
 
 def test_feats_traits_items_background_notes() -> None:
-    assert parse_feats("巨武器大师/幸运") == ["巨武器大师", "幸运"]
-    assert parse_race_traits("黑暗视觉 / 妖精血统:豁免优势") == [
+    assert parse_feats("巨武器大师; 幸运") == ["巨武器大师", "幸运"]
+    assert parse_race_traits("黑暗视觉; 妖精血统:豁免优势") == [
         "黑暗视觉", "妖精血统:豁免优势"
     ]
     class_traits = parse_class_features(
-        "1|仪式学家:仪式法术直接施展/3|塑能学者"
+        "1|仪式学家:仪式法术直接施展; 3|塑能学者"
     )
     assert [item.get_info() for item in class_traits] == [
         "1|仪式学家:仪式法术直接施展", "3|塑能学者"
@@ -288,7 +288,7 @@ def test_multi_segment_without_required_merges_for_split_record() -> None:
     base = gen_template_char("g", "u")
     base.portrait = "portraits/g_u.png"
     merged = _parse(
-        "$姓名$ 李四\n$武器$ 短剑+6,1d6+3穿刺,灵巧\n$战斗记录$ 新记录",
+        "$姓名$ 李四\n$武器$ 短剑+6|1d6+3穿刺|灵巧\n$战斗记录$ 新记录",
         existing=base,
     )
     assert merged.name == "李四"
@@ -305,7 +305,7 @@ def test_multi_segment_without_required_merges_for_split_record() -> None:
 def test_multi_segment_without_existing_still_requires_level_and_ability() -> None:
     """没有旧卡时，多段命令仍必须同时带等级与属性。"""
     with pytest.raises(AssertionError, match="必须设定等级与属性"):
-        _parse("$姓名$ 李四\n$武器$ 短剑+6,1d6+3穿刺")
+        _parse("$姓名$ 李四\n$武器$ 短剑+6|1d6+3穿刺")
 
 
 def test_single_segment_without_existing_fails() -> None:
@@ -358,35 +358,35 @@ def test_coins_progress_story_parsing() -> None:
 
 
 def test_weapon_note_parsing() -> None:
-    weapon = parse_weapon_item("匕首+5,1d4+2穿刺,灵巧·轻型")
-    assert weapon.note == "灵巧·轻型"
-    assert weapon.get_info() == "匕首+5,1d4+2穿刺,灵巧·轻型"
-    assert parse_weapon_item("匕首+5,1d4+2穿刺").note == ""
+    weapon = parse_weapon_item("匕首+5|1d4+2穿刺|灵巧, 轻型")
+    assert weapon.note == "灵巧, 轻型"
+    assert weapon.get_info() == "匕首+5|1d4+2穿刺|灵巧, 轻型"
+    assert parse_weapon_item("匕首+5|1d4+2穿刺").note == ""
     with pytest.raises(AssertionError, match="最多三段"):
-        parse_weapon_item("匕首+5,1d4+2穿刺,a,b")
+        parse_weapon_item("匕首+5|1d4+2穿刺|a|b")
     with pytest.raises(AssertionError, match="备注过长"):
-        parse_weapon_item("匕首+5,1d4+2穿刺," + "长" * 31)
+        parse_weapon_item("匕首+5|1d4+2穿刺|" + "长" * 31)
     with pytest.raises(AssertionError, match="不能包含符号"):
-        parse_weapon_item("匕首+5,1d4+2穿刺,灵巧/轻型")
+        parse_weapon_item("匕首+5|1d4+2穿刺|灵巧;轻型")
 
 
 def test_spell_details_parsing() -> None:
     spell = parse_spell_item(
-        "火球术:3*|时间=1动作,距离=150尺,材料=是,备注=8d6 火焰 / 敏捷"
+        "火球术:3*|时间:1动作|距离:150尺|材料:是|备注:8d6 火焰 / 敏捷"
     )
     assert (spell.level, spell.prepared) == (3, True)
     assert (spell.cast_time, spell.range) == ("1动作", "150尺")
     assert spell.material is True
     assert spell.note == "8d6 火焰 / 敏捷"
     assert spell.get_info() == (
-        "火球术:3*|时间=1动作,距离=150尺,材料=是,备注=8d6 火焰 / 敏捷"
+        "火球术:3*|时间:1动作|距离:150尺|材料:是|备注:8d6 火焰 / 敏捷"
     )
     with pytest.raises(AssertionError, match="法术详情重复"):
-        parse_spell_item("火球术:3|时间=1动作,时间=1反应")
+        parse_spell_item("火球术:3|时间:1动作|时间:1反应")
     with pytest.raises(AssertionError, match="只能写 是 或 否"):
-        parse_spell_item("火球术:3|专注=也许")
+        parse_spell_item("火球术:3|专注:也许")
     with pytest.raises(AssertionError, match="备注过长"):
-        parse_spell_item("火球术:3|备注=" + "长" * 41)
+        parse_spell_item("火球术:3|备注:" + "长" * 41)
 
 
 def test_spell_setting_header_keys() -> None:
@@ -408,7 +408,7 @@ def test_feature_and_feat_description() -> None:
     with pytest.raises(AssertionError, match="限定资源说明过长"):
         parse_feature_item("奥术回想:1/1短休|" + "长" * 81)
 
-    assert parse_feats("战法师:专注豁免具有优势/幸运") == [
+    assert parse_feats("战法师:专注豁免具有优势; 幸运") == [
         "战法师:专注豁免具有优势",
         "幸运",
     ]

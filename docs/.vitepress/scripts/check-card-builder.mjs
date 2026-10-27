@@ -307,7 +307,7 @@ function main() {
   checkEqual(
     '职业特性按等级排序',
     builder.contentFor(state, K.CLASS_TRAITS),
-    '1|战斗风格:选择一种战斗风格/3|战斗大师:获得战技',
+    '1|战斗风格:选择一种战斗风格; 3|战斗大师:获得战技',
   )
 
   // 魔法物品说明转 // 分段
@@ -385,7 +385,7 @@ function main() {
     { name: '短剑', noAttack: false, attack: '+1d4', damage: '1d6+2', type: '穿刺', note: '' },
   ]
   check('武器命中骰子加值可导出', builder.validateState(diceState).errors.length === 0, JSON.stringify(builder.validateState(diceState).errors))
-  checkEqual('武器命中骰子加值保留', builder.contentFor(diceState, K.WEAPON), '短剑+1d4,1d6+2穿刺')
+  checkEqual('武器命中骰子加值保留', builder.contentFor(diceState, K.WEAPON), '短剑+1d4|1d6+2穿刺')
 
   // 空的展示分组要报「不能为空」而不是「无效条目」
   const emptyGroup = builder.parseCardText(
@@ -426,8 +426,14 @@ function main() {
 
   const backgroundState = baseState()
   backgroundState[K.BACKGROUND]['外貌'] = '银发绿眼；嘴角有疤'
+  check(
+    '背景里的全角分号允许（不是分隔符）',
+    !errorOf(backgroundState, K.BACKGROUND),
+    JSON.stringify(backgroundState[K.BACKGROUND]),
+  )
+  backgroundState[K.BACKGROUND]['外貌'] = '银发绿眼; 嘴角有疤'
   const backgroundError = errorOf(backgroundState, K.BACKGROUND)
-  check('背景全角分号被拦截', Boolean(backgroundError), JSON.stringify(backgroundState[K.BACKGROUND]))
+  check('背景半角分号被拦截', Boolean(backgroundError), JSON.stringify(backgroundState[K.BACKGROUND]))
   check(
     '背景分号错误点名字段',
     backgroundError?.message.includes('背景「外貌」'),
@@ -435,7 +441,7 @@ function main() {
   )
   check(
     '背景分号错误点名符号',
-    backgroundError?.message.includes('「；」'),
+    backgroundError?.message.includes('「;」'),
     backgroundError?.message,
   )
   check(
@@ -444,32 +450,25 @@ function main() {
     backgroundError?.message,
   )
   backgroundState[K.BACKGROUND]['外貌'] = ''
-  backgroundState[K.BACKGROUND]['个性'] = '喜欢;追问原理'
-  const backgroundHalfWidthError = errorOf(backgroundState, K.BACKGROUND)
-  check(
-    '背景半角分号同样点名符号',
-    backgroundHalfWidthError?.message.includes('背景「个性」') &&
-      backgroundHalfWidthError.message.includes('「;」'),
-    backgroundHalfWidthError?.message,
-  )
-  backgroundState[K.BACKGROUND]['个性'] = ''
   check('背景清空后不再报错', !errorOf(backgroundState, K.BACKGROUND))
   backgroundState[K.BACKGROUND]['外貌'] = '银发绿眼，深蓝法袍'
   check('背景里的逗号允许', !errorOf(backgroundState, K.BACKGROUND))
+  backgroundState[K.BACKGROUND]['外貌'] = '银发绿眼|嘴角有疤'
+  check(
+    '背景竖线被拦截',
+    errorOf(backgroundState, K.BACKGROUND)?.message.includes('「|」'),
+    errorOf(backgroundState, K.BACKGROUND)?.message,
+  )
   backgroundState[K.BACKGROUND]['外貌'] = ''
 
   const importBackground = builder.parseCardText(
     '$背景$ 外貌:银发绿眼；嘴角有疤; 个性:喜欢追问原理',
   )
-  check(
-    '导入背景分号提示缺少键名与分号',
-    importBackground.errors.some(
-      (item) =>
-        item.key === K.BACKGROUND &&
-        item.message.includes('缺少键名') &&
-        item.message.includes('不能出现分号'),
-    ),
-    JSON.stringify(importBackground.errors),
+  check('导入背景保留全角分号', importBackground.errors.length === 0, JSON.stringify(importBackground.errors))
+  checkEqual(
+    '导入背景分号留在值里',
+    importBackground.state[K.BACKGROUND]['外貌'],
+    '银发绿眼；嘴角有疤',
   )
 
   const semicolonStoryState = baseState()
@@ -477,40 +476,42 @@ function main() {
   check('故事里的分号允许', !errorOf(semicolonStoryState, K.STORY))
 
   const featState = baseState()
-  featState[K.FEATS] = [{ name: '战法师', text: '专注/豁免优势' }]
+  featState[K.FEATS] = [{ name: '战法师', text: '专注; 豁免优势' }]
   const featTextError = errorOf(featState, K.FEATS)
   check(
-    '专长说明斜杠被拦截',
+    '专长说明分号被拦截',
     featTextError?.message.includes('专长「战法师」的说明') &&
-      featTextError.message.includes('「/」'),
+      featTextError.message.includes('「;」'),
     featTextError?.message,
   )
   featState[K.FEATS] = [{ name: '战法师：学徒', text: '' }]
+  check('专长名称全角冒号允许', !errorOf(featState, K.FEATS))
+  featState[K.FEATS] = [{ name: '战法师:学徒', text: '' }]
   const featNameError = errorOf(featState, K.FEATS)
   check(
-    '专长名称冒号被拦截',
-    featNameError?.message.includes('专长名称') && featNameError.message.includes('「：」'),
+    '专长名称半角冒号被拦截',
+    featNameError?.message.includes('专长名称') && featNameError.message.includes('「:」'),
     featNameError?.message,
   )
-  featState[K.FEATS] = [{ name: '战法师', text: '专注／豁免优势' }]
-  check('专长说明里的全角斜杠允许', !errorOf(featState, K.FEATS))
+  featState[K.FEATS] = [{ name: '战法师', text: '专注/豁免优势' }]
+  check('专长说明里的斜杠允许', !errorOf(featState, K.FEATS))
 
   const raceTraitState = baseState()
-  raceTraitState[K.RACE_TRAITS] = [{ name: '黑暗视觉', text: '60尺/120尺' }]
+  raceTraitState[K.RACE_TRAITS] = [{ name: '黑暗视觉', text: '60尺; 120尺' }]
   const raceTraitError = errorOf(raceTraitState, K.RACE_TRAITS)
   check(
-    '种族特性说明斜杠被拦截',
+    '种族特性说明分号被拦截',
     raceTraitError?.message.includes('种族特性「黑暗视觉」的说明'),
     raceTraitError?.message,
   )
 
   const classTraitState = baseState()
   classTraitState[K.CLASS_TRAITS] = [
-    { level: '3', name: '塑能学者', text: '火球/闪电' },
+    { level: '3', name: '塑能学者', text: '火球; 闪电' },
   ]
   const classTraitError = errorOf(classTraitState, K.CLASS_TRAITS)
   check(
-    '职业特性说明斜杠被拦截',
+    '职业特性说明分号被拦截',
     classTraitError?.message.includes('职业特性「塑能学者」的说明'),
     classTraitError?.message,
   )
@@ -527,20 +528,20 @@ function main() {
         两者: { on: false, amount: '' },
         手动: { on: false, amount: '' },
       },
-      text: '回复法术位；每次短休',
+      text: '回复法术位; 每次短休',
     },
   ]
   const featureError = errorOf(featureState, K.FEATURE)
   check(
     '限定资源说明分号被拦截',
     featureError?.message.includes('限定资源「奥术回想」的说明') &&
-      featureError.message.includes('「；」'),
+      featureError.message.includes('「;」'),
     featureError?.message,
   )
 
   const magicItemState = baseState()
   magicItemState[K.MAGIC_ITEMS] = [
-    { name: '防护斗篷', tag: '奇物', text: 'AC+1；豁免+1' },
+    { name: '防护斗篷', tag: '奇物', text: 'AC+1; 豁免+1' },
   ]
   const magicItemError = errorOf(magicItemState, K.MAGIC_ITEMS)
   check(
@@ -559,29 +560,29 @@ function main() {
   )
 
   const itemState = baseState()
-  itemState[K.ITEMS] = [{ name: '治疗药水；大瓶', qty: '1' }]
+  itemState[K.ITEMS] = [{ name: '治疗药水; 大瓶', qty: '1' }]
   const itemError = errorOf(itemState, K.ITEMS)
   check(
     '物品名称分号被拦截',
-    itemError?.message.includes('物品名称') && itemError.message.includes('「；」'),
+    itemError?.message.includes('物品名称') && itemError.message.includes('「;」'),
     itemError?.message,
   )
 
   const noteState = baseState()
-  noteState[K.COMBAT_NOTES] = ['祝福术；中毒']
+  noteState[K.COMBAT_NOTES] = ['祝福术; 中毒']
   const noteError = errorOf(noteState, K.COMBAT_NOTES)
   check(
     '战斗记录分号被拦截',
-    noteError?.message.includes('战斗记录') && noteError.message.includes('「；」'),
+    noteError?.message.includes('战斗记录') && noteError.message.includes('「;」'),
     noteError?.message,
   )
 
   const speedState = baseState()
-  speedState[K.COMBAT]['速度'] = '30；飞行60'
+  speedState[K.COMBAT]['速度'] = '30; 飞行60'
   const speedError = errorOf(speedState, K.COMBAT)
   check(
     '速度分号被拦截',
-    speedError?.message.includes('速度') && speedError.message.includes('「；」'),
+    speedError?.message.includes('速度') && speedError.message.includes('「;」'),
     speedError?.message,
   )
 
@@ -593,14 +594,16 @@ function main() {
       attack: '+5',
       damage: '1d8+3',
       type: '挥砍',
-      note: '双手，灵巧',
+      note: '双手, √灵巧 / 重型',
     },
   ]
+  check('武器备注里的逗号与斜杠允许', !errorOf(weaponNoteState, K.WEAPON))
+  weaponNoteState[K.WEAPON][0].note = '双手|灵巧'
   const weaponNoteError = errorOf(weaponNoteState, K.WEAPON)
   check(
-    '武器备注逗号被拦截',
+    '武器备注竖线被拦截',
     weaponNoteError?.message.includes('武器「长剑」的备注') &&
-      weaponNoteError.message.includes('「，」'),
+      weaponNoteError.message.includes('「|」'),
     weaponNoteError?.message,
   )
 
@@ -616,7 +619,7 @@ function main() {
         name: '火球术',
         level: '3',
         prepared: false,
-        time: '1动作，或1反应',
+        time: '1动作, 或1反应',
         range: '150尺',
         concentration: false,
         ritual: false,
@@ -625,14 +628,16 @@ function main() {
       },
     ],
   }
+  check('法术施法时间里的逗号允许', !errorOf(spellState, K.SPELL))
+  spellState[K.SPELL].list[0].time = '1动作|或1反应'
   const spellTimeError = errorOf(spellState, K.SPELL)
   check(
-    '法术施法时间逗号被拦截',
+    '法术施法时间竖线被拦截',
     spellTimeError?.message.includes('法术「火球术」的施法时间'),
     spellTimeError?.message,
   )
   spellState[K.SPELL].list[0].time = '1动作'
-  spellState[K.SPELL].list[0].note = '8d6；敏捷'
+  spellState[K.SPELL].list[0].note = '8d6; 敏捷'
   const spellNoteError = errorOf(spellState, K.SPELL)
   check(
     '法术备注分号被拦截',
@@ -641,10 +646,10 @@ function main() {
   )
 
   const profState = baseState()
-  profState[K.PROF].groups['工具'] = '书法工具/盗贼工具'
+  profState[K.PROF].groups['工具'] = '书法工具|盗贼工具'
   const profError = errorOf(profState, K.PROF)
   check(
-    '熟练分组条目斜杠被拦截',
+    '熟练分组条目的竖线被拦截',
     profError?.message.includes('熟练分组「工具」的条目'),
     profError?.message,
   )
@@ -733,7 +738,7 @@ function main() {
   checkEqual('运动健将运动', athleteValues['运动'], '+2')
   checkEqual('运动健将察觉不适用', athleteValues['察觉'], '+2')
 
-  const bothHalf = builder.parseCardText(halfBase + '$半熟练$ 力敏体:向上/全部:向下')
+  const bothHalf = builder.parseCardText(halfBase + '$半熟练$ 力敏体:向上; 全部:向下')
   const bothValues = builder.deriveCheckValues(bothHalf.state)
   checkEqual('半熟练重叠取较高', bothValues['先攻'], '+4')
   checkEqual('半熟练重叠技能取较高', bothValues['运动'], '+2')
@@ -741,7 +746,7 @@ function main() {
   checkEqual(
     '半熟练规则回写排序',
     builder.contentFor(bothHalf.state, K.HALF_PROF),
-    '全部:向下/力敏体:向上',
+    '全部:向下; 力敏体:向上',
   )
   const halfSerialized = builder.serializeCard(bothHalf.state)
   const halfReparsed = builder.parseCardText(halfSerialized)

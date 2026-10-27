@@ -71,14 +71,16 @@ def test_feature_recover_display_explicit_full():
 def test_feature_recover_normalized_order():
     """恢复档按固定顺序输出（长休写在短休前面也会被排好）。"""
     assert normalize_feature_recover("长休,短休+1") == "短休+1,长休"
-    feature = parse_feature_item("引导神力：2/2长休+2，短休")
+    feature = parse_feature_item("引导神力:2/2长休+2,短休")
     assert feature.recover == "短休,长休+2"
 
 
-def test_feature_list_semicolon_both_widths():
-    """半角 / 全角分号都接受；多条解析。"""
-    features = parse_feature_list("奥术回想:1/1短休；圣疗:25/25长休")
+def test_feature_list_semicolon():
+    """分条只认半角分号；全角分号是普通文字，留在同一项里导致写法无效。"""
+    features = parse_feature_list("奥术回想:1/1短休; 圣疗:25/25长休")
     assert [feature.name for feature in features] == ["奥术回想", "圣疗"]
+    with pytest.raises(AssertionError, match="限定资源恢复量无效"):
+        parse_feature_list("奥术回想:1/1短休；圣疗:25/25长休")
 
 
 @pytest.mark.parametrize(
@@ -133,7 +135,7 @@ def test_feature_old_card_defaults():
 def test_spell_setting_with_ability_and_prepared():
     """施法属性 + 准备标记 + 戏法。"""
     ability, spells, dc, attack = parse_spell_setting(
-        "施法属性：魅力; 火球术:3*; 闪电束:3; 火焰箭:0"
+        "施法属性:魅力; 火球术:3*; 闪电束:3; 火焰箭:0"
     )
     assert ability == "魅力"
     assert (dc, attack) == ("", "")
@@ -204,7 +206,7 @@ def test_spell_slots_parse_and_render():
 def test_spell_slots_set_omitted_max():
     """命令写法 ``1:4`` = 当前与上限都设为 4。"""
     entries = parse_spell_slot_entries(
-        "1:4, 2:3, 契约3:2/2", allow_omitted_max=True
+        "1:4; 2:3; 契约3:2/2", allow_omitted_max=True
     )
     assert entries == [
         (False, 1, 4, 4),

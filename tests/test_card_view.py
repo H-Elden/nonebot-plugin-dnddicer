@@ -132,7 +132,7 @@ def test_extra_bonus_participates_in_display() -> None:
     char = CharacterService.parse(
         "$等级$ 5\n$属性$ 16/10/10/10/10/10\n"
         "$熟练$ 运动\n"
-        "$额外加值$ 豁免:+2/运动:+1d4/隐匿:优势",
+        "$额外加值$ 豁免:+2; 运动:+1d4; 隐匿:优势",
         "g",
         "u",
     )
@@ -183,14 +183,14 @@ def test_weapons_five_columns() -> None:
         "2d10",
         "火焰",
     )
-    assert view.weapons[0].note == "法术攻击 · 120尺"
+    assert view.weapons[0].note == "法术攻击, 120尺"
     assert (view.weapons[1].hit, view.weapons[1].damage) == ("+8", "2d8")
     assert view.weapons[1].damage_type == "寒冷"
-    assert view.weapons[1].note == "法术攻击 · 60尺 · 速度-10"
+    assert view.weapons[1].note == "法术攻击, 60尺, 速度-10"
     assert view.weapons[2].hit == "+5"
     assert view.weapons[2].damage == "1d4+2"
     assert view.weapons[2].damage_type == "穿刺"
-    assert view.weapons[2].note == "灵巧 · 轻型"
+    assert view.weapons[2].note == "灵巧, 轻型"
     assert (view.weapons[3].hit, view.weapons[3].damage) == ("+2", "1d6-1")
 
 

@@ -64,18 +64,18 @@ async def _expect(app: App, matcher, event, expected: str):
 
 
 def test_parse_weapon_item_basic():
-    """标准写法：名称+命中加值,伤害表达式+类型。"""
-    weapon = parse_weapon_item("短剑+6,1d4+4穿刺")
+    """标准写法：名称+命中加值|伤害表达式+类型。"""
+    weapon = parse_weapon_item("短剑+6|1d4+4穿刺")
     assert weapon.name == "短剑"
     assert weapon.attack_bonus == "+6"
     assert weapon.damage_expr == "1d4+4"
     assert weapon.damage_type == "穿刺"
-    assert weapon.get_info() == "短剑+6,1d4+4穿刺"
+    assert weapon.get_info() == "短剑+6|1d4+4穿刺"
 
 
 def test_parse_weapon_item_without_bonus():
-    """省略命中加值（法术类常见）：火焰箭,2d10火焰。"""
-    weapon = parse_weapon_item("火焰箭,2d10火焰")
+    """省略命中加值（法术类常见）：火焰箭|2d10火焰。"""
+    weapon = parse_weapon_item("火焰箭|2d10火焰")
     assert weapon.name == "火焰箭"
     assert weapon.attack_bonus == ""
     assert weapon.damage_expr == "2d10"
@@ -84,26 +84,26 @@ def test_parse_weapon_item_without_bonus():
 
 def test_parse_weapon_item_without_type():
     """省略伤害类型：无类型提示。"""
-    weapon = parse_weapon_item("短剑+6,1d4+4")
+    weapon = parse_weapon_item("短剑+6|1d4+4")
     assert weapon.damage_expr == "1d4+4"
     assert weapon.damage_type == ""
 
 
-def test_parse_weapon_item_fullwidth_comma():
-    """全角逗号与半角等价。"""
-    weapon = parse_weapon_item("短剑+6，1d4+4穿刺")
-    assert weapon.name == "短剑" and weapon.damage_type == "穿刺"
+def test_parse_weapon_item_fullwidth_comma_rejected():
+    """全角逗号不再是分隔符（格式 v2）：缺 | → 视为条目不完整。"""
+    with pytest.raises(AssertionError, match="武器条目不完整"):
+        parse_weapon_item("短剑+6，1d4+4穿刺")
 
 
 def test_parse_weapon_item_slash_synonym():
     """伤害类型异译容错：斩击 → 挥砍。"""
-    weapon = parse_weapon_item("巨剑+5,2d6+3斩击")
+    weapon = parse_weapon_item("巨剑+5|2d6+3斩击")
     assert weapon.damage_type == "挥砍"
 
 
 def test_parse_weapon_item_multi_dice_and_dice_bonus():
     """多骰伤害与骰子加值均合法。"""
-    weapon = parse_weapon_item("双头武器+1d4,2d6+1d4+3")
+    weapon = parse_weapon_item("双头武器+1d4|2d6+1d4+3")
     assert weapon.attack_bonus == "+1d4"
     assert weapon.damage_expr == "2d6+1d4+3"
 
@@ -112,16 +112,16 @@ def test_parse_weapon_item_multi_dice_and_dice_bonus():
     ("item", "message"),
     [
         ("短剑+6", "武器条目不完整"),
-        ("短剑+6,", "武器条目不完整"),
-        ("+6,1d4+4", "武器名称不能为空"),
-        ("一二三四五六七八九十一二三四五六七八九十甲+1,1d6", "武器名称过长"),
-        ("猛虎攻击+5,1d6", "不能包含「攻击」字样"),
-        ("命中匕首+1,1d4", "不能包含「命中」字样"),
-        ("力量+5,1d6", "不能与检定条目重名"),
-        ("短剑+abc,1d4+4", "武器命中加值无效"),
-        ("短剑+6,2d6*2", "武器伤害表达式无效"),
-        ("短剑+6,(1d4+2)", "武器伤害表达式无效"),
-        ("短剑+6,1d4+", "武器伤害表达式无效"),
+        ("短剑+6|", "武器条目不完整"),
+        ("+6|1d4+4", "武器名称不能为空"),
+        ("一二三四五六七八九十一二三四五六七八九十甲+1|1d6", "武器名称过长"),
+        ("猛虎攻击+5|1d6", "不能包含「攻击」字样"),
+        ("命中匕首+1|1d4", "不能包含「命中」字样"),
+        ("力量+5|1d6", "不能与检定条目重名"),
+        ("短剑+abc|1d4+4", "武器命中加值无效"),
+        ("短剑+6|2d6*2", "武器伤害表达式无效"),
+        ("短剑+6|(1d4+2)", "武器伤害表达式无效"),
+        ("短剑+6|1d4+", "武器伤害表达式无效"),
     ],
 )
 def test_parse_weapon_item_invalid(item, message):
@@ -132,54 +132,53 @@ def test_parse_weapon_item_invalid(item, message):
 def test_parse_weapon_item_reserved_command_name():
     """武器名不得与插件固定命令重名（命令层传入保留名）。"""
     with pytest.raises(AssertionError, match="不能与插件命令重名"):
-        parse_weapon_item("r+5,1d4", reserved_names=("r", "角色卡"))
+        parse_weapon_item("r+5|1d4", reserved_names=("r", "角色卡"))
 
 
 def test_parse_weapon_list_multi():
-    weapons = parse_weapon_list("短剑+6,1d4+4穿刺/长弓+5,1d8+3穿刺")
+    weapons = parse_weapon_list("短剑+6|1d4+4穿刺; 长弓+5|1d8+3穿刺")
     assert [w.name for w in weapons] == ["短剑", "长弓"]
 
 
 def test_parse_weapon_list_duplicate():
     with pytest.raises(AssertionError, match="武器名称重复"):
-        parse_weapon_list("短剑+6,1d4+4/短剑+5,1d6")
+        parse_weapon_list("短剑+6|1d4+4; 短剑+5|1d6")
 
 
 def test_parse_weapon_list_limit():
-    content = "/".join(f"武器{i}+1,1d6" for i in range(21))
+    content = "; ".join(f"武器{i}+1|1d6" for i in range(21))
     with pytest.raises(AssertionError, match="武器数量最多 20 件"):
         parse_weapon_list(content)
 
 
 def test_parse_weapon_item_whitespace_tolerance():
-    """兼容性：逗号前后空格 / 全角逗号 / 表达式与加值内部空白均等价。"""
+    """兼容性：竖线前后空格 / 表达式与加值内部空白均等价。"""
     for item in (
-        "长剑+8,  1d8+5挥砍",
-        "长剑+8，1d8+5挥砍",
-        "长剑+8 , 1d8 + 5 挥砍",
-        "长剑+ 8,1d8+5挥砍",
+        "长剑+8|  1d8+5挥砍",
+        "长剑+8 | 1d8 + 5 挥砍",
+        "长剑+ 8|1d8+5挥砍",
     ):
         weapon = parse_weapon_item(item)
         assert weapon.name == "长剑"
         assert weapon.attack_bonus == "+8"
         assert weapon.damage_expr == "1d8+5"
         assert weapon.damage_type == "挥砍"
-        assert weapon.get_info() == "长剑+8,1d8+5挥砍"  # 归一化回写
+        assert weapon.get_info() == "长剑+8|1d8+5挥砍"  # 归一化回写
 
 
 def test_parse_weapon_item_no_attack_mark():
     """x 标记：不可攻击检定（纯伤害法术）；英文名尾 x 不误判；与加值互斥。"""
-    spell = parse_weapon_item("火球术x,8d6火焰")
+    spell = parse_weapon_item("火球术x|8d6火焰")
     assert spell.no_attack is True
     assert spell.name == "火球术"
-    assert spell.get_info() == "火球术x,8d6火焰"
+    assert spell.get_info() == "火球术x|8d6火焰"
 
-    sword = parse_weapon_item("Box+2,1d6")
+    sword = parse_weapon_item("Box+2|1d6")
     assert sword.no_attack is False
     assert sword.name == "Box"
 
     with pytest.raises(AssertionError, match="不要再写命中加值"):
-        parse_weapon_item("火球术x+2,1d6")
+        parse_weapon_item("火球术x+2|1d6")
 
 
 # ── 职业与伤害类型归一 ──────────────────────────────────────────────────
@@ -242,7 +241,7 @@ def test_parse_character_with_new_fields():
         "$子职$ 刺客\n"
         "$等级$ 5\n"
         "$属性$ 15/14/13/12/10/8\n"
-        "$武器$ 短剑+6,1d4+4穿刺/长弓+5,1d8+3穿刺",
+        "$武器$ 短剑+6|1d4+4穿刺; 长弓+5|1d8+3穿刺",
         "g",
         "u",
     )
@@ -264,7 +263,7 @@ def test_character_round_trip_with_weapons():
     """卡面输出可再记录（武器/职业段往返一致）。"""
     content = (
         "$姓名$ 伊丽莎白\n$种族$ 半精灵\n$职业$ 游荡者\n$子职$ 刺客\n"
-        "$等级$ 5\n$属性$ 15/14/13/12/10/8\n$武器$ 短剑+6,1d4+4穿刺/长弓+5,1d8+3穿刺"
+        "$等级$ 5\n$属性$ 15/14/13/12/10/8\n$武器$ 短剑+6|1d4+4穿刺; 长弓+5|1d8+3穿刺"
     )
     char = CharacterService.parse(content, "g", "u")
     again = CharacterService.parse(char.get_char_info(), "g", "u")
@@ -310,7 +309,7 @@ async def test_record_and_view_with_new_fields(app: App):
         "$子职$ 刺客\n"
         "$等级$ 5\n"
         "$属性$ 15/14/13/12/10/8\n"
-        "$武器$ 短剑+6,1d4+4穿刺/长弓+5,1d8+3穿刺"
+        "$武器$ 短剑+6|1d4+4穿刺; 长弓+5|1d8+3穿刺"
     )
     await _expect(app, char_matcher, _event(content), "已新建角色卡「测试卡」并绑定到本群。")
 
@@ -321,7 +320,7 @@ async def test_record_and_view_with_new_fields(app: App):
         "$子职$ 刺客\n"
         "$等级$ 5\n"
         "$属性$ 15/14/13/12/10/8\n"
-        "$武器$ 短剑+6,1d4+4穿刺/长弓+5,1d8+3穿刺"
+        "$武器$ 短剑+6|1d4+4穿刺; 长弓+5|1d8+3穿刺"
     )
     await _expect(app, char_matcher, _event(".角色卡"), expected)
 
@@ -331,7 +330,7 @@ async def test_record_weapon_reserved_name_rejected(app: App):
     """命令层传入保留名：武器名与插件命令同名 → 报错、不落库。"""
     from nonebot_plugin_dnddicer.commands.character import char_matcher
 
-    content = ".角色卡新建 测试卡 $姓名$ 测试角色\n$等级$ 1\n$属性$ 15/14/13/12/10/8\n$武器$ r+5,1d4"
+    content = ".角色卡新建 测试卡 $姓名$ 测试角色\n$等级$ 1\n$属性$ 15/14/13/12/10/8\n$武器$ r+5|1d4"
     await _expect(app, char_matcher, _event(content), "武器名称不能与插件命令重名: r")
 
 
@@ -340,7 +339,7 @@ async def test_record_weapon_invalid_rejected(app: App):
     """非法武器项（名称含禁词）→ 报错文案面向用户。"""
     from nonebot_plugin_dnddicer.commands.character import char_matcher
 
-    content = ".角色卡新建 测试卡 $姓名$ 测试角色\n$等级$ 1\n$属性$ 15/14/13/12/10/8\n$武器$ 猛虎攻击+5,1d6"
+    content = ".角色卡新建 测试卡 $姓名$ 测试角色\n$等级$ 1\n$属性$ 15/14/13/12/10/8\n$武器$ 猛虎攻击+5|1d6"
     await _expect(
         app, char_matcher, _event(content), "武器名称不能包含「攻击」字样: 猛虎攻击"
     )
@@ -353,7 +352,7 @@ _CARD = (
     "$职业$ 游荡者\n"  # 5 级游荡者 → 偷袭 3d6
     "$等级$ 5\n"
     "$属性$ 15/14/13/12/10/8\n"
-    "$武器$ 短剑+6,1d4+4穿刺/火焰箭,2d10火焰"
+    "$武器$ 短剑+6|1d4+4穿刺; 火焰箭|2d10火焰"
 )
 
 
@@ -632,7 +631,7 @@ async def test_weapon_damage_basic_and_type(app: App):
     # 无类型武器（木棍 1d6）
     await _expect(
         app, char_matcher,
-        _event(".角色卡修改 测试卡 $姓名$ 薇拉\n$武器$ 木棍+4,1d6"),
+        _event(".角色卡修改 测试卡 $姓名$ 薇拉\n$武器$ 木棍+4|1d6"),
         "角色卡「测试卡」已修改",
     )
     token = set_runtime(SequenceRuntime([5]))
@@ -710,7 +709,7 @@ async def test_weapon_damage_sneak_rejects(app: App):
 
     await _record(
         app,
-        card=".角色卡新建 测试卡 $姓名$ 薇拉\n$等级$ 3\n$属性$ 15/14/13/12/10/8\n$武器$ 短剑+4,1d6",
+        card=".角色卡新建 测试卡 $姓名$ 薇拉\n$等级$ 3\n$属性$ 15/14/13/12/10/8\n$武器$ 短剑+4|1d6",
     )
     await _expect(
         app, weapon_matcher, _event(".短剑偷袭伤害"),
@@ -735,7 +734,7 @@ async def test_weapon_damage_offhand_no_dice(app: App):
 
     await _record(
         app,
-        card=".角色卡新建 测试卡 $姓名$ 薇拉\n$等级$ 3\n$属性$ 15/14/13/12/10/8\n$武器$ 吹箭筒,1",
+        card=".角色卡新建 测试卡 $姓名$ 薇拉\n$等级$ 3\n$属性$ 15/14/13/12/10/8\n$武器$ 吹箭筒|1",
     )
     await _expect(
         app, weapon_matcher, _event(".吹箭筒副手伤害"),
@@ -788,10 +787,10 @@ async def test_weapon_spell_no_attack_and_upcast(app: App):
 
     await _expect(
         app, set_weapon_matcher,
-        _event(".设置武器 火球术x,8d6火焰/四环火球术x,9d6火焰"),
+        _event(".设置武器 火球术x|8d6火焰; 四环火球术x|9d6火焰"),
         "已设置武器：火球术/四环火球术（当前共 4 件）\n"
-        "1. 短剑+6,1d4+4穿刺\n2. 火焰箭,2d10火焰\n"
-        "3. 火球术x,8d6火焰\n4. 四环火球术x,9d6火焰",
+        "1. 短剑+6|1d4+4穿刺\n2. 火焰箭|2d10火焰\n"
+        "3. 火球术x|8d6火焰\n4. 四环火球术x|9d6火焰",
     )
 
     # 攻击检定被拒（x 标记）
@@ -876,9 +875,9 @@ async def test_set_weapon_add_override_and_use(app: App):
     await _record(app)
     await _expect(
         app, set_weapon_matcher,
-        _event(".设置武器 长弓+5,1d8+3穿刺"),
+        _event(".设置武器 长弓+5|1d8+3穿刺"),
         "已设置武器：长弓（当前共 3 件）\n"
-        "1. 短剑+6,1d4+4穿刺\n2. 火焰箭,2d10火焰\n3. 长弓+5,1d8+3穿刺",
+        "1. 短剑+6|1d4+4穿刺\n2. 火焰箭|2d10火焰\n3. 长弓+5|1d8+3穿刺",
     )
 
     token = set_runtime(SequenceRuntime([10]))
@@ -892,27 +891,27 @@ async def test_set_weapon_add_override_and_use(app: App):
 
     await _expect(
         app, set_weapon_matcher,
-        _event(".设置武器 短剑+7,1d6+4穿刺"),
+        _event(".设置武器 短剑+7|1d6+4穿刺"),
         "已设置武器：短剑（当前共 3 件）\n"
-        "1. 短剑+7,1d6+4穿刺\n2. 火焰箭,2d10火焰\n3. 长弓+5,1d8+3穿刺",
+        "1. 短剑+7|1d6+4穿刺\n2. 火焰箭|2d10火焰\n3. 长弓+5|1d8+3穿刺",
     )
 
 
 @pytest.mark.asyncio
 async def test_set_weapon_multi_and_limit(app: App):
-    """一次多条（/ 分隔）；超出数量上限报错。"""
+    """一次多条（; 分隔）；超出数量上限报错。"""
     from nonebot_plugin_dnddicer.commands.weapon import set_weapon_matcher
 
     await _record(app)
     await _expect(
         app, set_weapon_matcher,
-        _event(".设置武器 长弓+5,1d8+3穿刺/木棍+2,1d6钝击"),
+        _event(".设置武器 长弓+5|1d8+3穿刺; 木棍+2|1d6钝击"),
         "已设置武器：长弓/木棍（当前共 4 件）\n"
-        "1. 短剑+6,1d4+4穿刺\n2. 火焰箭,2d10火焰\n3. 长弓+5,1d8+3穿刺\n4. 木棍+2,1d6钝击",
+        "1. 短剑+6|1d4+4穿刺\n2. 火焰箭|2d10火焰\n3. 长弓+5|1d8+3穿刺\n4. 木棍+2|1d6钝击",
     )
 
     # 上限 20 件：现有 4 件 + 新 17 件 = 21 件 → 报错
-    extra = "/".join(f"甲{i}+1,1d6" for i in range(1, 18))
+    extra = "; ".join(f"甲{i}+1|1d6" for i in range(1, 18))
     await _expect(
         app, set_weapon_matcher,
         _event(f".设置武器 {extra}"),
@@ -935,25 +934,25 @@ async def test_set_weapon_list_and_empty(app: App):
     )
     await _expect(
         app, set_weapon_matcher, _event(".设置武器"),
-        "还没有设置武器。用法：.设置武器 短剑+6,1d4+4穿刺（多项用 / 分隔）",
+        "还没有设置武器。用法：.设置武器 短剑+6|1d4+4穿刺（多项用 ; 分隔）",
     )
 
     await _expect(
         app, char_matcher,
         _event(
             ".角色卡修改 测试卡 $姓名$ 伊丽莎白\n"
-            "$武器$ 短剑+6,1d4+4穿刺/火焰箭,2d10火焰"
+            "$武器$ 短剑+6|1d4+4穿刺; 火焰箭|2d10火焰"
         ),
         "角色卡「测试卡」已修改",
     )
     await _expect(
         app, set_weapon_matcher, _event(".设置武器"),
-        "当前武器（2 件）：\n1. 短剑+6,1d4+4穿刺\n2. 火焰箭,2d10火焰\n"
-        "用法：.设置武器 短剑+6,1d4+4穿刺（多项用 / 分隔）；删除用 .删除武器 名称",
+        "当前武器（2 件）：\n1. 短剑+6|1d4+4穿刺\n2. 火焰箭|2d10火焰\n"
+        "用法：.设置武器 短剑+6|1d4+4穿刺（多项用 ; 分隔）；删除用 .删除武器 名称",
     )
 
     await _expect(
-        app, set_weapon_matcher, _event(".设置武器 猛虎攻击+5,1d6"),
+        app, set_weapon_matcher, _event(".设置武器 猛虎攻击+5|1d6"),
         "武器名称不能包含「攻击」字样: 猛虎攻击",
     )
 
@@ -994,7 +993,7 @@ async def test_weapon_manage_private_denied(app: App):
     )
 
     cases = (
-        (set_weapon_matcher, ".设置武器 短剑+1,1d6"),
+        (set_weapon_matcher, ".设置武器 短剑+1|1d6"),
         (del_weapon_matcher, ".删除武器 短剑"),
     )
     for matcher, cmd in cases:
@@ -1010,7 +1009,7 @@ _FUZZY_CARD = (
     "$职业$ 游荡者\n"
     "$等级$ 5\n"
     "$属性$ 15/14/13/12/10/8\n"
-    "$武器$ 短剑+6,1d4+4穿刺/精灵短剑+7,1d6+4穿刺/投石索+5,1d4+3钝击/Longbow+5,1d8+3穿刺"
+    "$武器$ 短剑+6|1d4+4穿刺; 精灵短剑+7|1d6+4穿刺; 投石索+5|1d4+3钝击; Longbow+5|1d8+3穿刺"
 )
 
 
@@ -1138,13 +1137,13 @@ async def test_set_weapon_not_fuzzy(app: App):
     await _record(app, card=_FUZZY_CARD)
 
     await _expect(
-        app, set_weapon_matcher, _event(".设置武器 剑+9,1d8+5挥砍"),
+        app, set_weapon_matcher, _event(".设置武器 剑+9|1d8+5挥砍"),
         "已设置武器：剑（当前共 5 件）\n"
-        "1. 短剑+6,1d4+4穿刺\n"
-        "2. 精灵短剑+7,1d6+4穿刺\n"
-        "3. 投石索+5,1d4+3钝击\n"
-        "4. Longbow+5,1d8+3穿刺\n"
-        "5. 剑+9,1d8+5挥砍",
+        "1. 短剑+6|1d4+4穿刺\n"
+        "2. 精灵短剑+7|1d6+4穿刺\n"
+        "3. 投石索+5|1d4+3钝击\n"
+        "4. Longbow+5|1d8+3穿刺\n"
+        "5. 剑+9|1d8+5挥砍",
     )
 
 
@@ -1156,7 +1155,7 @@ _TWO_WEAPON_CARD = (
     "$职业$ 游荡者\n"
     "$等级$ 5\n"
     "$属性$ 15/14/13/12/10/8\n"
-    "$武器$ 短剑+6,1d4+4穿刺/匕首+6,1d4穿刺/火焰箭,2d10火焰"
+    "$武器$ 短剑+6|1d4+4穿刺; 匕首+6|1d4穿刺; 火焰箭|2d10火焰"
 )
 
 

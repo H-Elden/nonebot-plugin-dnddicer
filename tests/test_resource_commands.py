@@ -29,7 +29,7 @@ _DETAIL_CARD = "\n".join([
     "$等级$ 5",
     "$属性$ 10/10/10/10/10/10",
     "$法术$ 施法属性:智力; 豁免DC:15; "
-    "火球术:3*|时间=1动作,距离=150尺,材料=是,备注=8d6 火焰",
+    "火球术:3*|时间:1动作|距离:150尺|材料:是|备注:8d6 火焰",
 ])
 
 
@@ -363,7 +363,7 @@ async def test_set_spell_details_and_header_keys(app: App):
     assert char.spells[0].note == "8d6 火焰"
 
     await _expect(
-        app, set_spell_matcher, _event(".设置法术 火球术:4|备注=新备注"),
+        app, set_spell_matcher, _event(".设置法术 火球术:4|备注:新备注"),
         "已设置法术：火球术（当前共 1 项）\n"
         "1. 火球术 4环（已准备）",
     )
@@ -409,7 +409,7 @@ async def test_spell_slots_view_modify_and_reset(app: App):
         "契约魔法（3环）：1/2 → 0/2（已用尽）",
     )
     await _expect(
-        app, spell_slots_matcher, _event(".法术位 set 1:2, 2:1/3"),
+        app, spell_slots_matcher, _event(".法术位 set 1:2; 2:1/3"),
         "已设置法术位：1环 2/2、2环 1/3\n"
         "当前法术位：\n1环：2/2\n2环：1/3\n契约魔法（3环）：0/2",
     )
@@ -454,7 +454,7 @@ async def test_spell_slots_empty_and_no_card(app: App):
     await _record(app, card=card)
     await _expect(
         app, spell_slots_matcher, _event(".法术位"),
-        "还没有记录法术位。用法：.法术位 set 1:4,2:3"
+        "还没有记录法术位。用法：.法术位 set 1:4;2:3"
         "（当前/上限写 1:4/4；契约魔法写 契约3:2/2）",
     )
 
@@ -574,7 +574,7 @@ async def test_spell_slots_target_operations(app: App):
         "塔莉的法术位：\n1环：3/4\n2环：3/3\n契约魔法（3环）：2/2",
     )
     await _expect(
-        app, spell_slots_matcher, _event(".法术位 塔莉 set 1:2,2:1/3"),
+        app, spell_slots_matcher, _event(".法术位 塔莉 set 1:2;2:1/3"),
         "已设置塔莉的法术位：1环 2/2、2环 1/3\n"
         "当前法术位：\n1环：2/2\n2环：1/3\n契约魔法（3环）：2/2",
     )

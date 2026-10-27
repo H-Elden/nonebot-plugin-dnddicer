@@ -313,10 +313,10 @@ TXT_WEAPON_SNEAK_NOT_ROGUE = "当前职业「{char_class}」没有偷袭特性�
 TXT_WEAPON_SET = "已设置武器：{names}（当前共 {count} 件）\n{items}"
 TXT_WEAPON_LIST = (
     "当前武器（{count} 件）：\n{items}\n"
-    "用法：.设置武器 短剑+6,1d4+4穿刺（多项用 / 分隔）；删除用 .删除武器 名称"
+    "用法：.设置武器 短剑+6|1d4+4穿刺（多项用 ; 分隔）；删除用 .删除武器 名称"
 )
 TXT_WEAPON_LIST_EMPTY = (
-    "还没有设置武器。用法：.设置武器 短剑+6,1d4+4穿刺（多项用 / 分隔）"
+    "还没有设置武器。用法：.设置武器 短剑+6|1d4+4穿刺（多项用 ; 分隔）"
 )
 TXT_WEAPON_DEL = "已删除武器: {deleted}"
 TXT_WEAPON_DEL_PARTIAL = "已删除武器: {deleted}；未找到: {missing}"
@@ -427,7 +427,7 @@ TXT_SPELL_REMIND_USAGE = "用法：.法术 提醒 on|off"
 # ── 法术位（$法术位$ / .法术位 命令族，2026-10-20 批②）─────────────────
 TXT_SLOTS_LIST = "当前法术位：\n{items}"
 TXT_SLOTS_EMPTY = (
-    "还没有记录法术位。用法：.法术位 set 1:4,2:3"
+    "还没有记录法术位。用法：.法术位 set 1:4;2:3"
     "（当前/上限写 1:4/4；契约魔法写 契约3:2/2）"
 )
 TXT_SLOTS_ITEM = "{level}环：{cur}/{max}"

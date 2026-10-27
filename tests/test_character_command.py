@@ -24,7 +24,7 @@ _RECORD = (
     "$生命值$ 20/30(5)\n"
     "$生命骰$ 3/4 D8\n"
     "$属性$ 15/14/13/12/10/8\n"
-    "$熟练$ 力量/隐匿\n"
+    "$熟练$ 力量; 隐匿\n"
     "$额外加值$ 隐匿:优势"
 )
 _NEW_OK = text.TXT_CHAR_NEW_GROUP.format(name="测试卡")
@@ -426,7 +426,7 @@ async def test_char_private_single_omits_name(app: App):
         app, char_matcher, _private(".角色卡", 10041),
         "$姓名$ 伊丽莎白\n$生命值$ 20/30 (5)\n$生命骰$ 3/4 D8\n"
         "$等级$ 5\n$属性$ 15/14/13/12/10/8\n"
-        "$熟练$ 力量/隐匿\n$额外加值$ 隐匿:优势",
+        "$熟练$ 力量; 隐匿\n$额外加值$ 隐匿:优势",
     )
     await _expect(
         app, char_matcher, _private(".角色卡修改 $物品$ 治疗药水x2", 10041),
@@ -458,7 +458,7 @@ async def test_char_private_bind_and_unbind(app: App):
         app, char_matcher, _event(".角色卡", 10042),
         "$姓名$ 伊丽莎白\n$生命值$ 20/30 (5)\n$生命骰$ 3/4 D8\n"
         "$等级$ 5\n$属性$ 15/14/13/12/10/8\n"
-        "$熟练$ 力量/隐匿\n$额外加值$ 隐匿:优势",
+        "$熟练$ 力量; 隐匿\n$额外加值$ 隐匿:优势",
     )
 
     await _expect(

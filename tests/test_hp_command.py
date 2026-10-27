@@ -1315,7 +1315,7 @@ async def test_hp_weapon_damage_basic(app: App):
     await _expect(
         app, char_matcher,
         _event(
-            _record_with_hp("爱丽丝", 22011, hp="40/40", weapons="短剑+6,1d4+4穿刺"),
+            _record_with_hp("爱丽丝", 22011, hp="40/40", weapons="短剑+6|1d4+4穿刺"),
             user_id=22011,
         ),
         "已新建角色卡「测试卡」并绑定到本群。",
@@ -1344,7 +1344,7 @@ async def test_hp_weapon_damage_fuzzy_match(app: App):
         _event(
             _record_with_hp(
                 "爱丽丝", 22023, hp="40/40",
-                weapons="短剑+6,1d4+4穿刺/精灵短剑+7,1d6+4穿刺",
+                weapons="短剑+6|1d4+4穿刺; 精灵短剑+7|1d6+4穿刺",
             ),
             user_id=22023,
         ),
@@ -1392,7 +1392,7 @@ async def test_hp_weapon_damage_suffixes(app: App):
     await _expect(
         app, char_matcher,
         _event(
-            _record_with_hp("爱丽丝", 22014, hp="40/40", weapons="短剑+6,1d4+4穿刺"),
+            _record_with_hp("爱丽丝", 22014, hp="40/40", weapons="短剑+6|1d4+4穿刺"),
             user_id=22014,
         ),
         "已新建角色卡「测试卡」并绑定到本群。",
@@ -1446,7 +1446,7 @@ async def test_hp_weapon_damage_sneak_rogue(app: App):
         _event(
             ".角色卡新建 测试卡 $姓名$ 爱丽丝\n$职业$ 游荡者\n$等级$ 5\n"
             "$生命值$ 40/40\n$属性$ 10/10/10/10/10/10\n"
-            "$武器$ 短剑+6,1d4+4穿刺",
+            "$武器$ 短剑+6|1d4+4穿刺",
             user_id=22015,
         ),
         "已新建角色卡「测试卡」并绑定到本群。",
@@ -1473,7 +1473,7 @@ async def test_hp_weapon_attack_written_as_damage(app: App):
     await _expect(
         app, char_matcher,
         _event(
-            _record_with_hp("爱丽丝", 22016, hp="40/40", weapons="短剑+6,1d4+4穿刺"),
+            _record_with_hp("爱丽丝", 22016, hp="40/40", weapons="短剑+6|1d4+4穿刺"),
             user_id=22016,
         ),
         "已新建角色卡「测试卡」并绑定到本群。",
@@ -1505,7 +1505,7 @@ async def test_hp_weapon_damage_errors(app: App):
     await _expect(
         app, char_matcher,
         _event(
-            _record_with_hp("爱丽丝", 22018, hp="40/40", weapons="短剑+6,1d4+4穿刺"),
+            _record_with_hp("爱丽丝", 22018, hp="40/40", weapons="短剑+6|1d4+4穿刺"),
             user_id=22018,
         ),
         "已新建角色卡「测试卡」并绑定到本群。",
@@ -1543,7 +1543,7 @@ async def test_hp_weapon_damage_factor_header(app: App):
     await _expect(
         app, char_matcher,
         _event(
-            _record_with_hp("爱丽丝", 22021, hp="40/40", weapons="短剑+6,1d4+4穿刺"),
+            _record_with_hp("爱丽丝", 22021, hp="40/40", weapons="短剑+6|1d4+4穿刺"),
             user_id=22021,
         ),
         "已新建角色卡「测试卡」并绑定到本群。",
@@ -1583,7 +1583,7 @@ async def test_hp_weapon_damage_aoe_header_raw(app: App):
     await _expect(
         app, char_matcher,
         _event(
-            _record_with_hp("爱丽丝", 22022, hp="40/40", weapons="短剑+6,1d4+4穿刺"),
+            _record_with_hp("爱丽丝", 22022, hp="40/40", weapons="短剑+6|1d4+4穿刺"),
             user_id=22022,
         ),
         "已新建角色卡「测试卡」并绑定到本群。",
@@ -1622,7 +1622,7 @@ async def test_hp_weapon_damage_source_parentheses(app: App):
     await _expect(
         app, char_matcher,
         _event(
-            _record_with_hp("布鲁姆", 22025, weapons="短剑+6,1d4+4穿刺"),
+            _record_with_hp("布鲁姆", 22025, weapons="短剑+6|1d4+4穿刺"),
             user_id=22025,
         ),
         "已新建角色卡「测试卡」并绑定到本群。",
@@ -1691,7 +1691,7 @@ async def test_hp_weapon_damage_source_parentheses(app: App):
 # =========================================================================
 
 
-_TWO_WEAPONS = "短剑+6,1d4+4穿刺/匕首+6,1d4穿刺/火焰箭,2d10火焰"
+_TWO_WEAPONS = "短剑+6|1d4+4穿刺; 匕首+6|1d4穿刺; 火焰箭|2d10火焰"
 
 
 @pytest.mark.asyncio

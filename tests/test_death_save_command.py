@@ -191,7 +191,7 @@ async def test_hp_weapon_critical_records_two_failures(app: App):
     await _expect(
         app, char_matcher,
         _event(".角色卡新建 测试卡 $姓名$ 甲 $等级$ 1 $生命值$ 10/30 "
-               "$属性$ 10/10/10/10/10/10 $武器$ 短剑+5,1d8+3穿刺", uid),
+               "$属性$ 10/10/10/10/10/10 $武器$ 短剑+5|1d8+3穿刺", uid),
         "已新建角色卡「测试卡」并绑定到本群。",
     )
     await _expect(
