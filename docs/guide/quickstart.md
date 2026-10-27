@@ -240,7 +240,7 @@ DNDDICER_QUERY_ENDPOINT_COOLDOWN=60.0
 
 ::: chat
 白鸦 | @屠龙骰 .bot
-屠龙骰 | 屠龙骰（nonebot-plugin-dnddicer）v0.4.4
+屠龙骰 | 屠龙骰（nonebot-plugin-dnddicer）v0.5.0
 DND 5e/5r 跑团专用骰娘~
 本群服务已开启，可直接使用本插件的全部命令。
 用法：.bot on / .bot off——仅限群聊，需群主或管理员权限。

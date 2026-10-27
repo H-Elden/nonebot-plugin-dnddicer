@@ -6,7 +6,7 @@
 
 > 专精 **DND5e / DND5r** 跑团的 [NoneBot2](https://nonebot.dev/) 骰娘插件（OneBot V11 适配器），致力于做功能最全面、体验最好的 DND 骰娘。
 >
-> 当前版本：**v0.4.4** · 完整使用手册见 **📖 [使用文档](https://h-elden.github.io/nonebot-plugin-dnddicer/)**（[国内镜像](https://dnddicer.netlify.app/)）
+> 当前版本：**v0.5.0** · 完整使用手册见 **📖 [使用文档](https://h-elden.github.io/nonebot-plugin-dnddicer/)**（[国内镜像](https://dnddicer.netlify.app/)）
 >
 > 交流反馈 QQ 群：[![QQ群](https://img.shields.io/badge/QQ%E7%BE%A4-1107879441-12B7F5?logo=tencentqq&logoColor=white)](https://qun.qq.com/universal-share/share?ac=1&authKey=eUFiLk5ktomkYgDWCMnJnLNQW%2FJwmfR7wXKRrYyQeJy5uaYtwDsm4ABDiofKx6%2BN&busi_data=eyJncm91cENvZGUiOiIxMTA3ODc5NDQxIiwidG9rZW4iOiIvWHlQbDlNeUdBOVpQSnB1WU1RNUFmRCtBNlgwTXpnN2VOSlh6UkJ1YTFUdmREdEExYmEwSXo4SXFiR21zb0tsIiwidWluIjoiMjk4NDQ5NTc3NCJ9&data=JWJQw7qsywgzyHnQ-HJ_PzqF_Y1otBjTRkehoSmk6faB87xzjGf4PA_p1KNPhLvkkOwlLEuNH9jTN8XxNbxRPQ&svctype=4&tempid=h5_group_info)
 
@@ -198,7 +198,7 @@ plugins = ["nonebot_plugin_dnddicer"]
 | `.帮助` / `.help [命令 \| 分组 \| 链接 \| 关于 \| 骰主 \| 联系]` | 帮助入口：总览 / 命令目录 / 分组清单 / 命令详情 / 相关链接 / 插件信息 / 骰主指令 / 联系方式 |
 | `.master 消息` | 把问题或建议发给骰主：骰娘私聊转达（附群号与 QQ 号；单条 200 字、同一人 60 秒一条；骰主 QQ 号由 `dnddicer_master_qq` 配置） |
 
-> 一期范围外功能会**显式提示而非静默**：`.r exp` 期望值采样、`.r a/n` 特殊判定；牌堆/随机表（T2）与法术位/死亡豁免/BUFF 表（T3 候选）见下方路线。
+> 一期范围外功能会**显式提示而非静默**：`.r exp` 期望值采样、`.r a/n` 特殊判定；牌堆/随机表（T2）与 BUFF 表（T3 候选）见下方路线。
 
 ## 📄 版本与路线
 
@@ -212,8 +212,9 @@ plugins = ["nonebot_plugin_dnddicer"]
 8. ✅ **v0.4.2**：`.bot` 插件信息与 `.help` 命令总览的回复末尾新增「详细帮助文档」链接（指向文档站国内镜像），群内可直达使用手册；
 9. ✅ **v0.4.3**：**`.help` 帮助体系重做**（总览 / 七组目录 / 组清单 / 简版详情，另设链接、关于、骰主、联系四入口）；**武器名模糊匹配**与**一条命令结算多件武器**；**`.master` 反馈骰主**与三个骰主配置项；`.dnd` / `.dndx` 次数上限提到 20；规则查询速查切片、图片卡片排版与字体三项修复；
 10. ✅ **v0.4.4**：修复配置项写数字（如骰主 QQ、交流群）导致插件不加载的问题；《快速开始》补充字体家族在 `.env` 里的写法说明；
-11. ⏳ **第二期余下**：牌堆/随机表；
-12. ⏳（可选）**T3 增强期**：法术位管理（`.ss/.cast`）、死亡豁免闭环（`.ds`）、BUFF/临时加值表（`.buff`）等。
+11. ✅ **v0.5.0**：**角色卡库与私聊建卡**（`cards.json`、`.角色卡新建/修改/改名/列表/绑定/解绑/清除`、无卡生命值）、**休息与资源**（限定资源 / 法术 / 法术位、`.生命骰` / `.短休` / `.长休` / `.施法`、死亡豁免与群级规则版本）、**网页建卡器**与**角色卡图改版**、半熟练、`.激励` / `.战斗记录` / `.钱币`、`.立绘` 查看与设置；**角色卡存储、段语法与分隔符为破坏性变更，旧卡需重录**；
+12. ⏳ **第二期余下**：牌堆/随机表；
+13. ⏳（可选）**T3 增强期**：BUFF / 临时加值表（`.buff`）等。
 
 每版完整变更（新增 / 变更 / 修复 / 文档）见 [CHANGELOG.md](./CHANGELOG.md)。
 
