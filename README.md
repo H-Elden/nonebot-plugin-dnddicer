@@ -6,29 +6,60 @@
 
 > 专精 **DND5e / DND5r** 跑团的 [NoneBot2](https://nonebot.dev/) 骰娘插件（OneBot V11 适配器），致力于做功能最全面、体验最好的 DND 骰娘。
 >
-> 当前版本：**v0.5.0** · 完整使用手册见 **📖 [使用文档](https://h-elden.github.io/nonebot-plugin-dnddicer/)**（[国内镜像](https://dnddicer.netlify.app/)）
->
-> 交流反馈 QQ 群：[![QQ群](https://img.shields.io/badge/QQ%E7%BE%A4-1107879441-12B7F5?logo=tencentqq&logoColor=white)](https://qun.qq.com/universal-share/share?ac=1&authKey=eUFiLk5ktomkYgDWCMnJnLNQW%2FJwmfR7wXKRrYyQeJy5uaYtwDsm4ABDiofKx6%2BN&busi_data=eyJncm91cENvZGUiOiIxMTA3ODc5NDQxIiwidG9rZW4iOiIvWHlQbDlNeUdBOVpQSnB1WU1RNUFmRCtBNlgwTXpnN2VOSlh6UkJ1YTFUdmREdEExYmEwSXo4SXFiR21zb0tsIiwidWluIjoiMjk4NDQ5NTc3NCJ9&data=JWJQw7qsywgzyHnQ-HJ_PzqF_Y1otBjTRkehoSmk6faB87xzjGf4PA_p1KNPhLvkkOwlLEuNH9jTN8XxNbxRPQ&svctype=4&tempid=h5_group_info)
+> [![PyPI](https://img.shields.io/pypi/v/nonebot-plugin-dnddicer)](https://pypi.org/project/nonebot-plugin-dnddicer/) · [![QQ群](https://img.shields.io/badge/QQ%E7%BE%A4-1107879441-12B7F5?logo=tencentqq&logoColor=white)](https://qun.qq.com/universal-share/share?ac=1&authKey=eUFiLk5ktomkYgDWCMnJnLNQW%2FJwmfR7wXKRrYyQeJy5uaYtwDsm4ABDiofKx6%2BN&busi_data=eyJncm91cENvZGUiOiIxMTA3ODc5NDQxIiwidG9rZW4iOiIvWHlQbDlNeUdBOVpQSnB1WU1RNUFmRCtBNlgwTXpnN2VOSlh6UkJ1YTFUdmREdEExYmEwSXo4SXFiR21zb0tsIiwidWluIjoiMjk4NDQ5NTc3NCJ9&data=JWJQw7qsywgzyHnQ-HJ_PzqF_Y1otBjTRkehoSmk6faB87xzjGf4PA_p1KNPhLvkkOwlLEuNH9jTN8XxNbxRPQ&svctype=4&tempid=h5_group_info)
 
 ## ✨ 简介
 
-DNDDicer 的目标是填补「NoneBot 商店中缺少 **DND5e/5r 专业 + 现代维护 + 插件形态** 骰娘」的空位：围绕 DND 跑团全流程持续做深做全，致力于提供功能最全面、体验最好的 DND 骰娘，零配置可加载，供任何已有机器人从商店安装即用。
+DNDDicer 的目标是填补「NoneBot 商店中缺少 **DND5e/5r 专业 + 现代维护 + 插件形态** 骰娘」的空位：围绕 DND 跑团全流程持续做深做全，致力于提供功能最全面、体验最好的 DND 骰娘，零配置可加载，供任何使用 OneBot V11 适配器的机器人从商店安装即用。
 
-- **掷骰引擎**：内置 AST 表达式引擎（Lark 文法），支持 `2d20kh1`、优势/劣势、爆炸骰、连掷、暗骰等完整掷骰语法；
-- **跑团全流程**：掷骰 → `.dnd` 属性生成 → 角色卡与检定/豁免点命令（`.角色卡` 在骰主开启后出图、`.角色卡导出` 取文字卡、`.立绘` 查看/上传头像；`.激励` / `.战斗记录` / `.钱币` 直接维护卡上对应段）→ 自定义武器与攻击（`.X攻击`/`.X伤害`，支持两把武器一条命令结算）/ 能力与法术资源（`.能力`/`.法术`/`.法术位`/`.施法`）/ HP 与休息（伤害掷骰、抗性/易伤、AOE 多目标结算、`.短休`/`.生命骰`/`.长休`）→ 先攻列表与战斗轮 → 规则查询（`.查询`/`.搜索`，可限定书目、可出图）；
-- **规则范围**：仅 DND5e/5r：专精 DND 定位，不做 COC/D100 体系与 `.mode` 模式切换；
+- **掷骰引擎**：内置 AST 表达式引擎（Lark 文法），支持 `2D20kh1`、优势/劣势、爆炸骰、连掷、暗骰等完整掷骰语法；
+- **跑团全流程**：掷骰 → 属性生成 → 角色卡录入 → 检定与豁免 → 自定义武器与攻击、施法 → 先攻列表与战斗轮 → HP 结算 → 短休与长休 → 规则查询等；
+- **规则范围**：仅 DND5e/5r，专精 DND 定位，不做 COC/D100 体系；
 - **商店合规**：零配置可加载、本地存储走 `nonebot-plugin-localstore`、元数据完整、全程异步。
+
+> **升级提示**：0.5.0 起角色卡改为卡库存储，段语法与分隔符有破坏性调整，旧卡不会自动迁移，需用[网页建卡器](https://dnddicer.netlify.app/guide/card-builder)重新建卡；详见[更新日志](https://dnddicer.netlify.app/guide/changelog)。
+
+## 🚀 快速上手
+
+命令以 `.`（或全角 `。`）开头。安装并启动机器人后：
+
+1. 私聊机器人发送 `.bot`，确认插件已加载并查看基本信息；
+2. 在群里 @ 机器人发送 `.bot on`（群主/管理员），开启本群服务；
+3. 发送 `.dnd` 生成一套属性，或 `.r` 试一次掷骰。
+
+群聊服务默认关闭（白名单），未开启的群除 `.bot` 外不会响应本插件命令；私聊不受服务开关限制，但检定、HP、先攻与战斗轮等按群归属的命令仍仅限群聊。规则查询默认关闭，开启方法见[快速开始](https://dnddicer.netlify.app/guide/quickstart)。
+
+常用命令速览（完整命令见[命令总览](https://dnddicer.netlify.app/guide/overview)）：
+
+| 命令 | 作用 |
+| --- | --- |
+| `.r1D20+5` / `.rh` | 掷骰 / 暗骰 |
+| `.dndx` | 4D6K3 生成并绑定六项属性 |
+| `.角色卡新建 卡名` + 完整卡面 | 新建角色卡（群聊自动绑定本群） |
+| `.力量检定` / `.体质豁免` | 检定与豁免，自动代入调整值与熟练 |
+| `.hp` / `.hp 20/30` | 查看或记录 HP（支持队友与 NPC） |
+| `.init` / `.br` | 先攻列表 / 战斗轮 |
+| `.查询法术 火球术` | 规则查询（需开启 `dnddicer_query_enabled`） |
+| `.help` | 帮助入口与命令目录 |
 
 ## 📖 使用文档
 
-详细用法、输入/输出示例与常见问题见使用文档（手册式分章，含跑团示例；**在线版**：<https://h-elden.github.io/nonebot-plugin-dnddicer/>，源文件在仓库 `docs/`）：
+完整用法、输入输出示例与常见问题见使用文档：
 
-- 开始：[快速开始](./docs/guide/quickstart.md) · [示例团与人物](./docs/guide/cast.md)
-- 第一章 · 基础操作：[掷骰基础](./docs/guide/roll-basics.md) · [掷骰进阶](./docs/guide/roll-advanced.md) · [生命值管理](./docs/guide/hp.md) · [先攻列表](./docs/guide/initiative.md) · [战斗轮](./docs/guide/battle.md) · [规则查询](./docs/guide/query.md)
-- 第二章 · 玩家进阶：[角色卡录入](./docs/guide/character-card.md) · [检定与豁免](./docs/guide/checks.md) · [武器与攻击](./docs/guide/weapons.md) · [休息与资源](./docs/guide/resources.md) · [HP 进阶](./docs/guide/hp-advanced.md)
-- 第三章 · DM 进阶：[代掷与代操作](./docs/guide/dm-proxy.md) · [血量与伤害结算](./docs/guide/dm-settlement.md) · [查询范围](./docs/guide/query-scope.md)
-- 第四章 · 最佳实践：[最佳实践](./docs/guide/best-practices.md)
-- 参考：[命令总览](./docs/guide/overview.md) · [网页建卡器](./docs/guide/card-builder.md) · [角色卡字段](./docs/guide/card-fields.md) · [群管理与 FAQ](./docs/guide/faq.md) · [自建查询服务](./docs/guide/self-host.md)
+**文档主站** <https://h-elden.github.io/nonebot-plugin-dnddicer/>
+
+**国内镜像** <https://dnddicer.netlify.app/> （推荐）
+
+以下章节链接均指向国内镜像：
+
+- 开始：[快速开始](https://dnddicer.netlify.app/guide/quickstart) · [命令总览](https://dnddicer.netlify.app/guide/overview) · [示例团与人物](https://dnddicer.netlify.app/guide/cast)
+- 第一章 · 基础操作：[掷骰基础](https://dnddicer.netlify.app/guide/roll-basics) · [掷骰进阶](https://dnddicer.netlify.app/guide/roll-advanced) · [生命值管理](https://dnddicer.netlify.app/guide/hp) · [先攻列表](https://dnddicer.netlify.app/guide/initiative) · [战斗轮](https://dnddicer.netlify.app/guide/battle) · [规则查询](https://dnddicer.netlify.app/guide/query)
+- 第二章 · 玩家进阶：[角色卡录入](https://dnddicer.netlify.app/guide/character-card) · [检定与豁免](https://dnddicer.netlify.app/guide/checks) · [武器与攻击](https://dnddicer.netlify.app/guide/weapons) · [休息与资源](https://dnddicer.netlify.app/guide/resources) · [HP 进阶](https://dnddicer.netlify.app/guide/hp-advanced) · [死亡豁免](https://dnddicer.netlify.app/guide/death-save) · [规则版本与击晕](https://dnddicer.netlify.app/guide/rules-version)
+- 第三章 · DM 进阶：[代掷与代操作](https://dnddicer.netlify.app/guide/dm-proxy) · [血量与伤害结算](https://dnddicer.netlify.app/guide/dm-settlement) · [查询范围](https://dnddicer.netlify.app/guide/query-scope)
+- 第四章 · 最佳实践：[最佳实践](https://dnddicer.netlify.app/guide/best-practices)
+- 参考与工具：[网页建卡器](https://dnddicer.netlify.app/guide/card-builder) · [角色卡字段](https://dnddicer.netlify.app/guide/card-fields) · [群管理与 FAQ](https://dnddicer.netlify.app/guide/faq) · [自建查询服务（可选）](https://dnddicer.netlify.app/guide/self-host) · [更新日志](https://dnddicer.netlify.app/guide/changelog)
+
+文档源文件在仓库 [docs/](https://github.com/H-Elden/nonebot-plugin-dnddicer/tree/main/docs)。
 
 ## 📦 安装
 
@@ -49,176 +80,38 @@ pip install nonebot-plugin-dnddicer
 plugins = ["nonebot_plugin_dnddicer"]
 ```
 
+图片渲染是可选功能，需要额外安装 `[render]` 可选依赖（会安装 `nonebot-plugin-htmlkit`）：
+
+```bash
+nb plugin install "nonebot-plugin-dnddicer[render]"
+# 或
+pip install "nonebot-plugin-dnddicer[render]"
+```
+
+未安装时，规则查询与角色卡出图会回退为文字，不影响其他功能。装好后，规则查询图片还需把 `dnddicer_query_enabled` 与 `dnddicer_query_image_enabled` 都设为 `true`；角色卡图需把 `dnddicer_card_image_enabled` 设为 `true`。Linux 需要 glibc ≥ 2.34 与中文字体，详见[快速开始 - 可选依赖项](https://dnddicer.netlify.app/guide/quickstart#可选依赖项)。
+
 > 依赖：Python ≥ 3.11，NoneBot2 ≥ 2.4.0，OneBot V11 适配器（`nb plugin install` 会自动安装依赖）。
 
 ## ⚙️ 配置
 
-插件**零配置即可加载运行**，以下配置项全部可选（在 `.env` / 环境变量中设置）：
+插件**零配置即可加载运行**，以下为常用配置项，全部可选（在 `.env` / 环境变量中设置）：
 
 | 配置项 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
 | `dnddicer_command_priority` | `int` | `10` | 命令事件响应器基础优先级（越小越优先），与其他插件冲突时按需调整 |
 | `dnddicer_default_face` | `int` | `20` | 全局默认骰面（DND 惯例 D20；已配置 `.dset` 的群以群配置为准，此项作兜底） |
+| `dnddicer_default_rules_version` | `str` | `2024` | 默认规则版本（`2024` / `2014`，也可写 `5r` / `5e`）；群内未用 `.规则版本` 设置时按它结算 |
 | `dnddicer_enabled` | `bool` | `true` | 功能总开关，`false` 时只加载骨架、不注册命令 |
 | `dnddicer_use_host_command_starts` | `bool` | `false` | 是否兼容宿主 `COMMAND_START` 起始符（NoneBot 默认 `/`，开启后 `/.help` 等亦可触发）。默认只匹配 `.` / `。`，避免 `/help`、`/bot` 等常见单词命令与其他插件同时命中（冲突） |
+| `dnddicer_query_enabled` | `bool` | `false` | 规则查询总开关；开启后才响应 `.查询` 等命令（群聊仍受本群服务开关限制） |
 | `dnddicer_master_qq` | `str` | 空 | 骰主 QQ 号（**单个**）：`.master` 反馈的收件人，留空则 `.master` 回「骰主未配置」 |
 | `dnddicer_master_contact` | `str` | 空 | 骰主联系方式（自由文本），仅用于 `.help 联系` 展示，留空不显示该行 |
 | `dnddicer_master_group` | `str` | 空 | 骰主交流群群号，仅用于 `.help 联系` 展示，留空不显示该行 |
 | `dnddicer_card_image_enabled` | `bool` | `false` | 角色卡图开关；需安装 `[render]` 可选依赖（`nonebot-plugin-htmlkit`），开启后 `.角色卡` 出图，未开启时输出文字卡 |
 
-## 🎲 用法
+规则查询的书目、图片模式与字体等其余配置项见[快速开始](https://dnddicer.netlify.app/guide/quickstart#配置项)。
 
-> 命令以 `.`（或全角 `。`）开头；命令起始符默认仅 `.` / `。`，如需用宿主斜杠 `/` 等起始符触发（如 `/.help`），请设置配置项 `dnddicer_use_host_command_starts=true`。**群聊服务默认关闭（白名单）**：需群主/管理员发送 `.bot on` 开启本群服务；`.bot off` 关闭后本群不再响应命令（`.bot` 本身不受影响）。群聊中使用 `.bot` 需先 @ 本机器人；私聊不受服务开关限制，可在私聊管理自己的角色卡，但检定、HP、先攻、战斗轮与群配置等仍仅限群聊（差异见[群管理与 FAQ](./docs/guide/faq.md#群聊--私聊差异速查)）。
->
-> **DM 代操作（@ 提及目标）**：多数带目标的命令支持用 **@群成员** 指定目标：直连该成员在本群的角色卡（`.hp` / `.ds` 无卡时直连群级 HP 记录），不受同名 NPC/改名影响，且可与名称混写（`.hp @玩家 -4d6`、`.hp @玩家;地精 -d4`、`.ri+3 @玩家`、`.init del @玩家`、`.回合 @玩家`、`.角色卡 @玩家`、`.力量豁免 @玩家`、`.先攻检定 @玩家` 等）。完整机制见[代掷与代操作](./docs/guide/dm-proxy.md)，命令清单见[命令总览 - @ 提及目标](./docs/guide/overview.md#提及目标-dm-代操作)。
-
-### 🎲 掷骰（群聊 / 私聊）
-
-| 命令 | 说明 |
-| --- | --- |
-| `.r [N#][hs][表达式] [原因]` | 掷骰表达式（`#` 连掷 1~10、`h` 暗骰、`s` 只显数值；仅 D20 有大成功/大失败播报） |
-| `.rh [表达式] [原因]` | 暗骰（群内提示、结果私聊） |
-
-### 📋 角色卡与检定（角色卡管理群聊 / 私聊；检定仅群聊）
-
-| 命令 | 说明 |
-| --- | --- |
-| `.角色卡新建 卡名` + 完整卡面 | 新建卡（须含姓名、等级、属性；群聊自动绑定本群；也可用网页建卡器生成） |
-| `.角色卡修改 [卡名] 段条目` | 只覆盖提到的段；空段清空，必填段不可清空 |
-| `.角色卡` / `.角色卡列表` / `.角色卡清除 卡名 确认` | 查看 / 列出卡库 / 删除未绑定的卡（连同立绘） |
-| `.角色卡绑定` / `.角色卡解绑` / `.角色卡改名` | 绑定 / 解绑到群、修改卡名（私聊绑定需群号） |
-| `.角色卡 @玩家` / `.角色卡 角色名` | 查看**他人在本群绑定**的整卡（仅群聊；开启角色卡图时出图） |
-| `.角色卡导出 [@玩家\|角色名\|卡名]` | 输出可复制的文字版角色卡（始终文字；群聊看本群绑定卡或他人，私聊按卡名） |
-| `.立绘` / `.立绘 @玩家\|角色名` | 查看立绘：群聊看本群绑定卡，@ 或角色名看他人；私聊用 `.立绘 [卡名]` 看本人卡（单张可省略卡名） |
-| `.立绘 [卡名]` + 图片 | 设置立绘（群聊只能改本群绑定卡；原图直存，≤4 MB） |
-| `.状态 [@玩家\|卡名]` | 查看 HP 与生命骰摘要 |
-| `.激励 [状态\|+\|-\|给予 目标]` | 查看 / 获得 / 消耗英雄激励；`给予` 转赠给 `@玩家` 或角色名（2014 群称「激励」） |
-| `.战斗记录 [清\|+文本\|-序号]` | 查看 / 追加 / 删除 / 清空战斗记录（最多 20 条、每条 60 字） |
-| `.钱币 [+20GP-5SP]` | 查看五种币值；紧凑收支，减法不足时自动破币并播报明细 |
-| `.力量检定` / `.察觉检定+1` 等 | 属性/技能/先攻检定点命令，自动代入调整值/熟练/加值（`2#` 连掷、`+d4` 等可追加；表达式右侧可加 `@玩家` 代掷） |
-| `.体质豁免` / `.感知豁免优势` 等 | 豁免点命令（原名直配，优势/劣势后缀；同样支持尾部 `@玩家`） |
-| `.先攻检定` / `.先攻检定 @玩家` | 掷先攻并自动写入本群先攻列表（@ 形式代不在场的玩家掷） |
-
-> 角色卡按 QQ 归属，每人每群最多绑定一张。推荐一张卡只绑定一个群：绑到第二个群时骰娘会照常执行并提醒，但生命值、激励、死亡豁免、法术位等随卡保存，同一张卡绑到多个群会共用这些数据；需要同时跑两个团时，请另建一张卡名不同、内容相同的卡。
-
-### 🗡️ 武器与攻击（群聊）
-
-角色卡通过 `$武器$` 段自定义武器/法术项：`名称+命中加值|伤害表达式+类型`，如 `长剑+8|1d8+5挥砍`；名称尾加 `x` 表示不可攻击检定，如 `火球术x|8d6火焰`。
-
-骰娘只忠实执行、不判 AC、不自动补属性：
-
-| 命令 | 说明 |
-| --- | --- |
-| `.刺剑攻击` / `.刺剑命中` | 用卡上该武器的命中加值掷攻击检定（`优势`/`劣势`、`N#` 连掷、`±` 临时加值、`@玩家` 代掷；天然 20 提示重击；武器名支持模糊匹配） |
-| `.刺剑伤害` | 掷该武器伤害并报出类型；后缀 `副手`（不加任何加值）/ `重击`（骰数翻倍）/ `偷袭`（游荡者按等级自动附加偷袭骰）可组合，尾部可加 `±` 临时加值（如升环 `.火球术伤害+1d6`）；武器名支持模糊匹配 |
-| `.刺剑伤害、匕首副手伤害` | 一条命令结算多件武器（`、`/`，`/`/` 分隔，各件的后缀与加值各写各的）：逐件掷伤 + 一行合计；攻击同理（`.刺剑攻击、匕首攻击`） |
-| `.设置武器` / `.删除武器` | 维护卡上武器（同名覆盖 / 按名称删除，名称支持模糊匹配，多个用 `/` 分隔；`.设置武器` 无参数列出当前武器） |
-
-详见 [武器与攻击](./docs/guide/weapons.md)。
-
-### 🔮 休息与资源（群聊）
-
-角色卡新增 `$种族特性$` / `$职业特性$`（按等级带徽标）/ `$限定资源$` / `$魔法物品$` / `$法术$` / `$法术位$` 等段。休息按卡面恢复，施法按卡面扣除；骰娘只记账，不按职业表自动推算次数与环位。
-
-| 命令 | 说明 |
-| --- | --- |
-| `.生命骰 [N] [@玩家]` | 花生命骰回血（缺省 1 颗；5e 逐粒加体质、5r 骰点总和 + 枚数 × 体质） |
-| `.短休 [@玩家]` | 恢复短休类限定资源与契约魔法位，提示可用生命骰（不自动花骰） |
-| `.长休 [@玩家]` | 回满 HP、清临时 HP 与死亡豁免、恢复长休类限定资源与全部法术位、按规则版本恢复生命骰 |
-| `.能力` / `.能力 名称` | 查看限定资源清单 / 单个限定资源详情（当前/上限与恢复档）；最前面可写 `@玩家` 或角色名代操作 |
-| `.能力 名称 -1` / `+1` | 消耗 / 恢复次数（不会越过 0 与上限） |
-| `.设置能力` / `.删除能力` | 维护卡上限定资源（多项用 `;`，同名覆盖；删除支持模糊匹配） |
-| `.法术` | 查看法术清单、环阶与 `*` 今日准备标记 |
-| `.法术 准备/取消 名称` | 切换准备标记（戏法无需准备；名称支持模糊匹配） |
-| `.法术 提醒 on/off` | 本群施法未准备提醒开关（默认开） |
-| `.设置法术` / `.删除法术` | 维护卡上法术（`名称:环阶`，可写 `施法属性:智力`） |
-| `.法术位` / `.ss` | 查看 / `set 1:4;2:3` 设置 / `1 -1`、`契约 -1` 手动增减 / `reset` 恢复全部；最前面可写 `@玩家` 或角色名代操作 |
-| `.施法` / `.cast` | 按卡面环阶施法：`.施法 火球术`、`.施法 火球术4环`、`.施法 火球术+1环`、`.施法 3` |
-
-详见 [休息与资源](./docs/guide/resources.md)。
-
-### 🎯 属性生成（群聊 / 私聊）
-
-| 命令 | 说明 |
-| --- | --- |
-| `.dnd [次数] [原因]` | 4D6K3 掷点生成六项属性（附合计与降序，自行分配给六属性） |
-| `.dndx [次数] [原因]` | 4D6K3 掷点并绑定属性名（不排序，掷出即定、可直接抄入角色卡） |
-
-### ❤️ 生命值管理（群聊）
-
-没有绑定角色卡也能用 `.hp` 与 `.死亡豁免`：HP 记在群级记录里，之后绑定角色卡时以卡面 `$生命值$` 为准，旧记录直接丢弃。
-
-| 命令 | 说明 |
-| --- | --- |
-| `.hp [目标] 20/30 (5)` | 设置自己/队友/NPC HP（含临时 HP；无绑定卡也能记录；先 `.ri 名称` 入先攻表后即可记录 NPC 血量） |
-| `.hp [目标] -2d6+3` 等 | 伤害/治疗（支持掷骰表达式；伤害位置可直接写 `-武器名伤害`，如 `-战锤重击伤害+1d4`、多武器 `-刺剑伤害、匕首副手伤害`，对应发送者卡上武器项、尾部括号可指定来源代发；目标后加 `抗性`/`易伤` 后缀可减半/加倍，分号分隔多目标同发结算） |
-| `.hp @玩家 …` / `.hp @玩家` | 对 @ 的玩家结算 / 查看：有卡读卡，无卡直连群级 HP 记录（`.hp @玩家 -4d6`、`.hp @玩家;地精 -d4` 与名称混写） |
-| `.hp` / `.hp list` | 查看自己 / 本群列表（有卡 PC → 无卡 HP 记录 → NPC） |
-| `.hp del 名称` / `.hp clr` | 删除单个 / 清空全部 NPC 血量记录（玩家角色卡先在各个已绑定群或私聊按群号逐个解绑，再用 `.角色卡清除`；玩家先攻条目用 `.init del`） |
-| `.npc 持久/临时 名称` | NPC 血量跨战斗保持 / 恢复默认（同名 NPC 新入先攻表默认自动回满并提示） |
-| `.死亡豁免` / `.ds` | 0 HP 濒死时掷 1d20：≥10 成功、≤9 失败；3 成功稳定、3 失败死亡（自然 20 回 1 点 HP、自然 1 记两败）；`状态` / `重置` / `成功+N` 手动裁决（绑定角色卡与无卡 HP 记录都适用） |
-| `.长休` / `.长休 @玩家` | 长休结算（回满 HP、清临时 HP、清死亡豁免、恢复长休类能力与全部法术位、按群级规则版本恢复生命骰）；@ 形式代不在场的玩家收尾 |
-
-> 基础用法见[生命值管理](./docs/guide/hp.md)，武器伤害写法见 [HP 进阶](./docs/guide/hp-advanced.md)，休息与资源恢复见[休息与资源](./docs/guide/resources.md)，DM 的结算打法见[血量与伤害结算](./docs/guide/dm-settlement.md)。
-
-### ⚔️ 先攻与战斗轮（群聊）
-
-| 命令 | 说明 |
-| --- | --- |
-| `.ri[修正] [名称/…]` | 掷先攻入表（`.ri20 地精` 固定值、`3#` 批量、`.先攻` 别名） |
-| `.ri+3 @玩家` | 代不在场的玩家掷先攻：条目名取角色卡名并与该玩家绑定（重掷替换、回合提醒与 `.hp` 解析同步生效） |
-| `.init` | 查看先攻列表（`del`/`clr`/`first`/`swap` 子指令） |
-| `.init del/first/swap @玩家` | 子指令按玩家归属定位条目（角色卡改名后仍有效；未入表会给出提示） |
-| `.br` | 新建战斗轮（清空先攻表） |
-| `.回合` / `.轮次` | 查看/跳转当前回合与轮次（`.回合+2` 连续推进，轮到玩家自动 @ 提醒） |
-| `.回合 @玩家` | 跳转到该玩家的条目（不受改名/同名歧义影响） |
-| `.ed` | 结束当前回合并自动推进（`.结束` 别名） |
-
-### 🔍 规则查询（群聊 / 私聊，需骰主开启）
-
-| 命令 | 说明 |
-| --- | --- |
-| `.查询法术 名称` / `.查询怪物 名称` / `.查询物品 名称` | 速查子命令（推荐）：按名称精确查找法术 / 怪物 / 魔法物品，候选带环阶、CR、稀有度与出处 |
-| `.查询专长 名称` / `.查询职业 名称` / `.查询起源 名称` | 速查子命令：按名称查专长 / 职业与子职 / 种族与背景 |
-| `.查询术语 名称` / `.查询单位 名称` | 速查子命令：规则术语与状态 / 单位换算小节（长度、重量、温度、体积、货币） |
-| `.查询 关键词` / `.搜索 关键词` | 通用检索：按名称 / 全文检索《5e不全书》；多关键词用空格分隔表示同时满足、`\|` 表示或；唯一命中直接出词条、多个候选回数字看词条（多于一页时 `+` / `-` 翻页；60 秒内有效、只认发起者本人） |
-| `.查询图片 [on/off]` | 查看 / 切换本处的词条图片显示（群聊按群、私聊按本人；需骰主先开启图片模式，否则报错并回退文字） |
-| `.查询范围 [书目缩写…]` | 查看 / 收窄本处可查询的书目范围（如 `.查询范围 PHB24,MM25`；`.查询范围 全部` 恢复；不设置即全部开放） |
-| `.规则书` | 列出可设置的书目缩写与中文名对照（骰主开启图片模式时默认出图） |
-
-> 查规则推荐优先用速查子命令（8 条 `.查询法术` 等）；`.查询` / `.搜索` 是通用检索，结果不保证、排版可能有解析问题。规则查询默认关闭（`dnddicer_query_enabled`）：开启后群聊仍受本群服务开关管辖，私聊可用；查询内容来自《5e不全书》，只用于当次回复与短时内存缓存、不落盘、不随插件分发。详见[规则查询](./docs/guide/query.md)。
-
-### ⚙️ 群管理（群聊）
-
-| 命令 | 说明 |
-| --- | --- |
-| `.dset [表达式]` | 设置/查看群默认骰面（群主/管理员） |
-| `.规则版本 [5e\|5r]` | 设置/查看本群规则版本（5e = 2014、5r = 2024；影响长休生命骰恢复与击晕结果，不需要管理权限） |
-| `.bot [on/off]` | 插件信息查询 / 本群服务开关（群主/管理员，需 @） |
-| `.帮助` / `.help [命令 \| 分组 \| 链接 \| 关于 \| 骰主 \| 联系]` | 帮助入口：总览 / 命令目录 / 分组清单 / 命令详情 / 相关链接 / 插件信息 / 骰主指令 / 联系方式 |
-| `.master 消息` | 把问题或建议发给骰主：骰娘私聊转达（附群号与 QQ 号；单条 200 字、同一人 60 秒一条；骰主 QQ 号由 `dnddicer_master_qq` 配置） |
-
-> 一期范围外功能会**显式提示而非静默**：`.r exp` 期望值采样、`.r a/n` 特殊判定；牌堆/随机表（T2）与 BUFF 表（T3 候选）见下方路线。
-
-## 📄 版本与路线
-
-1. ✅ **v0.1.0**（第一期 = T0 + T1 + 战斗轮简化版 + `.bot` 服务开关）：掷骰引擎移植、`.r/.rh`、帮助、群配置（`.dset`）、角色卡与检定/豁免/攻击、`.dnd` 属性生成、HP 管理与长休（含抗性/易伤与 AOE 伤害掷骰）、先攻列表、战斗轮，全部落地、全量测试通过；
-2. ✅ **v0.2.0**：HP 抗性/易伤与 AOE 掷骰完善、`.dnd 原因` 兼容修复、**NPC/怪物血量**（三层目标搜索、先攻列表与 `.hp list` 联动、`.ri` 入表自动回满、`.npc 持久/临时` 跨战斗保持）、`.dndx` 属性名绑定掷点；
-3. ✅ **v0.2.1**：**@ 提及目标**（DM 可代玩家操作 `.hp`/`.npc`/`.ri`/`.回合` 等、查看角色卡）、玩家名称显示统一回退链、`.hp del/clr` 语义修订（仅作用 NPC 血量）、优势/劣势别名粘连等真机反馈修复；
-4. ✅ **v0.2.2**：掷骰说明文字按四则运算还原（常量复合子表达式与一元负号）、私聊下的群聊限定命令不再静默与 `.bot` 私聊文案修正；**使用文档站上线**（手册式 15 页，随发版自动部署）；
-5. ✅ **v0.3.0**：**自定义武器与攻击系统**（`$武器$` 段、`.武器名攻击` / `.武器名伤害`、`.设置武器` / `.删除武器`）、`.hp` 伤害位置武器写法（含来源括号代发）；**属性攻击命令退役**（破坏性变更，旧卡需重录）、文档站新增《武器与攻击》页与全站同步；
-6. ✅ **v0.4.0**：**规则查询**（`.查询` / `.搜索` 两种检索、候选选择与翻页、`.查询图片` 图片模式、`.查询范围` 书目限定与 `.规则书`）；**文档站按前置条件重排为四章**（基础操作 / 玩家进阶 / DM 进阶 / 最佳实践）；大成功/大失败播报另起一行、修饰符回显加括号；
-7. ✅ **v0.4.1**：**规则查询速查子命令**（8 条 `.查询法术` 等，推荐优先使用）与**骰主命令 `.查询索引`**（状态 / 按类刷新）；词条正文升级为站点样式渲染（卡片 / 数据卡 / 关键词高亮）；**文档站新增国内镜像**（GitHub Pages 访问不畅时用）；
-8. ✅ **v0.4.2**：`.bot` 插件信息与 `.help` 命令总览的回复末尾新增「详细帮助文档」链接（指向文档站国内镜像），群内可直达使用手册；
-9. ✅ **v0.4.3**：**`.help` 帮助体系重做**（总览 / 七组目录 / 组清单 / 简版详情，另设链接、关于、骰主、联系四入口）；**武器名模糊匹配**与**一条命令结算多件武器**；**`.master` 反馈骰主**与三个骰主配置项；`.dnd` / `.dndx` 次数上限提到 20；规则查询速查切片、图片卡片排版与字体三项修复；
-10. ✅ **v0.4.4**：修复配置项写数字（如骰主 QQ、交流群）导致插件不加载的问题；《快速开始》补充字体家族在 `.env` 里的写法说明；
-11. ✅ **v0.5.0**：**角色卡库与私聊建卡**（`cards.json`、`.角色卡新建/修改/改名/列表/绑定/解绑/清除`、无卡生命值）、**休息与资源**（限定资源 / 法术 / 法术位、`.生命骰` / `.短休` / `.长休` / `.施法`、死亡豁免与群级规则版本）、**网页建卡器**与**角色卡图改版**、半熟练、`.激励` / `.战斗记录` / `.钱币`、`.立绘` 查看与设置；**角色卡存储、段语法与分隔符为破坏性变更，旧卡需重录**；
-12. ⏳ **第二期余下**：牌堆/随机表；
-13. ⏳（可选）**T3 增强期**：BUFF / 临时加值表（`.buff`）等。
-
-每版完整变更（新增 / 变更 / 修复 / 文档）见 [CHANGELOG.md](./CHANGELOG.md)。
-
-## 📦 本地开发
+## 🛠️ 本地开发
 
 ```bash
 # uv 方式（推荐；或使用 pip 安装 .[dev]）
@@ -230,7 +123,7 @@ uv run pytest
 
 ## 🤝 许可与致谢
 
-- 本项目（业务层与工程骨架）以 **MIT License** 发布，见 [LICENSE](./LICENSE)。
-- **掷骰引擎移植自 [nonebot-dicepp](https://github.com/pear-studio/nonebot-dicepp)**（Copyright (c) 2022 pear-studio，MIT License）：引擎文件头保留上游版权声明，MIT 许可全文见 [LICENSE](./LICENSE)。
+- 本项目（业务层与工程骨架）以 **MIT License** 发布，见 [LICENSE](https://github.com/H-Elden/nonebot-plugin-dnddicer/blob/main/LICENSE)。
+- **掷骰引擎移植自 [nonebot-dicepp](https://github.com/pear-studio/nonebot-dicepp)**（Copyright (c) 2022 pear-studio，MIT License）：引擎文件头保留上游版权声明，MIT 许可全文见 [LICENSE](https://github.com/H-Elden/nonebot-plugin-dnddicer/blob/main/LICENSE)。
 - 规则查询类资料内容**不随插件分发**（版权归原权利方/译者），需要时由使用者自行提供。
 - 本项目与 nonebot-dicepp 无隶属关系，为独立命名的衍生/移植作品。
