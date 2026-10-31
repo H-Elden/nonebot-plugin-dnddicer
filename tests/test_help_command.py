@@ -253,6 +253,7 @@ def _reply_body(keyword: str) -> str:
         ("查询", "guide/query"),
         ("管理", "guide/faq"),
         ("dnd", "guide/character-card"),
+        ("物品", "guide/character-card"),
         ("状态", "guide/hp"),
         ("长休", "guide/resources"),
         ("npc", "guide/hp"),

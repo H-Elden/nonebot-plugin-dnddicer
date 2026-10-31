@@ -16,6 +16,7 @@
 - inspiration.py   英雄激励（.激励，2026-10-24 落地）
 - combat_notes.py  战斗记录（.战斗记录，2026-10-24 落地）
 - coins.py         钱币收支（.钱币，2026-10-24 落地）
+- items.py         背包物品（.物品，2026-11-01 落地）
 - feature.py       能力次数（.能力/.设置能力/.删除能力，2026-10-20 落地）
 - spell.py         法术与法术位（.法术/.设置法术/.删除法术/.法术位(.ss)，2026-10-20 落地）
 - dnd.py           属性生成（.dnd 4D6K3 掷点，已落地；标准购点另行规划）
@@ -38,6 +39,7 @@ from . import card_image  # noqa: F401  # 角色卡图片渲染辅助 + .立绘�
 from . import inspiration  # noqa: F401  # .激励 英雄激励记录与转赠（2026-10-24）
 from . import combat_notes  # noqa: F401  # .战斗记录 增删清（2026-10-24）
 from . import coins  # noqa: F401  # .钱币 紧凑收支（2026-10-24）
+from . import items  # noqa: F401  # .物品 查看与增减背包物品（2026-11-01）
 from . import weapon  # noqa: F401  # .X攻击/.X命中 自定义武器攻击检定（模式匹配）
 from . import feature  # noqa: F401  # .能力/.设置能力/.删除能力 有次数的能力
 from . import spell  # noqa: F401  # .法术/.法术位(.ss) 法术清单、准备标记与法术位

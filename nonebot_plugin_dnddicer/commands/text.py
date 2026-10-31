@@ -940,6 +940,23 @@ TXT_COIN_USAGE = (
     "用法：.钱币 [+20GP-5SP]（币种 CP/SP/EP/GP/PP，数量为正整数）"
 )
 
+# ── 物品 .物品（2026-11-01 新增）────────────────────────────────────────
+TXT_ITEM_LIST = "当前物品（{count} 项）：\n{items}"
+TXT_ITEM_LIST_ITEM = "{index}. {text}"
+TXT_ITEM_EMPTY = "背包里没有物品。可以用 .物品 名称+数量 添加。"
+TXT_ITEM_ADD_NEW = "已添加物品「{name}」×{quantity}。"
+TXT_ITEM_CHANGE = "物品「{name}」：{old} → {new}"
+TXT_ITEM_REMOVE_ZERO = "物品「{name}」：{old} → 0，已从背包移除。"
+TXT_ITEM_NOT_FOUND = "背包里没有物品「{name}」。"
+TXT_ITEM_AMBIGUOUS = "物品「{name}」匹配到多项：{candidates}。请写得更完整一些。"
+TXT_ITEM_DUPLICATE = "物品「{name}」在卡上出现了多次，请先用 .角色卡修改 修正。"
+TXT_ITEM_INSUFFICIENT = (
+    "物品「{name}」只有 {current} 个，无法扣减 {requested} 个。"
+)
+TXT_ITEM_MAX_COUNT = "物品最多 {max} 项，无法再添加。"
+TXT_ITEM_MAX_QUANTITY = "物品「{name}」数量不能超过 {max} 个。"
+TXT_ITEM_USAGE = "用法：.物品 [名称+数量|名称-数量|名称-]"
+
 
 def _d20_crit_counts(res_list: List[RollResult]) -> Tuple[int, int]:
     """统计被保留 d20 骰中的大成功（出目 20）与大失败（出目 1）次数。
