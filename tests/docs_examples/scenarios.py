@@ -1469,6 +1469,22 @@ coins_flow = Scene(
     ],
 )
 
+item_command = Scene(
+    id="item_command",
+    title="背包物品：查看、增加、扣减与数量不足",
+    steps=[
+        Step("老猫", ".角色卡修改 $物品$ 治疗药水x2; 箭矢x20; 巨斧"),
+        Step("老猫", ".物品"),
+        Step("老猫", ".物品 箭矢+3"),
+        Step("老猫", ".物品 治疗药水-1"),
+        Step("老猫", ".物品 巨斧 -"),
+        Step("老猫", ".物品 箭矢-99"),
+        Step("老猫", ".物品 治疗药水-1"),
+        Step("老猫", ".物品 火把+"),
+        Step("老猫", ".物品"),
+    ],
+)
+
 #: 时间线（顺序执行；后续按页补场景，注意保持剧情顺序）
 TIMELINE = [
     quickstart_bot_on,
@@ -1619,6 +1635,7 @@ TIMELINE = [
     resource_target,
     combat_notes,
     coins_flow,
+    item_command,
     hp_no_card,          # 无卡 HP 记录（《生命值管理》页；置尾避免影响前面示例）
     quickstart_bot_off,  # 压轴：服务关闭后本群不再响应其他命令
 ]
