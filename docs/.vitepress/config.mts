@@ -12,7 +12,7 @@ export default defineConfig({
   lang: 'zh-CN',
   title: '屠龙骰 DNDDicer',
   description:
-    '专精 DND5e/5r 的 QQ 跑团骰娘插件使用文档：掷骰表达式、角色卡录入与字段、检定与豁免、生命值管理、先攻列表与战斗轮、规则查询、DM 进阶与最佳实践',
+    '专精 DND5e/5r 的 QQ 跑团骰娘插件使用文档：掷骰表达式、角色卡录入与字段、检定与豁免、生命值管理、先攻列表与战斗轮、规则查询、牌堆与随机表、DM 进阶与最佳实践',
   base: process.env.DOCS_BASE ?? '/nonebot-plugin-dnddicer/',
   cleanUrls: true,
   lastUpdated: true,
@@ -50,6 +50,7 @@ export default defineConfig({
           { text: '先攻列表', link: '/guide/initiative' },
           { text: '战斗轮', link: '/guide/battle' },
           { text: '规则查询', link: '/guide/query' },
+          { text: '牌堆与随机表', link: '/guide/decks' },
         ],
       },
       {
@@ -75,6 +76,10 @@ export default defineConfig({
       {
         text: '第四章 · 最佳实践',
         items: [{ text: '最佳实践', link: '/guide/best-practices' }],
+      },
+      {
+        text: '第五章 · 骰主专区',
+        items: [{ text: '自定义牌堆', link: '/guide/deck-custom' }],
       },
       {
         text: '参考与工具',

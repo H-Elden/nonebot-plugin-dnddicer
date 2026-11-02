@@ -47,6 +47,7 @@ SYNCED_PAGES = [
     "guide/dm-settlement.md",
     "guide/query-scope.md",
     "guide/best-practices.md",
+    "guide/decks.md",
     "guide/overview.md",
     "guide/faq.md",
 ]

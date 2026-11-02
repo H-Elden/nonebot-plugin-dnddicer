@@ -13,7 +13,7 @@
 DNDDicer 的目标是填补「NoneBot 商店中缺少 **DND5e/5r 专业 + 现代维护 + 插件形态** 骰娘」的空位：围绕 DND 跑团全流程持续做深做全，致力于提供功能最全面、体验最好的 DND 骰娘，零配置可加载，供任何使用 OneBot V11 适配器的机器人从商店安装即用。
 
 - **掷骰引擎**：内置 AST 表达式引擎（Lark 文法），支持 `2D20kh1`、优势/劣势、爆炸骰、连掷、暗骰等完整掷骰语法；
-- **跑团全流程**：掷骰 → 属性生成 → 角色卡录入 → 检定与豁免 → 自定义武器与攻击、施法 → 先攻列表与战斗轮 → HP 结算 → 短休与长休 → 规则查询等；
+- **跑团全流程**：掷骰 → 属性生成 → 角色卡录入 → 检定与豁免 → 自定义武器与攻击、施法 → 先攻列表与战斗轮 → HP 结算 → 牌堆与随机表 → 短休与长休 → 规则查询等；
 - **规则范围**：仅 DND5e/5r，专精 DND 定位，不做 COC/D100 体系；
 - **商店合规**：零配置可加载、本地存储走 `nonebot-plugin-localstore`、元数据完整、全程异步。
 
@@ -40,6 +40,7 @@ DNDDicer 的目标是填补「NoneBot 商店中缺少 **DND5e/5r 专业 + 现代
 | `.hp` / `.hp 20/30` | 查看或记录 HP（支持队友与 NPC） |
 | `.init` / `.br` | 先攻列表 / 战斗轮 |
 | `.查询法术 火球术` | 规则查询（需开启 `dnddicer_query_enabled`） |
+| `.draw 牌堆名` | 从自定义牌堆/随机表抽取，支持文本+图片与纯图片 |
 | `.help` | 帮助入口与命令目录 |
 
 ## 📖 使用文档
@@ -53,10 +54,11 @@ DNDDicer 的目标是填补「NoneBot 商店中缺少 **DND5e/5r 专业 + 现代
 以下章节链接均指向国内镜像：
 
 - 开始：[快速开始](https://dnddicer.netlify.app/guide/quickstart) · [命令总览](https://dnddicer.netlify.app/guide/overview) · [示例团与人物](https://dnddicer.netlify.app/guide/cast)
-- 第一章 · 基础操作：[掷骰基础](https://dnddicer.netlify.app/guide/roll-basics) · [掷骰进阶](https://dnddicer.netlify.app/guide/roll-advanced) · [生命值管理](https://dnddicer.netlify.app/guide/hp) · [先攻列表](https://dnddicer.netlify.app/guide/initiative) · [战斗轮](https://dnddicer.netlify.app/guide/battle) · [规则查询](https://dnddicer.netlify.app/guide/query)
+- 第一章 · 基础操作：[掷骰基础](https://dnddicer.netlify.app/guide/roll-basics) · [掷骰进阶](https://dnddicer.netlify.app/guide/roll-advanced) · [生命值管理](https://dnddicer.netlify.app/guide/hp) · [先攻列表](https://dnddicer.netlify.app/guide/initiative) · [战斗轮](https://dnddicer.netlify.app/guide/battle) · [规则查询](https://dnddicer.netlify.app/guide/query) · [牌堆与随机表](https://dnddicer.netlify.app/guide/decks)
 - 第二章 · 玩家进阶：[角色卡录入](https://dnddicer.netlify.app/guide/character-card) · [检定与豁免](https://dnddicer.netlify.app/guide/checks) · [武器与攻击](https://dnddicer.netlify.app/guide/weapons) · [休息与资源](https://dnddicer.netlify.app/guide/resources) · [HP 进阶](https://dnddicer.netlify.app/guide/hp-advanced) · [死亡豁免](https://dnddicer.netlify.app/guide/death-save) · [规则版本与击晕](https://dnddicer.netlify.app/guide/rules-version)
 - 第三章 · DM 进阶：[代掷与代操作](https://dnddicer.netlify.app/guide/dm-proxy) · [血量与伤害结算](https://dnddicer.netlify.app/guide/dm-settlement) · [查询范围](https://dnddicer.netlify.app/guide/query-scope)
 - 第四章 · 最佳实践：[最佳实践](https://dnddicer.netlify.app/guide/best-practices)
+- 第五章 · 骰主专区：[自定义牌堆](https://dnddicer.netlify.app/guide/deck-custom)
 - 参考与工具：[网页建卡器](https://dnddicer.netlify.app/guide/card-builder) · [角色卡字段](https://dnddicer.netlify.app/guide/card-fields) · [群管理与 FAQ](https://dnddicer.netlify.app/guide/faq) · [自建查询服务（可选）](https://dnddicer.netlify.app/guide/self-host) · [更新日志](https://dnddicer.netlify.app/guide/changelog)
 
 文档源文件在仓库 [docs/](https://github.com/H-Elden/nonebot-plugin-dnddicer/tree/main/docs)。

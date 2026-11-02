@@ -1074,6 +1074,20 @@ faq_dset_denied = Scene(
     ],
 )
 
+# ── 第十四幕：牌堆与随机表（《牌堆与随机表》页）────────────────────────────
+# 注：牌堆示例使用测试临时目录中的自定义「示例牌堆」；插件本身不内置牌堆。
+deck_draw = Scene(
+    id="deck_draw",
+    title="牌堆与随机表：自定义牌堆的列表、抽取、搜索与详情",
+    steps=[
+        Step("白鸦", ".draw"),
+        Step("白鸦", ".draw 示例牌堆", deck=[1]),
+        Step("白鸦", ".draw 示例牌堆 3", deck=[1, 1, 1]),
+        Step("白鸦", ".draw 搜索 示例"),
+        Step("白鸦", ".draw 详情 示例牌堆"),
+    ],
+)
+
 #: 时间线末尾：群主关闭本群服务（演示收尾）。
 #: 该场景必须压轴——服务关闭后本群不再响应其他命令；补新场景时请插在它之前。
 quickstart_bot_off = Scene(
@@ -1637,5 +1651,6 @@ TIMELINE = [
     coins_flow,
     item_command,
     hp_no_card,          # 无卡 HP 记录（《生命值管理》页；置尾避免影响前面示例）
+    deck_draw,           # 牌堆与随机表（《牌堆与随机表》页）
     quickstart_bot_off,  # 压轴：服务关闭后本群不再响应其他命令
 ]

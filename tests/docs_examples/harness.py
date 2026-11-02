@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from contextlib import contextmanager
@@ -68,6 +69,7 @@ class Step:
     speaker: str  # cast 名册里的群昵称（如「阿茶」）
     text: str  # 输入原文；`@名字` 会转成真实 at 段
     dice: List[int] = field(default_factory=list)  # 本步消费的骰值（恰好耗尽）
+    deck: List[int] = field(default_factory=list)  # 本步消费的牌堆抽签值（恰好耗尽）
     gate: Literal["real", "bypass"] = "bypass"  # real=走真实群聊服务门禁
     channel: Literal["group", "private"] = "group"  # private=私聊（答复落「屠龙骰（私聊）」）
     superuser: bool = False  # 本步期间把发言人设为骰主（SUPERUSERS）
@@ -178,6 +180,35 @@ class TimelineRunner:
         adapter = Adapter(nonebot.get_driver())
         self.bot = bot_type(adapter, self_id=str(cast.BOT_QQ))
         self.bot.recorder = self.recorder  # type: ignore[attr-defined]
+
+        # 牌堆示例使用临时自定义目录并写入示例牌堆，避免本机 decks 数据影响基线
+        import tempfile
+
+        from nonebot_plugin_dnddicer.commands import deck as deck_cmd
+        from nonebot_plugin_dnddicer.deck.library import DeckLibrary
+
+        self._deck_dir = tempfile.TemporaryDirectory(prefix="dnddicer-docs-decks-")
+        deck_dir = Path(self._deck_dir.name)
+        (deck_dir / "demo.json").write_text(
+            json.dumps(
+                {
+                    "_title": "示例牌堆",
+                    "_author": "DNDDicer 示例",
+                    "_version": "1.0",
+                    "_license": "CC0",
+                    "_source": "文档示例数据",
+                    "_brief": "文档取证用的自定义牌堆，不是插件内置内容。",
+                    "示例牌堆": [
+                        "01｜篝火旁传来的旧传闻",
+                        "02｜林间小径上的一串脚印",
+                        "03｜酒馆角落里的陌生人",
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        deck_cmd.set_library(DeckLibrary(custom_dir=deck_dir))
 
     async def reset_group_state(self) -> None:
         """重置示例群状态（服务关闭、清空角色卡 / NPC 血量 / 先攻表 / 群配置 / 查询设置）。
@@ -294,6 +325,11 @@ class TimelineRunner:
 
     async def run_step(self, step: Step, *, label: str) -> None:
         """执行一步：记录输入 → 真实分发 → 校验骰值恰好耗尽。"""
+        from nonebot_plugin_dnddicer.deck.runtime import (
+            SequenceDeckRuntime,
+            reset_runtime as reset_deck_runtime,
+            set_runtime as set_deck_runtime,
+        )
         from nonebot_plugin_dnddicer.engine.roll.karma_runtime import (
             reset_runtime,
             set_runtime,
@@ -308,11 +344,15 @@ class TimelineRunner:
 
         runtime = SequenceRuntime(step.dice)
         token = set_runtime(runtime)
+        deck_runtime = SequenceDeckRuntime(step.deck) if step.deck else None
+        deck_token = set_deck_runtime(deck_runtime) if deck_runtime else None
         try:
             with self._gate(step.gate), self._as_superuser(step.superuser, persona):
                 await self.bot.handle_event(event)
         finally:
             reset_runtime(token)
+            if deck_token is not None:
+                reset_deck_runtime(deck_token)
 
         # 后台任务（如 .查询索引 刷新）先跑完：回报消息要落在本步内，顺序才稳定
         from nonebot_plugin_dnddicer.commands import atlas as atlas_cmd
@@ -326,6 +366,14 @@ class TimelineRunner:
                 f"{label}「{first_line}」骰值未耗尽：剩余 {remaining} 个"
                 f"（{step.dice[runtime.get_consumed_count():]}）"
             )
+        if deck_runtime is not None:
+            deck_remaining = deck_runtime.get_remaining_count()
+            if deck_remaining:
+                first_line = step.text.splitlines()[0]
+                raise AssertionError(
+                    f"{label}「{first_line}」牌堆抽签值未耗尽：剩余 {deck_remaining} 个"
+                    f"（{step.deck[deck_runtime.get_consumed_count():]}）"
+                )
 
     @staticmethod
     def _build_event(persona: cast.Persona, message, channel: str = "group"):
