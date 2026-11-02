@@ -222,6 +222,33 @@ def test_sanitize_table_keeps_bgcolor_outside_stat_block() -> None:
     assert 'style="background-color:#f5c589"' in fragment
 
 
+def test_sanitize_stat_abilities_table_keeps_class() -> None:
+    """2024 怪物数据卡属性表：保留 stat-abilities，并标注各列角色。
+
+    列角色供卡片样式固定列宽（名称 / 数值 / 调整 / 豁免 / 间隔）；
+    数据卡之外的同名类名不保留，避免普通表格误用数据卡样式。
+    """
+    card = (
+        '<div class="stat-block"><table class="stat-abilities">'
+        '<tr><th>力量</th><td class="c1">13</td><td>+1</td><td>+1</td><td></td>'
+        "</tr></table></div>"
+    )
+    fragment = decode.sanitize_html(card)
+    assert 'class="rt-table stat-abilities"' in fragment
+    assert 'class="ab-name"' in fragment
+    assert 'class="c1 ab-score"' in fragment
+    assert 'class="ab-mod"' in fragment
+    assert 'class="ab-save"' in fragment
+    assert 'class="ab-gap"' in fragment
+
+    outside = decode.sanitize_html(
+        '<table class="stat-abilities"><tr><td>普通</td></tr></table>'
+    )
+    assert 'class="rt-table"' in outside
+    assert "stat-abilities" not in outside
+    assert "ab-name" not in outside
+
+
 def test_sanitize_highlight_wraps_keyword() -> None:
     """高亮：关键词在文本节点内包上 dx-hl 标记（大小写不敏感）。"""
     fragment = decode.sanitize_html("<p>样例法术说明</p>", highlight="样例")

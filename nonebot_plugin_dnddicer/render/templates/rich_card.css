@@ -173,9 +173,30 @@ body {
   text-align: left;
 }
 
+/* 属性表撑满数据卡：固定列宽，名称列只留两个字的宽度，数值列紧跟其后，
+   剩余宽度分给调整 / 豁免列，避免属性值与属性名之间出现大片空白。 */
 .stat-block table.stat-abilities {
   text-align: center;
-  margin-bottom: 12px;
+  width: 100%;
+  table-layout: fixed;
+  margin: 0 0 12px 0;
+}
+
+.stat-block table.stat-abilities .ab-name {
+  width: 45px;
+}
+
+.stat-block table.stat-abilities .ab-score {
+  width: 27px;
+}
+
+.stat-block table.stat-abilities .ab-mod,
+.stat-block table.stat-abilities .ab-save {
+  width: 60px;
+}
+
+.stat-block table.stat-abilities .ab-gap {
+  width: 16px;
 }
 
 .stat-block table.stat-abilities th {
@@ -189,10 +210,21 @@ body {
   text-align: center;
 }
 
-td.c1 { background-color: #e9e3d6; }
-td.c2 { background-color: #d8d0c9; }
-td.c3 { background-color: #d2d6ce; }
-td.c4 { background-color: #cbc6c6; }
+td.c1 {
+  background-color: #e9e3d6;
+}
+
+td.c2 {
+  background-color: #d8d0c9;
+}
+
+td.c3 {
+  background-color: #d2d6ce;
+}
+
+td.c4 {
+  background-color: #cbc6c6;
+}
 
 .note {
   margin: 0 0 8px 0;

@@ -51,6 +51,17 @@ _KEEP_CLASSES = {
     "c1", "c2", "c3", "c4",
 }
 
+#: 2024 数据卡属性表的列角色（14 列，按一行内 td/th 的出现顺序）。
+#: 每个属性占 4 列（名称 / 数值 / 调整 / 豁免），三组之间夹一列窄间隔；
+#: 卡片样式按这些类名固定列宽，名称与数值贴在一起，整表仍撑满卡片。
+_STAT_CELL_CLASSES = {
+    1: "ab-name", 2: "ab-score", 3: "ab-mod", 4: "ab-save",
+    5: "ab-gap",
+    6: "ab-name", 7: "ab-score", 8: "ab-mod", 9: "ab-save",
+    10: "ab-gap",
+    11: "ab-name", 12: "ab-score", 13: "ab-mod", 14: "ab-save",
+}
+
 #: 高亮标记的类名（渲染侧样式表定义底色）
 HIGHLIGHT_CLASS = "dx-hl"
 
@@ -318,6 +329,8 @@ class _Sanitizer(HTMLParser):
         self.out: List[str] = []
         self.skip = 0
         self.div_stack: List[bool] = []
+        self.stat_table = False
+        self.cell_index = 0
         self.highlight = highlight.strip()
         self._hl_re = (
             re.compile(re.escape(self.highlight), re.I) if self.highlight else None
@@ -328,8 +341,11 @@ class _Sanitizer(HTMLParser):
     def _in_stat_block(self) -> bool:
         return bool(self.div_stack and self.div_stack[-1])
 
-    def _class_attr(self, attrs: Dict[str, str]) -> str:
+    def _class_attr(
+        self, attrs: Dict[str, str], extra: Sequence[str] = ()
+    ) -> str:
         kept = [c for c in attrs.get("class", "").split() if c in _KEEP_CLASSES]
+        kept.extend(extra)
         return f' class="{" ".join(kept)}"' if kept else ""
 
     # -- HTMLParser 回调 -------------------------------------------------
@@ -364,16 +380,34 @@ class _Sanitizer(HTMLParser):
             self.out.append(f"<span{style}>")
             return
         if tag == "table":
-            self.out.append('<table class="rt-table">')
+            # 普通表格统一给 rt-table；2024 怪物数据卡里的属性表另需保留
+            # stat-abilities，卡片样式靠它固定列宽并撑满数据卡。
+            self.stat_table = (
+                self._in_stat_block()
+                and "stat-abilities" in attrs.get("class", "").split()
+            )
+            self.cell_index = 0
+            classes = ["rt-table"]
+            if self.stat_table:
+                classes.append("stat-abilities")
+            self.out.append(f'<table class="{" ".join(classes)}">')
             return
+        if tag == "tr" and self.stat_table:
+            self.cell_index = 0
         if tag in ("td", "th"):
             span_attr = ""
             if attrs.get("colspan"):
                 span_attr += f' colspan="{attrs["colspan"]}"'
             if attrs.get("rowspan"):
                 span_attr += f' rowspan="{attrs["rowspan"]}"'
+            extra: Tuple[str, ...] = ()
+            if self.stat_table:
+                self.cell_index += 1
+                role = _STAT_CELL_CLASSES.get(self.cell_index, "")
+                if role:
+                    extra = (role,)
             if self._in_stat_block():
-                self.out.append(f"<{tag}{self._class_attr(attrs)}{span_attr}>")
+                self.out.append(f"<{tag}{self._class_attr(attrs, extra)}{span_attr}>")
             else:
                 bg = attrs.get("bgcolor")
                 style = f' style="background-color:{bg}"' if bg else ""
@@ -410,6 +444,11 @@ class _Sanitizer(HTMLParser):
             return
         if tag == "font":
             self.out.append("</span>")
+            return
+        if tag == "table":
+            self.stat_table = False
+            self.cell_index = 0
+            self.out.append("</table>")
             return
         if tag in _ALLOWED_TAGS:
             self.out.append(f"</{tag}>")
