@@ -73,6 +73,7 @@ _CATALOG = (
     ".help 生命 查看生命值命令\n"
     ".help 先攻 查看先攻/战斗命令\n"
     ".help 查询 查看规则查询命令\n"
+    ".help 牌堆 查看牌堆与随机表命令\n"
     ".help 管理 查看群管专用命令"
 )
 
@@ -108,6 +109,12 @@ _QUERY_GROUP = (
     ".查询图片 [on|off]　#本处图片/文字开关\n"
     ".查询范围 [书目缩写|全部]　#收窄可查书目\n"
     ".规则书　#书目缩写与中文名对照"
+)
+
+_DECK_GROUP = (
+    "【牌堆与随机表命令】\n"
+    ".draw [名称] [次数] [放回]　#抽取或列出牌堆\n"
+    ".draw 搜索/详情 关键词　#搜索与查看"
 )
 
 _R_DETAIL = (
@@ -184,7 +191,7 @@ async def test_landing_chinese_start(app: App):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("keyword", ["命令", "列表"])
 async def test_catalog(app: App, keyword: str):
-    """.help 命令：8 组目录（`列表` 为静默别名）。"""
+    """.help 命令：9 组目录（`列表` 为静默别名）。"""
     await _expect_group(app, f".help {keyword}", _CATALOG)
 
 
@@ -208,6 +215,12 @@ async def test_resource_group_listing(app: App):
 async def test_group_takes_precedence_over_command(app: App):
     """.help 查询：组名优先于命令名，给「查询」组清单而不是 .查询 详情。"""
     await _expect_group(app, ".help 查询", _QUERY_GROUP)
+
+
+@pytest.mark.asyncio
+async def test_deck_group(app: App):
+    """.help 牌堆：牌堆与随机表命令组（2026-11-02 新增）。"""
+    await _expect_group(app, ".help 牌堆", _DECK_GROUP)
 
 
 @pytest.mark.asyncio

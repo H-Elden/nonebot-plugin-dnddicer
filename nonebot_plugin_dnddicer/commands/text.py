@@ -95,7 +95,7 @@ TXT_HELP_LANDING = (
     ".help 骰主 查看骰主指令\n"
     ".help 联系 联系骰主"
 )
-#: `.help 命令`：8 组目录
+#: `.help 命令`：9 组目录
 TXT_HELP_CATALOG = (
     "屠龙骰命令一览\n"
     ".help 掷骰 查看掷骰相关命令\n"
@@ -105,6 +105,7 @@ TXT_HELP_CATALOG = (
     ".help 生命 查看生命值命令\n"
     ".help 先攻 查看先攻/战斗命令\n"
     ".help 查询 查看规则查询命令\n"
+    ".help 牌堆 查看牌堆与随机表命令\n"
     ".help 管理 查看群管专用命令"
 )
 #: `.help 链接`：相关链接 + 链接开关的用法
@@ -1083,3 +1084,38 @@ def format_nat_attack_state(res_list: List[RollResult], weapon_name: str) -> str
     if nat1:
         parts.append(f"{nat1}次天然1")
     return "、".join(parts)
+
+# ── 牌堆与随机表 .draw（2026-11-02）─────────────────────────────────────
+TXT_DECK_USAGE = "用法：.draw [名称] [次数] [放回]\n用 .draw 查看可用牌堆。"
+TXT_DECK_MASTER_ONLY = "仅骰主私聊可用。"
+TXT_DECK_LIST_CUSTOM = "自定义牌堆（{count}）："
+TXT_DECK_LIST_ITEM = "- {name}（{count} 条）"
+TXT_DECK_LIST_EMPTY = "- 暂无"
+TXT_DECK_LIST_FOOTER = "用 .draw 名称 [次数] 抽取；.draw 搜索 关键词 搜索。"
+TXT_DECK_LIST_MORE = "（自定义牌堆过多，仅显示前 {count} 个；用 .draw 搜索 关键词 查找。）"
+TXT_DECK_CANDIDATE = "- {name}（{count} 条）"
+TXT_DECK_NOT_FOUND = "找不到牌堆「{name}」。"
+TXT_DECK_SUGGEST = "相近的牌堆：{names}"
+TXT_DECK_AMBIGUOUS = "牌堆「{name}」匹配到多个：{names}\n请写得更完整一些。"
+TXT_DECK_EMPTY = "牌堆「{name}」没有可抽取的条目。"
+TXT_DECK_COUNT_RANGE = "次数需要在 1 到 10 之间。"
+TXT_DECK_DRAW_HEADER = "从【{name}】抽到："
+TXT_DECK_DRAW_MULTI_TITLE = "从【{name}】抽了 {count} 条："
+TXT_DECK_DRAW_MULTI_HEADER = "从【{name}】抽到第 {index}/{total} 条："
+TXT_DECK_DRAW_ITEM = "{index}. {text}"
+TXT_DECK_EXHAUSTED = "（牌堆已抽完，本次只抽到 {count} 条。）"
+TXT_DECK_IMAGE_MISSING = "【图片缺失：{name}】"
+TXT_DECK_IMAGE_BAD = "【图片无法读取：{name}】"
+TXT_DECK_IMAGE_TOO_MANY = "【图片过多，已省略】"
+TXT_DECK_IMAGE_TOTAL_TOO_LARGE = "【图片过多或过大，后续图片已省略】"
+TXT_DECK_TRUNCATED = "（内容过长，已截断。）"
+TXT_DECK_DETAIL_HEADER = "牌堆：{name}"
+TXT_DECK_DETAIL_LINE = "{label}：{value}"
+TXT_DECK_DETAIL_HINT = "用 .draw {name} [次数] 抽取。"
+TXT_DECK_SEARCH_HEADER = "搜索「{keyword}」（{count} 个）："
+TXT_DECK_SEARCH_NONE = "没有找到名称包含「{keyword}」的牌堆。"
+TXT_DECK_RELOAD_OK = "牌堆已重载：自定义 {custom} 个。"
+TXT_DECK_RELOAD_DIR = "自定义牌堆目录：{path}"
+TXT_DECK_RELOAD_ERRORS = "加载失败 {count} 个："
+TXT_DECK_RELOAD_ERROR_LINE = "- {file}：{message}"
+TXT_DECK_RELOAD_MORE = "其余错误见日志。"

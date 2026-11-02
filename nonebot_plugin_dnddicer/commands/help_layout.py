@@ -123,6 +123,15 @@ HELP_GROUPS: Tuple[Tuple[str, Tuple[str, ...], str], ...] = (
         "guide/query",
     ),
     (
+        "牌堆",
+        (
+            "【牌堆与随机表命令】",
+            ".draw [名称] [次数] [放回]　#抽取或列出牌堆",
+            ".draw 搜索/详情 关键词　#搜索与查看",
+        ),
+        "guide/decks",
+    ),
+    (
         "管理",
         (
             "【群管理专用命令】",

@@ -134,7 +134,7 @@ def test_entry_limits():
         version=__version__, repo="https://example.com", group="1"
     )
     assert len(landing.splitlines()) <= 9
-    assert len(catalog.splitlines()) <= 9
+    assert len(catalog.splitlines()) <= 10
     assert len(link.splitlines()) <= 7
     assert len(about.splitlines()) <= 8
     assert len(cmd_text.TXT_HELP_MASTER.splitlines()) <= 4
