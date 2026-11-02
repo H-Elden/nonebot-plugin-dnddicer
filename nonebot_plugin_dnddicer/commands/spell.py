@@ -17,13 +17,14 @@
 from __future__ import annotations
 
 import re
-from typing import List, Optional
+from typing import List, NamedTuple, Optional, Tuple
 
 from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, MessageEvent
 
 from ..character import rules as char_rules
+from ..character import spell_combat
 from ..character.constants import SPELL_LEVEL_MAX, SPELL_MAX_COUNT
-from ..character.models import DNDCharacter, SpellEntry, SpellSlots
+from ..character.models import DNDCharacter, SpellDamagePart, SpellEntry, SpellSlots
 from ..character.services import (
     RestService,
     match_spells,
@@ -35,7 +36,7 @@ from ..data import spell_settings
 from ..data.characters import get_character, save_character
 from ..platform import onebot_v11
 from . import base, card_helpers, text
-from .weapon import find_exact_weapon
+from .weapon import WeaponDamageRoll, append_multi_damage_lines
 
 _HELP_SPELL = (
     ".法术 [准备|取消 名称] [提醒 on|off]\n"
@@ -47,9 +48,10 @@ spell_matcher = base.on_dnd_command("法术", _HELP_SPELL, doc="guide/resources"
 
 _HELP_SET_SPELL = (
     ".设置法术 名称:环阶[*] （多项用 ; 分隔）\n"
-    "  可写 施法属性:智力; 豁免DC:15; 法术攻击:+7\n"
-    "  卡面详情写在 | 后：时间:1动作|距离:150尺|专注:是|材料:是\n"
-    "  示例：.设置法术 火球术:3*|时间:1动作|距离:150尺|材料:是"
+    "  可写 施法属性:智力; 豁免DC:15; 法术攻击:+8\n"
+    "  战斗字段：类型:攻击/豁免/自动/辅助; 伤害:8d6火焰; 升环:+1d6\n"
+    "  豁免型写 豁免:敏捷; 成功:半伤/无伤；多段伤害用 + 连接\n"
+    "  示例：.设置法术 火球术:3*|类型:豁免|豁免:敏捷|伤害:8d6火焰"
 )
 set_spell_matcher = base.on_dnd_command(
     "设置法术", _HELP_SET_SPELL, doc="guide/resources"
@@ -290,6 +292,14 @@ async def handle_set_spell(event: MessageEvent) -> None:
                 existing.ritual = spell.ritual
                 existing.material = spell.material
                 existing.note = spell.note
+                existing.kind = spell.kind
+                existing.attack_bonus = spell.attack_bonus
+                existing.save_ability = spell.save_ability
+                existing.save_dc = spell.save_dc
+                existing.save_success = spell.save_success
+                existing.damage_parts = spell.damage_parts
+                existing.upcast = spell.upcast
+                existing.effect = spell.effect
         else:
             merged.append(spell)
         set_names.append(spell.name)
@@ -681,6 +691,17 @@ def _parse_cast_modifier(
     return name, (int(matched.group(3)), matched.group(2) == "+")
 
 
+def _split_cast_advantage(arg: str) -> Tuple[str, int]:
+    """摘出施法参数末尾的 优势/劣势 → (剩余参数, 1/-1/0)。
+
+    整串精确命中法术名由调用方先判断，避免把名为「优势」的法术误拆。
+    """
+    for word, value in (("优势", 1), ("劣势", -1)):
+        if arg.endswith(word) and len(arg) > len(word):
+            return arg[: -len(word)].strip(), value
+    return arg, 0
+
+
 async def _resolve_cast_spell(
     spells: List[SpellEntry], name: str
 ) -> Tuple[Optional[SpellEntry], List[SpellEntry]]:
@@ -701,6 +722,154 @@ async def _finish_cast_no_slot(
     )
 
 
+class _CastCombat(NamedTuple):
+    """施法前已校验好的战斗计划（避免扣位后才报配置错误）。"""
+
+    kind: str
+    attack_expression: str
+    damage_parts: List[SpellDamagePart]
+    upcast_note: str
+    save_ability: str
+    save_dc: str
+    save_success: str
+    effect: str
+
+
+def _build_cast_combat(
+    character: DNDCharacter,
+    spell: SpellEntry,
+    cast_level: int,
+    advantage: int,
+) -> Optional[_CastCombat]:
+    """按法术类型生成战斗计划；未配置类型返回 None。"""
+    if not spell.kind:
+        return None
+    if spell.kind == "攻击":
+        bonus = spell_combat.get_attack_bonus(character, spell)
+        advantage_text = (
+            "优势" if advantage > 0 else "劣势" if advantage < 0 else ""
+        )
+        parts, note = spell_combat.build_damage_parts(spell, cast_level)
+        return _CastCombat(
+            "攻击", f"D20{advantage_text}{bonus}", parts, note,
+            "", "", "", spell.effect,
+        )
+    if spell.kind == "豁免":
+        dc = spell_combat.get_save_dc(character, spell)
+        parts, note = spell_combat.build_damage_parts(spell, cast_level)
+        return _CastCombat(
+            "豁免", "", parts, note,
+            spell.save_ability, dc, spell.save_success or "半伤", spell.effect,
+        )
+    if spell.kind == "自动":
+        parts, note = spell_combat.build_damage_parts(spell, cast_level)
+        return _CastCombat(
+            "自动", "", parts, note, "", "", "", spell.effect,
+        )
+    return _CastCombat(spell.kind, "", [], "", "", "", "", spell.effect)
+
+
+def _append_spell_damage(
+    lines: List[str],
+    display_name: str,
+    spell: SpellEntry,
+    rolls: List[spell_combat.SpellDamagePartRoll],
+    note: str,
+) -> None:
+    """把法术伤害逐段拼进回复；单段用单行模板，多段复用武器的多段组装。"""
+    if not rolls:
+        return
+    total = sum(roll.total for roll in rolls)
+    types = {roll.damage_type for roll in rolls if roll.damage_type}
+    if len(rolls) == 1:
+        roll = rolls[0]
+        lines.append(
+            text.TXT_SPELL_DAMAGE.format(
+                name=display_name,
+                spell=spell.name,
+                total=roll.total,
+                type=roll.damage_type,
+                note=note,
+                result=roll.result.get_complete_result(),
+            )
+        )
+        return
+    lines.append(
+        text.TXT_SPELL_MULTI_DAMAGE_HEAD.format(
+            name=display_name,
+            spell=spell.name,
+            total=total,
+            type=next(iter(types)) if len(types) == 1 else "多类型",
+            note=note,
+        )
+    )
+    append_multi_damage_lines(
+        lines,
+        display_name,
+        [
+            WeaponDamageRoll(
+                weapon=spell.name,
+                damage_type=roll.damage_type,
+                note="",
+                result=roll.result,
+                total=roll.total,
+                no_dice=re.search(r"\d*[dD]\d+", roll.expr) is None,
+            )
+            for roll in rolls
+        ],
+    )
+
+
+def _append_cast_combat(
+    lines: List[str],
+    combat: Optional[_CastCombat],
+    spell: SpellEntry,
+    display_name: str,
+) -> None:
+    """执行战斗计划并把结果追加到回复行。"""
+    if combat is None:
+        lines.append(text.TXT_CAST_NO_COMBAT.format(spell=spell.name))
+        return
+
+    if combat.kind == "攻击":
+        result = spell_combat.roll_expression(combat.attack_expression)
+        lines.append(
+            text.TXT_SPELL_ATTACK_LINE.format(
+                spell=spell.name, result=result.get_complete_result()
+            )
+        )
+        nat_state = text.format_nat_attack_state([result], spell.name)
+        if nat_state:
+            lines.append(nat_state)
+        if combat.effect:
+            lines.append(combat.effect)
+        if combat.upcast_note:
+            lines.append(combat.upcast_note)
+        if combat.damage_parts:
+            lines.append(text.TXT_CAST_ATTACK_HINT.format(spell=spell.name))
+        return
+
+    if combat.damage_parts:
+        if combat.kind == "豁免":
+            lines.append(
+                text.TXT_CAST_SAVE_HEAD.format(
+                    ability=combat.save_ability,
+                    dc=combat.save_dc,
+                    success=combat.save_success,
+                )
+            )
+        rolls = spell_combat.roll_damage_parts(combat.damage_parts)
+        _append_spell_damage(lines, display_name, spell, rolls, combat.upcast_note)
+        if combat.effect:
+            lines.append(combat.effect)
+        return
+
+    if combat.effect:
+        lines.append(combat.effect)
+    if combat.upcast_note:
+        lines.append(combat.upcast_note)
+
+
 async def _cast_spell(
     matcher,
     event: GroupMessageEvent,
@@ -709,9 +878,20 @@ async def _cast_spell(
     spell: SpellEntry,
     cast_level: int,
     version_2024: bool,
+    advantage: int = 0,
 ) -> None:
     """执行一次已确定法术与环阶的施法结算并回复。"""
     lines: List[str] = []
+
+    # 战斗数据先校验，避免扣掉法术位后才报配置错误
+    combat: Optional[_CastCombat] = None
+    if spell.kind:
+        try:
+            combat = _build_cast_combat(
+                character, spell, cast_level, advantage
+            )
+        except spell_combat.SpellCombatError as exc:
+            await matcher.finish(str(exc))
 
     if spell.level == 0:
         lines.append(
@@ -747,9 +927,13 @@ async def _cast_spell(
         )
         await save_character(character)
 
-    weapon = find_exact_weapon(character.weapons, spell.name)
-    if weapon is not None:
-        lines.append(text.TXT_CAST_WEAPON_HINT.format(weapon=weapon.name))
+    if advantage and spell.kind and spell.kind != "攻击":
+        lines.append(text.TXT_SPELL_NOT_ATTACK.format(spell=spell.name))
+
+    try:
+        _append_cast_combat(lines, combat, spell, display_name)
+    except spell_combat.SpellCombatError as exc:
+        await matcher.finish(str(exc))
 
     # 未准备提醒固定在回复末尾（非戏法、成功消耗环位后才判定）
     if (
@@ -788,10 +972,17 @@ async def handle_cast(bot: Bot, event: MessageEvent) -> None:
 
     # ① 整串精确命中法术名（支持名称本身以数字结尾的卡面条目）
     exact = _find_exact_spell(character.spells, arg)
+    advantage = 0
+    if exact is None:
+        # 末尾的 优势/劣势 只在整串不是法名时才摘除
+        stripped, advantage = _split_cast_advantage(arg)
+        if advantage:
+            arg = stripped
+            exact = _find_exact_spell(character.spells, arg)
     if exact is not None:
         await _cast_spell(
             cast_matcher, event, character, display_name,
-            exact, exact.level, version_2024,
+            exact, exact.level, version_2024, advantage,
         )
         return
 
@@ -871,5 +1062,5 @@ async def handle_cast(bot: Bot, event: MessageEvent) -> None:
 
     await _cast_spell(
         cast_matcher, event, character, display_name,
-        spell, cast_level, version_2024,
+        spell, cast_level, version_2024, advantage,
     )

@@ -76,6 +76,13 @@ async def _set_rules_version(group_id: int, version: str) -> None:
     await set_group_config_field(group_id, rules.RULES_VERSION_FIELD, version)
 
 
+def _no_combat(spell: str) -> str:
+    """旧卡未配置战斗字段时 .施法 末尾的补录提示。"""
+    from nonebot_plugin_dnddicer.commands import text
+
+    return "\n" + text.TXT_CAST_NO_COMBAT.format(spell=spell)
+
+
 # =========================================================================
 # 基本施法流程
 # =========================================================================
@@ -90,26 +97,26 @@ async def test_cast_default_absolute_relative_and_level_only(app: App):
     await _expect(
         app, cast_matcher, _event(".施法 火球术"),
         "洛恩施展了「火球术」（3环）\n"
-        "消耗3环法术位：2/2 → 1/2",
+        "消耗3环法术位：2/2 → 1/2" + _no_combat("火球术"),
     )
     # 未准备：照常消耗，末尾提醒
     await _expect(
         app, cast_matcher, _event(".施法 闪电束"),
         "洛恩施展了「闪电束」（3环）\n"
-        "消耗3环法术位：1/2 → 0/2\n"
+        "消耗3环法术位：1/2 → 0/2" + _no_combat("闪电束") + "\n"
         "（未标记为已准备，如需标记：.法术 准备 闪电束）",
     )
     # 绝对升环：魔法飞弹（1 环）用 2 环位
     await _expect(
         app, cast_matcher, _event(".施法 魔法飞弹2"),
         "洛恩施展了「魔法飞弹」（2环）\n"
-        "消耗2环法术位：3/3 → 2/3",
+        "消耗2环法术位：3/3 → 2/3" + _no_combat("魔法飞弹"),
     )
     # 相对升环：+1 → 2 环
     await _expect(
         app, cast_matcher, _event(".施法 魔法飞弹+1"),
         "洛恩施展了「魔法飞弹」（2环）\n"
-        "消耗2环法术位：2/3 → 1/3",
+        "消耗2环法术位：2/3 → 1/3" + _no_combat("魔法飞弹"),
     )
     # 纯环阶
     await _expect(
@@ -131,15 +138,13 @@ async def test_cast_cantrip_and_weapon_hint(app: App):
     await _expect(
         app, cast_matcher, _event(".施法 火焰箭"),
         "洛恩施展了「火焰箭」（戏法）\n"
-        "戏法不消耗法术位。\n"
-        "可用 .火焰箭伤害 掷伤害。",
+        "戏法不消耗法术位。" + _no_combat("火焰箭"),
     )
     # 写 0 环等价于戏法本体
     await _expect(
         app, cast_matcher, _event(".施法 火焰箭0"),
         "洛恩施展了「火焰箭」（戏法）\n"
-        "戏法不消耗法术位。\n"
-        "可用 .火焰箭伤害 掷伤害。",
+        "戏法不消耗法术位。" + _no_combat("火焰箭"),
     )
 
 
@@ -152,13 +157,13 @@ async def test_cast_alias_fuzzy_and_fullwidth(app: App):
     await _expect(
         app, cast_matcher, _event(".cast 火球"),
         "洛恩施展了「火球术」（3环）\n"
-        "消耗3环法术位：2/2 → 1/2",
+        "消耗3环法术位：2/2 → 1/2" + _no_combat("火球术"),
     )
     # 全角数字
     await _expect(
         app, cast_matcher, _event(".施法 魔法飞弹２"),
         "洛恩施展了「魔法飞弹」（2环）\n"
-        "消耗2环法术位：3/3 → 2/3",
+        "消耗2环法术位：3/3 → 2/3" + _no_combat("魔法飞弹"),
     )
 
 
@@ -181,7 +186,7 @@ async def test_cast_contract_slot_fallback(app: App):
     await _expect(
         app, cast_matcher, _event(".施法 魔法飞弹"),
         "魔契师施展了「魔法飞弹」（3环）\n"
-        "消耗契约魔法（3环）法术位：1/1 → 0/1",
+        "消耗契约魔法（3环）法术位：1/1 → 0/1" + _no_combat("魔法飞弹"),
     )
     await _expect(
         app, cast_matcher, _event(".施法 3"),
@@ -206,7 +211,7 @@ async def test_prepare_reminder_2024_wizard_and_switch(app: App):
     await _expect(
         app, cast_matcher, _event(".施法 闪电束"),
         "洛恩施展了「闪电束」（3环）\n"
-        "消耗3环法术位：2/2 → 1/2\n"
+        "消耗3环法术位：2/2 → 1/2" + _no_combat("闪电束") + "\n"
         "（未标记为已准备，如需标记：.法术 准备 闪电束）",
     )
     # 关闭提醒后同一法术不再附句
@@ -217,7 +222,7 @@ async def test_prepare_reminder_2024_wizard_and_switch(app: App):
     await _expect(
         app, cast_matcher, _event(".施法 闪电束"),
         "洛恩施展了「闪电束」（3环）\n"
-        "消耗3环法术位：1/2 → 0/2",
+        "消耗3环法术位：1/2 → 0/2" + _no_combat("闪电束"),
     )
 
 
@@ -248,7 +253,10 @@ async def test_prepare_reminder_version_and_class(
         "$法术位$ 3:1/1",
     ])
     await _record(app, card, user_id=25020, group_id=group_id)
-    expected = "test施展了「闪电束」（3环）\n消耗3环法术位：1/1 → 0/1"
+    expected = (
+        "test施展了「闪电束」（3环）\n消耗3环法术位：1/1 → 0/1"
+        + _no_combat("闪电束")
+    )
     if expected_hint:
         expected += "\n（未标记为已准备，如需标记：.法术 准备 闪电束）"
     await _expect(
@@ -337,5 +345,5 @@ async def test_cast_makes_no_network_call(app: App, monkeypatch):
     await _expect(
         app, cast_matcher, _event(".施法 火球术"),
         "洛恩施展了「火球术」（3环）\n"
-        "消耗3环法术位：2/2 → 1/2",
+        "消耗3环法术位：2/2 → 1/2" + _no_combat("火球术"),
     )

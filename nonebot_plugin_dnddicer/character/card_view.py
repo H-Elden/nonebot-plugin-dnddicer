@@ -126,6 +126,7 @@ class SpellView:
     concentration: bool = False
     ritual: bool = False
     material: bool = False
+    combat: str = ""
     note: str = ""
 
 
@@ -547,6 +548,7 @@ def _spell_groups(character: DNDCharacter) -> Tuple[SpellGroupView, ...]:
                         concentration=spell.concentration,
                         ritual=spell.ritual,
                         material=spell.material,
+                        combat=spell.get_combat_summary(),
                         note=spell.note,
                     )
                     for spell in spells

@@ -56,12 +56,18 @@ from nonebot.matcher import Matcher
 from nonebot.plugin import on_message
 from nonebot.rule import Rule
 
-from ..character.constants import WEAPON_DAMAGE_SUFFIX_LIST, WEAPON_MAX_COUNT
-from ..character.models import DNDCharacter, WeaponInfo
+from ..character.constants import (
+    SPELL_LEVEL_MAX,
+    WEAPON_DAMAGE_SUFFIX_LIST,
+    WEAPON_MAX_COUNT,
+)
+from ..character import spell_combat
+from ..character.models import DNDCharacter, SpellEntry, WeaponInfo
 from ..character.services import (
     WEAPON_BONUS_RE,
     apply_critical_to_damage,
     get_sneak_attack_dice,
+    match_spells,
     parse_weapon_list,
     strip_damage_constants,
 )
@@ -560,19 +566,106 @@ async def _load_target_character(
     return character
 
 
+_SPELL_RING_SUFFIX_RE = re.compile(r"^(.*?)\s*([+]?)(\d+)\s*环?$")
+
+
+def _find_exact_spell(
+    spells: List[SpellEntry], name: str
+) -> Optional[SpellEntry]:
+    """按名称精确查找法术（大小写不敏感；整串优先，支持名称以数字结尾）。"""
+    lowered = name.lower()
+    for spell in spells:
+        if spell.name.lower() == lowered:
+            return spell
+    return None
+
+
+async def resolve_spell_target(
+    matcher: Matcher,
+    character: DNDCharacter,
+    name: str,
+    *,
+    need_attack: bool,
+) -> Tuple[SpellEntry, int]:
+    """解析法术名与环阶修饰 → (法术, 实际施法环阶)。
+
+    名称匹配沿用「整串精确优先 → 精确 → 子串」；``火球术4`` / ``火球术+1``
+    这类尾部环阶只在整串不是法名时才拆。``need_attack`` 为真时要求类型为攻击，
+    否则直接回复「不进行攻击检定」并终止。
+    """
+    exact = _find_exact_spell(character.spells, name)
+    if exact is not None:
+        spell, cast_level = exact, exact.level
+    else:
+        matched = _SPELL_RING_SUFFIX_RE.match(name)
+        base_name = matched.group(1).strip() if matched else ""
+        if base_name:
+            candidates = match_spells(character.spells, base_name)
+        else:
+            candidates = match_spells(character.spells, name)
+        if not candidates:
+            await matcher.finish(text.TXT_COMBAT_NOT_FOUND.format(name=name))
+        if len(candidates) > 1:
+            await matcher.finish(
+                text.TXT_CAST_VAGUE.format(
+                    name=base_name or name,
+                    names="/".join(item.name for item in candidates),
+                )
+            )
+        spell = candidates[0]
+        cast_level = spell.level
+        if base_name:
+            value = int(matched.group(3))
+            relative = matched.group(2) == "+"
+            if spell.level == 0:
+                await matcher.finish(
+                    text.TXT_SPELL_UPCAST_CANTRIP.format(spell=spell.name)
+                )
+            cast_level = spell.level + value if relative else value
+            if cast_level < spell.level:
+                await matcher.finish(
+                    text.TXT_SPELL_UPCAST_LOW.format(
+                        spell=spell.name, min=spell.level, level=cast_level
+                    )
+                )
+            if not 1 <= cast_level <= SPELL_LEVEL_MAX:
+                await matcher.finish(text.TXT_CAST_LEVEL_RANGE)
+
+    if need_attack and spell.kind != "攻击":
+        await matcher.finish(text.TXT_SPELL_NOT_ATTACK.format(spell=spell.name))
+    return spell, cast_level
+
+
 async def _handle_attack(
     bot: Bot, event: MessageEvent, times: int, weapon_name: str, mod_str: str
 ) -> None:
-    """攻击检定：D20（可优劣势）+ 武器命中加值 + 临时加值。"""
+    """攻击检定：武器读 ``$武器$``，找不到时回退 ``$法术$`` 的攻击型条目。"""
     # 修正串中的 @ 目标（DM 代掷，与检定点同规则）
     target_qq, mod_str = base.split_target_mention(mod_str)
     character = await _load_target_character(event, target_qq)
 
-    weapon = await resolve_weapon(weapon_matcher, character, weapon_name)
-    if weapon.no_attack:
-        # x 标记：纯伤害法术（如 火球术），不做攻击检定
+    weapon: Optional[WeaponInfo] = None
+    spell: Optional[SpellEntry] = None
+    spell_cast_level = 0
+    spell_upcast_note = ""
+    candidates = match_weapons(character.weapons, weapon_name)
+    if len(candidates) == 1:
+        weapon = candidates[0]
+        if weapon.no_attack:
+            # x 标记：纯伤害法术，不做攻击检定
+            await weapon_matcher.finish(
+                text.TXT_WEAPON_NO_ATTACK.format(weapon=weapon.name)
+            )
+    elif len(candidates) > 1:
         await weapon_matcher.finish(
-            text.TXT_WEAPON_NO_ATTACK.format(weapon=weapon.name)
+            text.TXT_WEAPON_VAGUE.format(
+                name=weapon_name,
+                weapons="/".join(item.name for item in candidates),
+            )
+        )
+    else:
+        spell, spell_cast_level = await resolve_spell_target(
+            weapon_matcher, character, weapon_name, need_attack=True
         )
 
     # 解析临时优劣势（修正串开头的 优势/劣势；与检定点同款）
@@ -585,22 +678,41 @@ async def _handle_attack(
         mod_str = mod_str[2:]
     mod_str = mod_str.strip()
 
+    if weapon is not None:
+        attack_bonus = weapon.attack_bonus
+        display_name = weapon.name
+        check_label = f"{weapon.name}攻击检定"
+        attack_hint = text.format_weapon_attack_hint(attack_bonus, advantage)
+        template = text.TXT_WEAPON_ATTACK
+    else:
+        try:
+            attack_bonus = spell_combat.get_attack_bonus(character, spell)
+        except spell_combat.SpellCombatError as exc:
+            await weapon_matcher.finish(str(exc))
+        display_name = spell.name
+        check_label = f"{spell.name}法术攻击检定"
+        attack_hint = text.format_spell_attack_hint(attack_bonus, advantage)
+        template = text.TXT_SPELL_ATTACK_COMMAND
+        _parts, spell_upcast_note = spell_combat.build_damage_parts(
+            spell, spell_cast_level
+        )
+
     roll_exp = "D20"
     if advantage > 0:
         roll_exp += "优势"
     elif advantage < 0:
         roll_exp += "劣势"
-    roll_exp += weapon.attack_bonus + mod_str
+    roll_exp += attack_bonus + mod_str
 
     # 注：不做「预校验掷骰」——那会额外消耗一次随机数；表达式问题走下面的
-    # 正式掷骰错误路径（归因到用户输入的修正串或武器加值，给出可读提示）
+    # 正式掷骰错误路径（归因到用户输入的修正串或攻击加值，给出可读提示）
     results: List[str] = []
     roll_results: List[RollResult] = []
     for _ in range(times):
         try:
             roll_result = exec_roll_exp_unified(roll_exp)
         except RollDiceError as exc:
-            bad = mod_str if mod_str else weapon.attack_bonus
+            bad = mod_str if mod_str else attack_bonus
             await weapon_matcher.finish(
                 text.TXT_WEAPON_BAD_MOD.format(mod=bad, reason=exc.info)
             )
@@ -610,20 +722,22 @@ async def _handle_attack(
     name = await base.resolve_display_name(
         bot, event, target_qq, char_name=character.name
     )
-    display_check = f"{weapon.name}攻击检定"
+    display_check = check_label
     if times > 1:
         display_check = f"{times}次{display_check}"
 
-    nat_state = text.format_nat_attack_state(roll_results, weapon.name)
+    nat_state = text.format_nat_attack_state(roll_results, display_name)
     if nat_state:
         # 天然 20/1 提示单独成行（2026-09-24 用户要求）
         results.append(nat_state)
+    if spell_upcast_note:
+        results.append(spell_upcast_note)
 
     await weapon_matcher.finish(
-        text.TXT_WEAPON_ATTACK.format(
+        template.format(
             name=name,
             check=display_check,
-            hint=text.format_weapon_attack_hint(weapon.attack_bonus, advantage),
+            hint=attack_hint,
             result="\n".join(results),
         )
     )
@@ -636,14 +750,97 @@ async def _handle_damage(
     suffixes: List[str],
     tail: str,
 ) -> None:
-    """伤害结算：伤害表达式 + 临时加值 + 后缀变换（副手 / 重击 / 偷袭）。"""
+    """伤害结算：武器读 ``$武器$``，找不到时回退 ``$法术$`` 的伤害段。"""
     # 「伤害」之后的剩余文本：允许 @ 标记与 ± 临时加值（如升环火球术 .火球术伤害+1d6）
     target_qq, mod_str = base.split_target_mention(tail)
     if mod_str and not WEAPON_BONUS_RE.match(mod_str):
         await weapon_matcher.finish(text.TXT_WEAPON_DAMAGE_TAIL.format(tail=mod_str))
     character = await _load_target_character(event, target_qq)
 
-    weapon = await resolve_weapon(weapon_matcher, character, weapon_name)
+    candidates = match_weapons(character.weapons, weapon_name)
+    if len(candidates) > 1:
+        await weapon_matcher.finish(
+            text.TXT_WEAPON_VAGUE.format(
+                name=weapon_name,
+                weapons="/".join(item.name for item in candidates),
+            )
+        )
+    weapon = candidates[0] if candidates else None
+
+    if weapon is None:
+        spell, cast_level = await resolve_spell_target(
+            weapon_matcher, character, weapon_name, need_attack=False
+        )
+        if "副手" in suffixes:
+            await weapon_matcher.finish(text.TXT_SPELL_OFFHAND)
+        if "偷袭" in suffixes:
+            await weapon_matcher.finish(text.TXT_SPELL_SNEAK)
+        is_crit = "重击" in suffixes
+        if is_crit and spell.kind != "攻击":
+            await weapon_matcher.finish(
+                text.TXT_SPELL_CRIT_ONLY_ATTACK.format(spell=spell.name)
+            )
+        if not spell.damage_parts:
+            await weapon_matcher.finish(
+                text.TXT_SPELL_NO_DAMAGE.format(spell=spell.name)
+            )
+        parts, upcast_note = spell_combat.build_damage_parts(
+            spell, cast_level, mod_str
+        )
+        try:
+            rolls = spell_combat.roll_damage_parts(parts, critical=is_crit)
+        except spell_combat.SpellCombatError as exc:
+            await weapon_matcher.finish(str(exc))
+
+        name = await base.resolve_display_name(
+            bot, event, target_qq, char_name=character.name
+        )
+        total = sum(roll.total for roll in rolls)
+        note = text.TXT_SPELL_CRIT_NOTE if is_crit else ""
+        if len(rolls) == 1:
+            feedback = text.TXT_SPELL_DAMAGE.format(
+                name=name,
+                spell=spell.name,
+                total=total,
+                type=rolls[0].damage_type,
+                note=note,
+                result=rolls[0].result.get_complete_result(),
+            )
+            if upcast_note:
+                feedback += f"\n{upcast_note}"
+            await weapon_matcher.finish(feedback)
+
+        types = {roll.damage_type for roll in rolls if roll.damage_type}
+        type_summary = (
+            next(iter(types)) if len(types) == 1 else "多类型" if types else ""
+        )
+        lines = [
+            text.TXT_SPELL_MULTI_DAMAGE_HEAD.format(
+                name=name,
+                spell=spell.name,
+                total=total,
+                type=type_summary,
+                note=note,
+            )
+        ]
+        append_multi_damage_lines(
+            lines,
+            name,
+            [
+                WeaponDamageRoll(
+                    weapon=spell.name,
+                    damage_type=roll.damage_type,
+                    note="",
+                    result=roll.result,
+                    total=roll.total,
+                    no_dice=not _has_dice(roll.expr),
+                )
+                for roll in rolls
+            ],
+        )
+        if upcast_note:
+            lines.append(upcast_note)
+        await weapon_matcher.finish("\n".join(lines))
 
     is_off_hand = "副手" in suffixes
     is_crit = "重击" in suffixes

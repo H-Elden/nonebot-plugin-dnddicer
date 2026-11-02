@@ -517,7 +517,8 @@ async def test_weapon_attack_not_found_and_no_char(app: App):
     await _record(app)
     await _expect(
         app, weapon_matcher, _event(".长枪攻击"),
-        "未找到武器「长枪」。可用 .设置武器 查看已有武器或添加新武器。",
+        "未找到「长枪」：武器和法术里都没有这个名字。"
+        "可用 .设置武器 / .设置法术 查看或录入。",
     )
 
     await _expect(
@@ -592,7 +593,8 @@ async def test_attribute_attack_retired_falls_back(app: App):
     await _record(app)
     await _expect(
         app, weapon_matcher, _event(".敏捷攻击"),
-        "未找到武器「敏捷」。可用 .设置武器 查看已有武器或添加新武器。",
+        "未找到「敏捷」：武器和法术里都没有这个名字。"
+        "可用 .设置武器 / .设置法术 查看或录入。",
     )
     await _expect(
         app, weapon_matcher, _event(".2#力量攻击", user_id=20099), "你还没有在本群绑定角色卡，可发 .角色卡列表 查看卡库并绑定"
@@ -968,7 +970,8 @@ async def test_del_weapon(app: App):
     )
     await _expect(
         app, weapon_matcher, _event(".火焰箭攻击"),
-        "未找到武器「火焰箭」。可用 .设置武器 查看已有武器或添加新武器。",
+        "未找到「火焰箭」：武器和法术里都没有这个名字。"
+        "可用 .设置武器 / .设置法术 查看或录入。",
     )
     await _expect(
         app, del_weapon_matcher, _event(".删除武器 短剑/长枪"),

@@ -106,17 +106,28 @@ from .constants import (
     SPELLCASTING_ABILITY_KEY,
     SPELLCASTING_CLASSES_2024,
     SPELL_ATTACK_KEY,
+    SPELL_ATTACK_MAX_LEN,
+    SPELL_DAMAGE_MAX_LEN,
+    SPELL_DAMAGE_PART_MAX,
     SPELL_DC_KEY,
     SPELL_DC_MAX,
     SPELL_DETAIL_KEYS,
+    SPELL_EFFECT_MAX_LEN,
+    SPELL_KIND_ATTACK,
+    SPELL_KIND_AUTO,
+    SPELL_KIND_LIST,
+    SPELL_KIND_SAVE,
+    SPELL_KIND_SUPPORT,
     SPELL_LEVEL_MAX,
     SPELL_MAX_COUNT,
     SPELL_NAME_FORBIDDEN_CHARS,
     SPELL_NAME_MAX_LEN,
     SPELL_NOTE_MAX_LEN,
     SPELL_RANGE_MAX_LEN,
+    SPELL_SAVE_SUCCESS_LIST,
     SPELL_SLOT_MAX,
     SPELL_TIME_MAX_LEN,
+    SPELL_UPCAST_MAX_LEN,
     STORY_MAX_LEN,
     WEAPON_MAX_COUNT,
     WEAPON_NAME_FORBIDDEN_CHARS,
@@ -133,6 +144,7 @@ from .models import (
     HalfProfRule,
     HPInfo,
     MagicItem,
+    SpellDamagePart,
     SpellEntry,
     SpellSlots,
     WeaponInfo,
@@ -208,6 +220,68 @@ def normalize_damage_type(text: str) -> str:
     if text in DAMAGE_TYPE_SYNONYM_DICT:
         return DAMAGE_TYPE_SYNONYM_DICT[text]
     return text if text in DAMAGE_TYPE_LIST else ""
+
+
+def split_damage_type(text: str) -> Tuple[str, str]:
+    """把「表达式+伤害类型」拆成 (表达式, 规范类型)；无类型时类型为空串。
+
+    供武器伤害与法术伤害共用：从右往左按最长类型名匹配，如
+    ``1d4+4穿刺`` → ``("1d4+4", "穿刺")``、``8d6`` → ``("8d6", "")``。
+    """
+    for type_name in sorted(
+        (*DAMAGE_TYPE_LIST, *DAMAGE_TYPE_SYNONYM_DICT), key=len, reverse=True
+    ):
+        if text.endswith(type_name) and len(text) > len(type_name):
+            return text[: -len(type_name)].strip(), normalize_damage_type(type_name)
+    return text, ""
+
+
+def parse_spell_damage(text: str) -> List[SpellDamagePart]:
+    """解析法术伤害：单段 ``8d6火焰``，多段 ``2d10钝击+4d6寒冷``。
+
+    多段拆分规则：先按 ``+`` 切分，只有**每个分段都能匹配「含骰子的表达式 +
+    伤害类型」时**才判为多段；否则整段按单段解析（``1d6+2火焰`` 里的 ``+2``
+    是表达式的一部分，不能切段）。最多 ``SPELL_DAMAGE_PART_MAX`` 段。
+    """
+    raw = text.strip()
+    if not raw:
+        raise AssertionError("法术伤害不能为空（示例：8d6火焰）")
+
+    segments = [segment.strip() for segment in raw.split("+") if segment.strip()]
+    parts: List[SpellDamagePart] = []
+    if len(segments) >= 2:
+        for segment in segments:
+            expr, damage_type = split_damage_type(segment)
+            if (
+                not damage_type
+                or re.search(r"\d*[dD]\d+", expr) is None
+                or _WEAPON_DAMAGE_ITEM_RE.match(expr) is None
+            ):
+                parts = []
+                break
+            parts.append(SpellDamagePart(expr=expr, damage_type=damage_type))
+    if parts:
+        if len(parts) > SPELL_DAMAGE_PART_MAX:
+            raise AssertionError(
+                f"法术伤害最多 {SPELL_DAMAGE_PART_MAX} 段: {raw}"
+            )
+        for part in parts:
+            if len(part.expr) > SPELL_DAMAGE_MAX_LEN:
+                raise AssertionError(
+                    f"法术伤害表达式过长（每段 ≤{SPELL_DAMAGE_MAX_LEN} 字）: {part.expr}"
+                )
+        return parts
+
+    expr, damage_type = split_damage_type(raw)
+    if _WEAPON_DAMAGE_ITEM_RE.match(expr) is None:
+        raise AssertionError(
+            f"法术伤害表达式无效: {raw}（仅支持骰子与常数的加减组合，如 8d6 或 1d8+4）"
+        )
+    if len(expr) > SPELL_DAMAGE_MAX_LEN:
+        raise AssertionError(
+            f"法术伤害表达式过长（≤{SPELL_DAMAGE_MAX_LEN} 字）: {expr}"
+        )
+    return [SpellDamagePart(expr=expr, damage_type=damage_type)]
 
 
 def _validate_weapon_name(name: str) -> None:
@@ -298,15 +372,7 @@ def parse_weapon_item(item: str, reserved_names: Iterable[str] = ()) -> WeaponIn
         )
 
     damage_part = re.sub(r"\s+", "", damage_part)
-    damage_type = ""
-    damage_expr = damage_part
-    for type_name in sorted(
-        (*DAMAGE_TYPE_LIST, *DAMAGE_TYPE_SYNONYM_DICT), key=len, reverse=True
-    ):
-        if damage_part.endswith(type_name) and len(damage_part) > len(type_name):
-            damage_expr = damage_part[: -len(type_name)].strip()
-            damage_type = normalize_damage_type(type_name)
-            break
+    damage_expr, damage_type = split_damage_type(damage_part)
     if not _WEAPON_DAMAGE_ITEM_RE.match(damage_expr):
         raise AssertionError(
             f"武器伤害表达式无效: {damage_expr}（仅支持骰子与常数的加减组合，如 1d4+4）"
@@ -528,11 +594,96 @@ def _parse_spell_flag(value: str, label: str) -> bool:
     raise AssertionError(f"法术「{label}」只能写 是 或 否: {value}")
 
 
-def _parse_spell_details(text: str) -> Dict[str, object]:
-    """解析法术条目 ``|`` 之后的详情：``时间:1动作|距离:150尺|专注:是``。
+#: 升环加骰写法：``+1d6`` / ``+1d4+1`` / ``+1d10钝击``（表达式必须含骰子）
+SPELL_UPCAST_DICE_RE = re.compile(
+    r"^\+((?:\d*[dD]\d+)(?:[+-](?:\d*[dD]\d+|\d+))*)\s*([^\d+\-]*)$"
+)
 
-    键固定为时间/距离/专注/仪式/材料/备注，顺序不限、缺项不写；返回可直接
-    展开给 ``SpellEntry`` 的字段字典。校验失败抛 AssertionError。
+
+def split_spell_upcast(value: str) -> Tuple[Optional[Tuple[str, str]], str]:
+    """拆升环写法 → ``((加骰表达式, 类型原文), "")`` 或 ``(None, 原文)``。
+
+    只有"含骰子的加法表达式"才返回加骰形态；``+1束`` / ``+1枚`` / ``+1目标``
+    与自由文本都走第二项，由调用方按"只展示、手动处理"处理。类型原文由
+    调用方用 ``normalize_damage_type`` 归一后再比较。
+    """
+    text = value.strip().replace(" ", "")
+    matched = SPELL_UPCAST_DICE_RE.match(text)
+    if matched:
+        return (matched.group(1), matched.group(2).strip()), ""
+    return None, value.strip()
+
+
+def _validate_spell_combat(result: Dict[str, object], level: int) -> None:
+    """校验法术战斗字段的组合关系（解析阶段，失败抛 AssertionError）。"""
+    kind = str(result.get("kind", ""))
+    combat_keys = (
+        "attack_bonus",
+        "save_ability",
+        "save_dc",
+        "save_success",
+        "damage_parts",
+        "upcast",
+        "effect",
+    )
+    if not kind:
+        if any(key in result for key in combat_keys):
+            raise AssertionError(
+                "法术写了战斗字段但没有写类型（类型:攻击/豁免/自动/辅助/治疗/特殊）"
+            )
+        return
+
+    if kind == SPELL_KIND_ATTACK:
+        if any(key in result for key in ("save_ability", "save_dc", "save_success")):
+            raise AssertionError("类型为攻击的法术不能写 豁免 / DC / 成功")
+    elif kind == SPELL_KIND_SAVE:
+        if "attack_bonus" in result:
+            raise AssertionError("类型为豁免的法术不能写 攻击")
+        if "save_ability" not in result:
+            raise AssertionError(
+                f"豁免型法术必须写 豁免:属性（可选：{'/'.join(ABILITY_LIST)}）"
+            )
+        if "damage_parts" in result and "save_success" not in result:
+            raise AssertionError("伤害型豁免法术必须写 成功:半伤 或 成功:无伤")
+    else:
+        if any(
+            key in result
+            for key in ("attack_bonus", "save_ability", "save_dc", "save_success")
+        ):
+            raise AssertionError(f"类型为{kind}的法术不能写 攻击 / 豁免 / DC / 成功")
+
+    if level == 0 and result.get("upcast", "无") != "无":
+        raise AssertionError(
+            "戏法不能升环；戏法成长请直接把当前等级的伤害写进 伤害"
+        )
+
+    upcast = str(result.get("upcast", ""))
+    if upcast:
+        dice_upcast, _ = split_spell_upcast(upcast)
+        if dice_upcast is not None:
+            _up_expr, up_type_raw = dice_upcast
+            up_type = normalize_damage_type(up_type_raw)
+            if up_type_raw and not up_type:
+                raise AssertionError(f"升环伤害类型无效: {up_type_raw}")
+            parts = result.get("damage_parts") or []
+            if len(parts) > 1 and not up_type:
+                raise AssertionError(
+                    "多段伤害的升环必须写伤害类型（如 升环:+1d10钝击）"
+                )
+            if up_type and parts and not any(
+                part.damage_type == up_type for part in parts
+            ):
+                raise AssertionError(
+                    f"升环伤害类型「{up_type}」与基础伤害类型不匹配"
+                )
+
+
+def _parse_spell_details(text: str, level: int = -1) -> Dict[str, object]:
+    """解析法术条目 ``|`` 之后的详情。
+
+    既包括展示用的 ``时间/距离/专注/仪式/材料/备注``，也包括 2026-11-02 新增
+    的战斗字段 ``类型/攻击/豁免/DC/成功/伤害/升环/效果``；顺序不限、缺项不写。
+    返回可直接展开给 ``SpellEntry`` 的字段字典。校验失败抛 AssertionError。
     """
     result: Dict[str, object] = {}
     seen: set[str] = set()
@@ -552,7 +703,58 @@ def _parse_spell_details(text: str) -> Dict[str, object]:
         if key in seen:
             raise AssertionError(f"法术详情重复: {key}")
         seen.add(key)
-        if key == "时间":
+        if key == "类型":
+            if value not in SPELL_KIND_LIST:
+                raise AssertionError(
+                    f"法术类型无效: {value}（可选：{'/'.join(SPELL_KIND_LIST)}）"
+                )
+            result["kind"] = value
+        elif key == "攻击":
+            if len(value) > SPELL_ATTACK_MAX_LEN:
+                raise AssertionError(
+                    f"法术攻击加值过长（≤{SPELL_ATTACK_MAX_LEN} 字）: {value}"
+                )
+            if WEAPON_BONUS_RE.match(value) is None:
+                raise AssertionError(
+                    f"法术攻击加值无效: {value}（仅支持骰子与常数的加减组合，如 +8）"
+                )
+            result["attack_bonus"] = value
+        elif key == "豁免":
+            if value not in ABILITY_LIST:
+                raise AssertionError(
+                    f"法术豁免属性无效: {value}（可选：{'/'.join(ABILITY_LIST)}）"
+                )
+            result["save_ability"] = value
+        elif key == "DC":
+            if not value.isdigit() or not 1 <= int(value) <= SPELL_DC_MAX:
+                raise AssertionError(
+                    f"法术豁免 DC 必须是 1~{SPELL_DC_MAX} 的整数: {value}"
+                )
+            result["save_dc"] = str(int(value))
+        elif key == "成功":
+            if value not in SPELL_SAVE_SUCCESS_LIST:
+                raise AssertionError(
+                    f"法术豁免成功效果无效: {value}"
+                    f"（可选：{'/'.join(SPELL_SAVE_SUCCESS_LIST)}）"
+                )
+            result["save_success"] = value
+        elif key == "伤害":
+            result["damage_parts"] = parse_spell_damage(value)
+        elif key == "升环":
+            if len(value) > SPELL_UPCAST_MAX_LEN:
+                raise AssertionError(
+                    f"法术升环效应过长（≤{SPELL_UPCAST_MAX_LEN} 字）: {value}"
+                )
+            _ensure_free_text(value, "法术升环效应")
+            result["upcast"] = value
+        elif key == "效果":
+            if not 1 <= len(value) <= SPELL_EFFECT_MAX_LEN:
+                raise AssertionError(
+                    f"法术效果过长（≤{SPELL_EFFECT_MAX_LEN} 字）: {value}"
+                )
+            _ensure_free_text(value, "法术效果")
+            result["effect"] = value
+        elif key == "时间":
             if not 1 <= len(value) <= SPELL_TIME_MAX_LEN:
                 raise AssertionError(
                     f"法术施法时间过长（≤{SPELL_TIME_MAX_LEN} 字）: {value}"
@@ -577,6 +779,7 @@ def _parse_spell_details(text: str) -> Dict[str, object]:
                 )
             _ensure_free_text(value, "法术备注")
             result["note"] = value
+    _validate_spell_combat(result, level)
     return result
 
 
@@ -605,7 +808,7 @@ def parse_spell_item(item: str) -> SpellEntry:
     level = int(level_text)
     if level > SPELL_LEVEL_MAX:
         raise AssertionError(f"法术环阶无效: {raw}（写 0~9 的数字，0 = 戏法）")
-    details = _parse_spell_details(detail_text) if pipe else {}
+    details = _parse_spell_details(detail_text, level) if pipe else {}
     return SpellEntry(name=name, level=level, prepared=prepared, **details)
 
 

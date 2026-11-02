@@ -485,6 +485,58 @@ TXT_CAST_CANTRIP_UPCAST = "「{name}」是戏法，不能升环施法。"
 TXT_CAST_UPCAST_ZERO = "升环数至少为 1。"
 TXT_CAST_NO_SLOT = "没有可用的{level}环法术位（当前可用：{available}）。"
 
+# ── 施法战斗：类型 / 攻击 / 豁免 / 伤害（2026-11-02 新增）──────────────────
+#: 旧卡或未配置战斗字段：只扣环位并引导补录
+TXT_CAST_NO_COMBAT = "「{spell}」尚未配置法术战斗数据，可用 .设置法术 补充类型/伤害。"
+#: 法术攻击检定行（.施法 攻击型；标题行已由 TXT_CAST_HEAD 输出）
+TXT_SPELL_ATTACK_LINE = "{spell}法术攻击检定：\n{result}"
+#: 法术攻击的过程说明（与武器攻击的「武器命中加值」区分）
+TXT_SPELL_ATTACK_HINT = "法术攻击加值:{bonus}{adv}"
+#: 攻击型施法的后续提示（有伤害段时才附）
+TXT_CAST_ATTACK_HINT = "命中后可用 .{spell}伤害 掷伤害。"
+#: 非攻击型法术被要求掷攻击时的提示
+TXT_SPELL_NOT_ATTACK = "「{spell}」不进行攻击检定。"
+#: 豁免型施法的说明行
+TXT_CAST_SAVE_HEAD = "目标{ability}豁免 DC {dc}，成功{success}："
+#: 升环效应不是加骰时的提示
+TXT_CAST_UPCAST_MANUAL = "（升环效应：{upcast}，本期需手动处理）"
+#: 法术伤害（单段；{note} 可放升环提示）
+TXT_SPELL_DAMAGE = "{name}的「{spell}」造成了 {total} 点{type}伤害{note}：\n{result}"
+#: 法术多段伤害的标题行（逐段明细与合计复用武器的多段组装）
+TXT_SPELL_MULTI_DAMAGE_HEAD = "{name}的「{spell}」造成了 {total} 点{type}伤害{note}："
+#: 法术伤害命令（.X伤害 读法术段）的标题行
+TXT_SPELL_DAMAGE_COMMAND = "{name}的「{spell}」造成了 {total} 点{type}伤害{note}：\n{result}"
+#: 法术攻击命令（.X攻击 读法术段）
+TXT_SPELL_ATTACK_COMMAND = "{name}进行【{check}】：\n{hint}\n{result}"
+#: 法术伤害不支持的后缀
+TXT_SPELL_OFFHAND = "法术伤害不支持「副手」。"
+TXT_SPELL_SNEAK = "法术伤害不支持「偷袭」。"
+#: 非攻击型法术被要求重击
+TXT_SPELL_CRIT_ONLY_ATTACK = "「{spell}」不是法术攻击型，不能使用「重击」。"
+#: 法术伤害命令的环阶修饰低于原环阶 / 戏法升环
+TXT_SPELL_UPCAST_LOW = "「{spell}」最低为 {min}环，不能用 {level}环。"
+TXT_SPELL_UPCAST_CANTRIP = "「{spell}」是戏法，不能升环。"
+#: 法术伤害命令的剩余文本不合法
+TXT_SPELL_DAMAGE_TAIL = (
+    "伤害命令不支持的写法: {tail}"
+    "（用法：.法术名[环阶]伤害[±加值]，可 @玩家）"
+)
+#: 武器命令回退到法术段时找不到法术
+TXT_SPELL_NOT_FOUND = (
+    "未找到法术「{name}」。可用 .设置法术 法术名:环阶 录入，或检查名称。"
+)
+#: 武器与法术两段都没有该名称（.X攻击 / .X伤害 共用）
+TXT_COMBAT_NOT_FOUND = (
+    "未找到「{name}」：武器和法术里都没有这个名字。"
+    "可用 .设置武器 / .设置法术 查看或录入。"
+)
+#: 法术存在但没有伤害段
+TXT_SPELL_NO_DAMAGE = (
+    "「{spell}」没有配置伤害数据，可用 .设置法术 补充 类型/伤害。"
+)
+#: 法术伤害重击的读数标注
+TXT_SPELL_CRIT_NOTE = "（重击）"
+
 # ── HP 管理 .hp 文案 ────────────────────────────────────────────────────
 TXT_HP_INFO = "{name}: {hp_info}"
 TXT_HP_INFO_MISS = "找不到{name}的生命值信息"
@@ -1049,6 +1101,18 @@ def format_weapon_attack_hint(attack_bonus: str, advantage: int) -> str:
     """
     parts: List[str] = [
         f"武器命中加值:{attack_bonus}" if attack_bonus else "无命中加值"
+    ]
+    if advantage > 0:
+        parts.append("优势")
+    elif advantage < 0:
+        parts.append("劣势")
+    return " ".join(parts)
+
+
+def format_spell_attack_hint(attack_bonus: str, advantage: int) -> str:
+    """法术攻击检定的过程说明行（与武器攻击分开措辞，2026-11-02）。"""
+    parts: List[str] = [
+        f"法术攻击加值:{attack_bonus}" if attack_bonus else "无法术攻击加值"
     ]
     if advantage > 0:
         parts.append("优势")

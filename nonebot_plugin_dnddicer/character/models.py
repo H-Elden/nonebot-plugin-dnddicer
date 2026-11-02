@@ -675,31 +675,79 @@ class MagicItem(BaseModel):
         return [part for part in self.text.split("//") if part]
 
 
+class SpellDamagePart(BaseModel):
+    """法术伤害的一段：表达式 + 可选伤害类型（2026-11-02 新增）。
+
+    多段伤害用 ``+`` 连接（如 ``8d6火焰``、``2d10钝击+4d6寒冷``），
+    类型可省略；类型识别与校验见 ``character/services.py``。
+    """
+
+    expr: str = ""
+    damage_type: str = ""
+
+    def get_info(self) -> str:
+        """展示/回写文本，如 ``8d6火焰``。"""
+        return f"{self.expr}{self.damage_type}"
+
+
 class SpellEntry(BaseModel):
-    """已知/准备法术条目（``$法术$`` 段，2026-10-20 批②新增）。
+    """已知/准备法术条目（``$法术$`` 段）。
 
     ``level`` 0 = 戏法（不消耗法术位、无需准备）；``prepared`` 是「今日已准备」
     标记（卡面写 ``*``），只由 ``.法术 准备/取消`` 切换，长休只做提醒、不自动改。
 
-    卡面展示用的五项元数据与备注（2026-10-21 批②）：
+    卡面展示用的元数据与备注：
     ``cast_time`` / ``range`` / ``concentration`` / ``ritual`` / ``material`` /
     ``note``，写在条目末尾的 ``|`` 之后（``时间:1动作|距离:150尺|专注:是``），
-    只用于渲染卡面图，不参与施法与结算。
+    只用于渲染卡面图，不参与施法结算。
+
+    战斗字段（2026-11-02 新增，写在同一条 ``|`` 详情里）：
+    ``kind`` 是施法方式（攻击/豁免/自动/辅助/治疗/特殊）；
+    ``attack_bonus`` 覆盖头键 ``法术攻击``；``save_ability`` / ``save_dc`` /
+    ``save_success`` 只对豁免型有意义；``damage_parts`` 支持多段多类型；
+    ``upcast`` 记录升环效应（``+1d6`` 自动加骰，``+1束`` 等只展示）；
+    ``effect`` 是辅助/治疗/特殊法术的效果文本，只展示不掷骰。
     """
 
     name: str
     level: int = 0
     prepared: bool = False
-    cast_time: str = ""       # 施法时间（如 "1动作"）
-    range: str = ""           # 施法距离（如 "150尺"、"自身"）
-    concentration: bool = False  # 专注
-    ritual: bool = False         # 仪式
-    material: bool = False       # 材料
-    note: str = ""               # 备注（如 "8d6 火焰 / 敏捷"）
+    kind: str = ""                 # 攻击 / 豁免 / 自动 / 辅助 / 治疗 / 特殊
+    attack_bonus: str = ""         # 覆盖头键「法术攻击」
+    save_ability: str = ""         # 豁免属性（力量/敏捷/体质/智力/感知/魅力）
+    save_dc: str = ""              # 覆盖头键「豁免DC」
+    save_success: str = ""         # 半伤 / 无伤
+    damage_parts: List[SpellDamagePart] = Field(default_factory=list)
+    upcast: str = ""               # 升环效应（+1d6 / +1束 / +1枚 / +1目标 / 自由文本）
+    effect: str = ""               # 辅助效果文本
+    cast_time: str = ""            # 施法时间（如 "1动作"）
+    range: str = ""                # 施法距离（如 "150尺"、"自身"）
+    concentration: bool = False    # 专注
+    ritual: bool = False           # 仪式
+    material: bool = False         # 材料
+    note: str = ""                 # 备注
 
     def get_detail_text(self) -> str:
         """详情的回写片段（只输出已填项，固定键序）。"""
         parts: List[str] = []
+        if self.kind:
+            parts.append(f"类型:{self.kind}")
+        if self.attack_bonus:
+            parts.append(f"攻击:{self.attack_bonus}")
+        if self.save_ability:
+            parts.append(f"豁免:{self.save_ability}")
+        if self.save_dc:
+            parts.append(f"DC:{self.save_dc}")
+        if self.save_success:
+            parts.append(f"成功:{self.save_success}")
+        if self.damage_parts:
+            parts.append(
+                "伤害:" + "+".join(part.get_info() for part in self.damage_parts)
+            )
+        if self.upcast:
+            parts.append(f"升环:{self.upcast}")
+        if self.effect:
+            parts.append(f"效果:{self.effect}")
         if self.cast_time:
             parts.append(f"时间:{self.cast_time}")
         if self.range:
@@ -715,7 +763,7 @@ class SpellEntry(BaseModel):
         return "|".join(parts)
 
     def get_info(self) -> str:
-        """展示/回写文本，如 ``火球术:3*|时间:1动作|距离:150尺|材料:是``。"""
+        """展示/回写文本，如 ``火球术:3*|类型:豁免|豁免:敏捷|伤害:8d6火焰``。"""
         mark = "*" if self.prepared else ""
         text = f"{self.name}:{self.level}{mark}"
         detail = self.get_detail_text()
@@ -726,6 +774,42 @@ class SpellEntry(BaseModel):
     def get_level_label(self) -> str:
         """环阶展示：``戏法`` 或 ``3环``。"""
         return "戏法" if self.level == 0 else f"{self.level}环"
+
+    def get_combat_summary(self) -> str:
+        """卡面战斗摘要，如 ``8d6 火焰 · 敏捷豁免（成功半伤）· 升环+1d6``。"""
+        if not self.kind:
+            return ""
+        parts: List[str] = []
+        if self.kind == "攻击":
+            label = "法术攻击"
+            if self.attack_bonus:
+                label += f" {self.attack_bonus}"
+            parts.append(label)
+        elif self.kind == "豁免":
+            label = f"{self.save_ability}豁免" if self.save_ability else "豁免"
+            if self.save_success:
+                label += f"（成功{self.save_success}）"
+            parts.append(label)
+        elif self.kind == "自动":
+            parts.append("自动命中")
+        elif self.kind == "辅助":
+            parts.append("辅助")
+        elif self.kind == "治疗":
+            parts.append("治疗")
+        else:
+            parts.append(self.kind)
+        if self.damage_parts:
+            parts.append(
+                " + ".join(
+                    f"{part.expr} {part.damage_type}".strip()
+                    for part in self.damage_parts
+                )
+            )
+        if self.upcast:
+            parts.append(f"升环{self.upcast}")
+        if self.effect:
+            parts.append(self.effect)
+        return " · ".join(parts)
 
 
 class SpellSlots(BaseModel):
