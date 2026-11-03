@@ -1,5 +1,6 @@
 ---
 editLink: false
+outline: [2, 2]
 ---
 
 <!-- 本文件由 docs/.vitepress/scripts/sync-changelog.mjs 依据仓库根 CHANGELOG.md 生成，请勿直接编辑。 -->
