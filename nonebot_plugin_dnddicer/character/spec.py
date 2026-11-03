@@ -89,15 +89,23 @@ from .constants import (
     SKILL_LIST,
     SKILL_PARENT_DICT,
     SKILL_SYNONYM_DICT,
+    SPELL_ATTACK_MAX_LEN,
+    SPELL_DAMAGE_MAX_LEN,
+    SPELL_DAMAGE_PART_MAX,
     SPELL_DC_MAX,
     SPELL_DETAIL_KEYS,
+    SPELL_EFFECT_MAX_LEN,
+    SPELL_KIND_LIST,
     SPELL_LEVEL_MAX,
     SPELL_MAX_COUNT,
     SPELL_NAME_MAX_LEN,
     SPELL_NOTE_MAX_LEN,
     SPELL_RANGE_MAX_LEN,
+    SPELL_SAVE_SUCCESS_LIST,
+    SPELL_SHOTS_MAX,
     SPELL_SLOT_MAX,
     SPELL_TIME_MAX_LEN,
+    SPELL_UPCAST_MAX_LEN,
     STORY_MAX_LEN,
     SUBCLASS_LEVEL_5E_DICT,
     SUBCLASS_LEVEL_5R,
@@ -366,27 +374,25 @@ CARD_SPEC_SEGMENTS: List[Dict[str, object]] = [
         "summary": "",
         "example": (
             "施法属性:智力; 豁免DC:15; 法术攻击:+8; "
-            "火焰箭:0|时间:1动作|距离:120尺|备注:2d10 火焰 / 法术攻击; "
-            "冷冻射线:0|时间:1动作|距离:60尺|备注:2d8 寒冷 / 速度-10; "
-            "法师之手:0|时间:1动作|距离:30尺|备注:操控物件 / 1分钟; "
-            "次级幻象:0|时间:1动作|距离:30尺|材料:是|备注:声音或影像 / 1分钟; "
-            "魔法伎俩:0|时间:1动作|距离:10尺|备注:无害小魔法 / 至多1小时; "
-            "光亮术:0|时间:1动作|距离:触碰|材料:是|备注:20尺明亮光照 / 1小时; "
-            "心灵之楔:0|时间:1动作|距离:60尺|备注:2d6 心灵 / 智力豁免; "
-            "护盾术:1*|时间:1反应|距离:自身|备注:+5 AC / 1轮 / 学徒免位1次; "
-            "魔法飞弹:1*|时间:1动作|距离:120尺|备注:3d4+3 力场 / 升环+1飞镖; "
-            "法师护甲:1*|时间:1动作|距离:触碰|材料:是|备注:AC 13+敏捷 / 8小时; "
-            "侦测魔法:1*|时间:1动作或仪式|距离:自身|专注:是|仪式:是|"
-            "备注:30尺灵光 / 血系免位1次; "
-            "羽落术:1*|时间:1反应|距离:60尺|材料:是|备注:至多5个生物 / 1分钟; "
-            "迷踪步:2*|时间:1附赠动作|距离:自身|备注:传送30尺 / 血系免位1次; "
-            "蛛网术:2*|时间:1动作|距离:60尺|专注:是|材料:是|备注:20尺立方 / 束缚; "
-            "镜影术:2*|时间:1动作|距离:自身|备注:3个分身 / 1分钟; "
-            "火球术:3*|时间:1动作|距离:150尺|材料:是|备注:20尺半径 / 8d6 火焰 / 敏捷; "
-            "闪电束:3*|时间:1动作|距离:自身|材料:是|备注:100尺线 / 8d6 闪电 / 敏捷; "
-            "法术反制:3*|时间:1反应|距离:60尺|备注:体质豁免 / 打断施法; "
-            "加速术:3*|时间:1动作|距离:30尺|专注:是|材料:是|"
-            "备注:速度翻倍 / +2 AC / 额外动作"
+            "火焰箭:0|类型:攻击|伤害:2d10火焰|时间:1动作|距离:120尺; "
+            "冷冻射线:0|类型:攻击|伤害:2d8寒冷|效果:速度-10|时间:1动作|距离:60尺; "
+            "法师之手:0|类型:辅助|效果:操控物件|时间:1动作|距离:30尺|备注:1分钟; "
+            "次级幻象:0|类型:辅助|效果:声音或影像|时间:1动作|距离:30尺|材料:是|备注:1分钟; "
+            "魔法伎俩:0|类型:辅助|效果:无害小魔法|时间:1动作|距离:10尺|备注:至多1小时; "
+            "光亮术:0|类型:辅助|效果:20尺明亮光照|时间:1动作|距离:触碰|材料:是|备注:1小时; "
+            "心灵之楔:0|类型:豁免|豁免:智力|成功:无伤|伤害:2d6心灵|效果:下次豁免-1d4|时间:1动作|距离:60尺; "
+            "护盾术:1*|类型:辅助|效果:AC+5，持续到你的下回合开始|时间:1反应|距离:自身|备注:学徒免位1次; "
+            "魔法飞弹:1*|类型:自动|伤害:1d4+1力场|多发:3|升环:+1发|时间:1动作|距离:120尺; "
+            "法师护甲:1*|类型:辅助|效果:AC=13+敏捷|时间:1动作|距离:触碰|材料:是|备注:8小时; "
+            "侦测魔法:1*|类型:辅助|效果:30尺灵光|时间:1动作或仪式|距离:自身|专注:是|仪式:是|备注:血系免位1次; "
+            "羽落术:1*|类型:辅助|效果:至多5个生物|时间:1反应|距离:60尺|材料:是|备注:1分钟; "
+            "迷踪步:2*|类型:辅助|效果:传送30尺|时间:1附赠动作|距离:自身|备注:血系免位1次; "
+            "蛛网术:2*|类型:豁免|豁免:敏捷|成功:无伤|效果:束缚|时间:1动作|距离:60尺|专注:是|材料:是|备注:20尺立方; "
+            "镜影术:2*|类型:辅助|效果:3个分身|时间:1动作|距离:自身|备注:1分钟; "
+            "火球术:3*|类型:豁免|豁免:敏捷|成功:半伤|伤害:8d6火焰|升环:+1d6|时间:1动作|距离:150尺|材料:是|备注:20尺半径; "
+            "闪电束:3*|类型:豁免|豁免:敏捷|成功:半伤|伤害:8d6闪电|升环:+1d6|时间:1动作|距离:自身|材料:是|备注:100尺线; "
+            "法术反制:3*|类型:特殊|效果:打断施法|时间:1反应|距离:60尺; "
+            "加速术:3*|类型:辅助|效果:速度翻倍、AC+2、额外动作|时间:1动作|距离:30尺|专注:是|材料:是"
         ),
     },
     {
@@ -494,6 +500,12 @@ CARD_SPEC_LIMITS: Dict[str, int] = {
     "spell_time_max_len": SPELL_TIME_MAX_LEN,
     "spell_range_max_len": SPELL_RANGE_MAX_LEN,
     "spell_note_max_len": SPELL_NOTE_MAX_LEN,
+    "spell_attack_max_len": SPELL_ATTACK_MAX_LEN,
+    "spell_damage_max_len": SPELL_DAMAGE_MAX_LEN,
+    "spell_damage_part_max": SPELL_DAMAGE_PART_MAX,
+    "spell_shots_max": SPELL_SHOTS_MAX,
+    "spell_upcast_max_len": SPELL_UPCAST_MAX_LEN,
+    "spell_effect_max_len": SPELL_EFFECT_MAX_LEN,
     "weapon_max_count": WEAPON_MAX_COUNT,
     "weapon_name_max_len": WEAPON_NAME_MAX_LEN,
     "weapon_note_max_len": WEAPON_NOTE_MAX_LEN,
@@ -529,6 +541,17 @@ CARD_SPEC_ENUMS: Dict[str, object] = {
     "recover_modes": list(FEATURE_RECOVER_MODES),
     "coin_keys": list(COIN_KEY_LIST),
     "spell_detail_keys": list(SPELL_DETAIL_KEYS),
+    "spell_kinds": list(SPELL_KIND_LIST),
+    "spell_save_success": list(SPELL_SAVE_SUCCESS_LIST),
+    "spell_upcast_templates": [
+        "+1d6",
+        "+1d8",
+        "+1d10",
+        "+1d4+1",
+        "+1发",
+        "+1目标",
+        "无",
+    ],
     "background_keys_5r": list(BACKGROUND_KEY_LIST_5R),
     "background_keys_5e": list(
         BACKGROUND_KEY_LIST_5R + BACKGROUND_KEY_LIST_5E_EXTRA

@@ -49,7 +49,8 @@ spell_matcher = base.on_dnd_command("法术", _HELP_SPELL, doc="guide/resources"
 _HELP_SET_SPELL = (
     ".设置法术 名称:环阶[*] （多项用 ; 分隔）\n"
     "  可写 施法属性:智力; 豁免DC:15; 法术攻击:+8\n"
-    "  战斗字段：类型:攻击/豁免/自动/辅助; 伤害:8d6火焰; 升环:+1d6\n"
+    "  战斗字段：类型:攻击/豁免/自动/辅助\n"
+    "  伤害:8d6火焰; 多发:3; 升环:+1d6\n"
     "  豁免型写 豁免:敏捷; 成功:半伤/无伤；多段伤害用 + 连接\n"
     "  示例：.设置法术 火球术:3*|类型:豁免|豁免:敏捷|伤害:8d6火焰"
 )
@@ -733,6 +734,7 @@ class _CastCombat(NamedTuple):
     save_dc: str
     save_success: str
     effect: str
+    shots: int = 1
 
 
 def _build_cast_combat(
@@ -753,6 +755,7 @@ def _build_cast_combat(
         return _CastCombat(
             "攻击", f"D20{advantage_text}{bonus}", parts, note,
             "", "", "", spell.effect,
+            spell_combat.resolve_spell_shots(spell, cast_level),
         )
     if spell.kind == "豁免":
         dc = spell_combat.get_save_dc(character, spell)
@@ -765,6 +768,7 @@ def _build_cast_combat(
         parts, note = spell_combat.build_damage_parts(spell, cast_level)
         return _CastCombat(
             "自动", "", parts, note, "", "", "", spell.effect,
+            spell_combat.resolve_spell_shots(spell, cast_level),
         )
     return _CastCombat(spell.kind, "", [], "", "", "", "", spell.effect)
 
@@ -773,10 +777,40 @@ def _append_spell_damage(
     lines: List[str],
     display_name: str,
     spell: SpellEntry,
-    rolls: List[spell_combat.SpellDamagePartRoll],
+    shot_rolls: List[List[spell_combat.SpellDamagePartRoll]],
     note: str,
+    shots: int = 1,
 ) -> None:
-    """把法术伤害逐段拼进回复；单段用单行模板，多段复用武器的多段组装。"""
+    """把法术伤害逐发拼进回复；多发逐发显示，单发沿用单行模板。"""
+    if not shot_rolls:
+        return
+    if shots > 1:
+        all_rolls = [roll for shot in shot_rolls for roll in shot]
+        total = sum(roll.total for roll in all_rolls)
+        types = {roll.damage_type for roll in all_rolls if roll.damage_type}
+        lines.append(
+            text.TXT_SPELL_SHOT_DAMAGE_HEAD.format(
+                name=display_name,
+                spell=spell.name,
+                total=total,
+                type=next(iter(types)) if len(types) == 1 else "多类型" if types else "",
+                shots=shots,
+                note=note,
+            )
+        )
+        for index, shot in enumerate(shot_rolls, start=1):
+            lines.append(
+                text.TXT_SPELL_SHOT_DAMAGE_ITEM.format(
+                    no=index,
+                    result=" + ".join(
+                        roll.result.get_complete_result() for roll in shot
+                    ),
+                    type=shot[0].damage_type if len(shot) == 1 else "多类型",
+                )
+            )
+        return
+
+    rolls = shot_rolls[0]
     if not rolls:
         return
     total = sum(roll.total for roll in rolls)
@@ -832,21 +866,43 @@ def _append_cast_combat(
         return
 
     if combat.kind == "攻击":
-        result = spell_combat.roll_expression(combat.attack_expression)
-        lines.append(
-            text.TXT_SPELL_ATTACK_LINE.format(
-                spell=spell.name, result=result.get_complete_result()
+        if combat.shots > 1:
+            lines.append(
+                text.TXT_SPELL_MULTI_ATTACK_HEAD.format(
+                    spell=spell.name, shots=combat.shots
+                )
             )
-        )
-        nat_state = text.format_nat_attack_state([result], spell.name)
-        if nat_state:
-            lines.append(nat_state)
+            for index in range(1, combat.shots + 1):
+                result = spell_combat.roll_expression(combat.attack_expression)
+                lines.append(
+                    text.TXT_SPELL_MULTI_ATTACK_ITEM.format(
+                        no=index,
+                        result=result.get_complete_result(),
+                        marker=text.format_nat_shot_marker(result),
+                    )
+                )
+        else:
+            result = spell_combat.roll_expression(combat.attack_expression)
+            lines.append(
+                text.TXT_SPELL_ATTACK_LINE.format(
+                    spell=spell.name, result=result.get_complete_result()
+                )
+            )
+            nat_state = text.format_nat_attack_state([result], spell.name)
+            if nat_state:
+                lines.append(nat_state)
         if combat.effect:
             lines.append(combat.effect)
         if combat.upcast_note:
             lines.append(combat.upcast_note)
         if combat.damage_parts:
-            lines.append(text.TXT_CAST_ATTACK_HINT.format(spell=spell.name))
+            lines.append(
+                text.TXT_CAST_ATTACK_HINT_MULTI.format(
+                    spell=spell.name, shots=combat.shots
+                )
+                if combat.shots > 1
+                else text.TXT_CAST_ATTACK_HINT.format(spell=spell.name)
+            )
         return
 
     if combat.damage_parts:
@@ -858,8 +914,15 @@ def _append_cast_combat(
                     success=combat.save_success,
                 )
             )
-        rolls = spell_combat.roll_damage_parts(combat.damage_parts)
-        _append_spell_damage(lines, display_name, spell, rolls, combat.upcast_note)
+            shot_rolls = [spell_combat.roll_damage_parts(combat.damage_parts)]
+        else:
+            shot_rolls = spell_combat.roll_damage_shots(
+                combat.damage_parts, combat.shots
+            )
+        _append_spell_damage(
+            lines, display_name, spell, shot_rolls,
+            combat.upcast_note, combat.shots,
+        )
         if combat.effect:
             lines.append(combat.effect)
         return

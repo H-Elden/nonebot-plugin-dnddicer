@@ -239,7 +239,9 @@ def test_spells_grouped_by_level() -> None:
     assert view.spell_groups[3].spells[1].prepared is True
     fireball = view.spell_groups[3].spells[0]
     assert (fireball.time, fireball.range, fireball.material) == ("1动作", "150尺", True)
-    assert fireball.note == "20尺半径 / 8d6 火焰 / 敏捷"
+    assert fireball.note == "20尺半径"
+    assert "敏捷豁免（成功半伤）" in fireball.combat
+    assert "8d6 火焰" in fireball.combat
     spells = {spell.name: spell for group in view.spell_groups for spell in group.spells}
     assert spells["侦测魔法"].concentration is True
     assert spells["侦测魔法"].ritual is True

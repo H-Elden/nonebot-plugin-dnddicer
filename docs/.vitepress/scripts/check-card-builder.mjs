@@ -678,6 +678,201 @@ function main() {
     spellNoteError?.message,
   )
 
+  const combatSpellState = baseState()
+  combatSpellState[K.NAME] = '测试'
+  combatSpellState[K.SPELL] = {
+    ability: '智力',
+    dc: '15',
+    attack: '+8',
+    dcManual: true,
+    attackManual: true,
+    list: [
+      {
+        name: '火球术',
+        level: '3',
+        prepared: false,
+        kind: '豁免',
+        attackBonus: '',
+        saveAbility: '敏捷',
+        saveDc: '',
+        saveSuccess: '半伤',
+        damage: '8d6火焰',
+        upcast: '+1d6',
+        effect: '',
+        time: '1动作',
+        range: '150尺',
+        concentration: false,
+        ritual: false,
+        material: false,
+        note: '',
+      },
+    ],
+  }
+  const combatText = builder.contentFor(combatSpellState, K.SPELL)
+  checkEqual(
+    '法术战斗字段回写',
+    combatText,
+    '施法属性:智力; 豁免DC:15; 法术攻击:+8; '
+      + '火球术:3|类型:豁免|豁免:敏捷|成功:半伤|伤害:8d6火焰|升环:+1d6|时间:1动作|距离:150尺',
+  )
+  const combatParsed = builder.parseCardText(
+    `${CARD_MODIFY_COMMAND} ${TEST_CARD_NAME} $法术$ ${combatText}`,
+  )
+  check('法术战斗字段可导入', combatParsed.errors.length === 0, JSON.stringify(combatParsed.errors))
+  checkEqual('法术战斗字段类型', combatParsed.state[K.SPELL].list[0].kind, '豁免')
+  checkEqual('法术战斗字段伤害', combatParsed.state[K.SPELL].list[0].damage, '8d6火焰')
+  checkEqual(
+    '法术战斗字段再回写稳定',
+    builder.contentFor(combatParsed.state, K.SPELL),
+    combatText,
+  )
+
+  const combatPreview = buildPreviewView(
+    builder, combatSpellState, { rulesVersion: '5r' }, '',
+  )
+  check(
+    '预览法术战斗摘要',
+    combatPreview.spellGroups[0].spells[0].combat.includes(
+      '敏捷豁免 DC 15（成功半伤）',
+    ),
+    combatPreview.spellGroups[0].spells[0].combat,
+  )
+
+  const multiShotState = baseState()
+  multiShotState[K.NAME] = '测试'
+  multiShotState[K.SPELL] = {
+    ability: '智力',
+    dc: '15',
+    attack: '+8',
+    dcManual: true,
+    attackManual: true,
+    list: [
+      {
+        name: '魔法飞弹',
+        level: '1',
+        prepared: true,
+        kind: '自动',
+        attackBonus: '',
+        saveAbility: '',
+        saveDc: '',
+        saveSuccess: '',
+        damage: '1d4+1力场',
+        shots: '3',
+        upcast: '+1发',
+        effect: '',
+        time: '1动作',
+        range: '120尺',
+        concentration: false,
+        ritual: false,
+        material: false,
+        note: '',
+      },
+    ],
+  }
+  const multiShotText = builder.contentFor(multiShotState, K.SPELL)
+  checkEqual(
+    '多发法术回写',
+    multiShotText,
+    '施法属性:智力; 豁免DC:15; 法术攻击:+8; '
+      + '魔法飞弹:1*|类型:自动|伤害:1d4+1力场|多发:3|升环:+1发|时间:1动作|距离:120尺',
+  )
+  const multiShotParsed = builder.parseCardText(
+    `${CARD_MODIFY_COMMAND} ${TEST_CARD_NAME} $法术$ ${multiShotText}`,
+  )
+  check(
+    '多发法术可导入',
+    multiShotParsed.errors.length === 0,
+    JSON.stringify(multiShotParsed.errors),
+  )
+  checkEqual('多发法术发数', multiShotParsed.state[K.SPELL].list[0].shots, '3')
+  const multiShotPreview = buildPreviewView(
+    builder, multiShotState, { rulesVersion: '5r' }, '',
+  )
+  check(
+    '预览多发摘要',
+    multiShotPreview.spellGroups[0].spells[0].combat.includes('3 发'),
+    multiShotPreview.spellGroups[0].spells[0].combat,
+  )
+  const badShots = builder.parseCardText(
+    `${CARD_MODIFY_COMMAND} ${TEST_CARD_NAME} $法术$ `
+      + '魔法飞弹:1|类型:自动|伤害:1d4+1力场|多发:1',
+  )
+  check(
+    '多发数小于 2 被拦截',
+    badShots.errors.some(
+      (error) => error.key === K.SPELL && error.message.includes('多发数'),
+    ),
+    JSON.stringify(badShots.errors),
+  )
+
+  const badCombat = () => {
+    const next = baseState()
+    next[K.SPELL] = {
+      ability: '智力',
+      dc: '15',
+      attack: '+8',
+      dcManual: true,
+      attackManual: true,
+      list: [
+        {
+          name: '火球术',
+          level: '3',
+          prepared: false,
+          kind: '',
+          attackBonus: '',
+          saveAbility: '',
+          saveDc: '',
+          saveSuccess: '',
+          damage: '8d6火焰',
+          upcast: '',
+          effect: '',
+          time: '',
+          range: '',
+          concentration: false,
+          ritual: false,
+          material: false,
+          note: '',
+        },
+      ],
+    }
+    return next
+  }
+  const noKindState = badCombat()
+  check(
+    '法术战斗字段缺类型被拦截',
+    errorOf(noKindState, K.SPELL)?.message.includes('没有写类型'),
+    errorOf(noKindState, K.SPELL)?.message,
+  )
+  const saveNoSuccess = badCombat()
+  saveNoSuccess[K.SPELL].list[0].kind = '豁免'
+  saveNoSuccess[K.SPELL].list[0].saveAbility = '敏捷'
+  check(
+    '伤害型豁免缺成功效果被拦截',
+    errorOf(saveNoSuccess, K.SPELL)?.message.includes('必须写 成功'),
+    errorOf(saveNoSuccess, K.SPELL)?.message,
+  )
+  const multiUpcast = badCombat()
+  multiUpcast[K.SPELL].list[0].kind = '豁免'
+  multiUpcast[K.SPELL].list[0].saveAbility = '敏捷'
+  multiUpcast[K.SPELL].list[0].saveSuccess = '半伤'
+  multiUpcast[K.SPELL].list[0].damage = '2d10钝击+4d6寒冷'
+  multiUpcast[K.SPELL].list[0].upcast = '+1d10'
+  check(
+    '多段伤害升环缺类型被拦截',
+    errorOf(multiUpcast, K.SPELL)?.message.includes('必须写伤害类型'),
+    errorOf(multiUpcast, K.SPELL)?.message,
+  )
+  const cantripUpcast = badCombat()
+  cantripUpcast[K.SPELL].list[0].level = '0'
+  cantripUpcast[K.SPELL].list[0].kind = '攻击'
+  cantripUpcast[K.SPELL].list[0].damage = '2d10火焰'
+  cantripUpcast[K.SPELL].list[0].upcast = '+1d6'
+  check(
+    '戏法升环被拦截',
+    errorOf(cantripUpcast, K.SPELL)?.message.includes('戏法不能升环'),
+    errorOf(cantripUpcast, K.SPELL)?.message,
+  )
+
   const profState = baseState()
   profState[K.PROF].groups['工具'] = '书法工具|盗贼工具'
   const profError = errorOf(profState, K.PROF)
@@ -719,11 +914,11 @@ function main() {
     '恰好等于上限仍是一块',
     builder.buildCardParts(templateState, {}, whole.length, TEST_CARD_NAME).parts.length === 1,
   )
-  const split = builder.buildCardParts(templateState, {}, 900, TEST_CARD_NAME)
+  const split = builder.buildCardParts(templateState, {}, 1200, TEST_CARD_NAME)
   check('小上限会拆成多块', split.parts.length > 1, String(split.parts.length))
   check(
     '每块都不超过上限',
-    split.parts.every((part) => part.length <= 900),
+    split.parts.every((part) => part.length <= 1200),
     JSON.stringify(split.parts.map((part) => part.length)),
   )
   check('第 1 块含等级', split.parts[0].text.includes('$等级$ 5'))

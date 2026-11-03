@@ -718,7 +718,8 @@ class SpellEntry(BaseModel):
     save_dc: str = ""              # 覆盖头键「豁免DC」
     save_success: str = ""         # 半伤 / 无伤
     damage_parts: List[SpellDamagePart] = Field(default_factory=list)
-    upcast: str = ""               # 升环效应（+1d6 / +1束 / +1枚 / +1目标 / 自由文本）
+    shots: int = 1                 # 多发：逐发攻击 / 逐发伤害（2~10）
+    upcast: str = ""               # 升环效应（+1d6 / +1发 / 自由文本）
     effect: str = ""               # 辅助效果文本
     cast_time: str = ""            # 施法时间（如 "1动作"）
     range: str = ""                # 施法距离（如 "150尺"、"自身"）
@@ -744,6 +745,8 @@ class SpellEntry(BaseModel):
             parts.append(
                 "伤害:" + "+".join(part.get_info() for part in self.damage_parts)
             )
+        if self.shots > 1:
+            parts.append(f"多发:{self.shots}")
         if self.upcast:
             parts.append(f"升环:{self.upcast}")
         if self.effect:
@@ -805,6 +808,8 @@ class SpellEntry(BaseModel):
                     for part in self.damage_parts
                 )
             )
+        if self.shots > 1:
+            parts.append(f"{self.shots} 发")
         if self.upcast:
             parts.append(f"升环{self.upcast}")
         if self.effect:

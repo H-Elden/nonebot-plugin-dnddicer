@@ -508,6 +508,22 @@ TXT_SPELL_MULTI_DAMAGE_HEAD = "{name}的「{spell}」造成了 {total} 点{type}
 TXT_SPELL_DAMAGE_COMMAND = "{name}的「{spell}」造成了 {total} 点{type}伤害{note}：\n{result}"
 #: 法术攻击命令（.X攻击 读法术段）
 TXT_SPELL_ATTACK_COMMAND = "{name}进行【{check}】：\n{hint}\n{result}"
+#: 多发法术攻击（逐发掷攻击；marker 为天然20/天然1 的短标记）
+TXT_SPELL_MULTI_ATTACK_HEAD = "{spell}法术攻击检定（{shots} 发）："
+TXT_SPELL_ATTACK_COMMAND_MULTI_HEAD = "{name}进行【{spell}法术攻击检定】（{shots} 发）："
+TXT_SPELL_MULTI_ATTACK_ITEM = "{no}. {result}{marker}"
+#: 多发法术伤害（逐发掷伤害；标题行已带合计）
+TXT_SPELL_SHOT_DAMAGE_HEAD = "{name}的「{spell}」造成了 {total} 点{type}伤害（{shots} 发）{note}："
+TXT_SPELL_SHOT_DAMAGE_ITEM = "{no}. {result} 点{type}伤害"
+#: 伤害命令的 N# 重掷（.3#灼热射线伤害）
+TXT_SPELL_REPEAT_DAMAGE_HEAD = "{name}的「{spell}」掷了 {times} 次伤害："
+TXT_WEAPON_REPEAT_DAMAGE_HEAD = "{name}用【{weapon}】掷了 {times} 次伤害："
+TXT_WEAPON_REPEAT_DAMAGE_ITEM = "{no}. {result}"
+TXT_REPEAT_DAMAGE_TOTAL = "共计造成了 {total} 点{type}伤害"
+#: 多发攻击型的后续提示（提醒用 N# 按命中发数掷伤害）
+TXT_CAST_ATTACK_HINT_MULTI = (
+    "命中后可用 .{spell}伤害 掷伤害；多道命中可写 .{shots}#{spell}伤害。"
+)
 #: 法术伤害不支持的后缀
 TXT_SPELL_OFFHAND = "法术伤害不支持「副手」。"
 TXT_SPELL_SNEAK = "法术伤害不支持「偷袭」。"
@@ -1119,6 +1135,15 @@ def format_spell_attack_hint(attack_bonus: str, advantage: int) -> str:
     elif advantage < 0:
         parts.append("劣势")
     return " ".join(parts)
+
+
+def format_nat_shot_marker(result: RollResult) -> str:
+    """多发攻击单发的天然 20/1 短标记（多发的逐发提示，2026-11-03）。"""
+    if 20 in result.d20_list:
+        return "（天然20）"
+    if 1 in result.d20_list:
+        return "（天然1）"
+    return ""
 
 
 def format_nat_attack_state(res_list: List[RollResult], weapon_name: str) -> str:

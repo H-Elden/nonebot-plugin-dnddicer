@@ -113,9 +113,105 @@
         </label>
         <label class="cb-grid__cell">
           <span class="cb-grid__label">备注</span>
-          <input v-model="item.note" class="cb-input" placeholder="8d6 火焰 / 敏捷" />
+          <input v-model="item.note" class="cb-input" placeholder="自由备注" />
         </label>
       </div>
+
+      <div class="cb-subhead">
+        战斗数据
+        <HintDot text="选择类型后填写；不填则只记录法术，.施法 会提示补录。攻击加值与豁免 DC 留空时继承上方的全局值；伤害写表达式加类型，多段用 + 连接。" />
+      </div>
+      <div class="cb-grid cb-grid--3">
+        <label class="cb-grid__cell">
+          <span class="cb-grid__label">类型</span>
+          <select v-model="item.kind" class="cb-select">
+            <option value="">未配置</option>
+            <option v-for="kind in enums.spell_kinds || []" :key="kind" :value="kind">
+              {{ kind }}
+            </option>
+          </select>
+        </label>
+        <label v-if="item.kind === '攻击'" class="cb-grid__cell">
+          <span class="cb-grid__label">攻击加值</span>
+          <input
+            v-model="item.attackBonus"
+            class="cb-input"
+            :placeholder="`继承 ${state[K.SPELL].attack || '未设置'}`"
+          />
+        </label>
+        <label
+          v-if="['攻击', '自动'].includes(item.kind)"
+          class="cb-grid__cell"
+        >
+          <span class="cb-grid__label">发数</span>
+          <input
+            v-model="item.shots"
+            class="cb-input"
+            inputmode="numeric"
+            placeholder="1"
+          />
+        </label>
+        <label v-if="item.kind === '豁免'" class="cb-grid__cell">
+          <span class="cb-grid__label">豁免属性</span>
+          <select v-model="item.saveAbility" class="cb-select">
+            <option value="">请选择</option>
+            <option v-for="ability in abilities" :key="ability" :value="ability">
+              {{ ability }}
+            </option>
+          </select>
+        </label>
+        <label v-if="item.kind === '豁免'" class="cb-grid__cell">
+          <span class="cb-grid__label">豁免 DC</span>
+          <input
+            v-model="item.saveDc"
+            class="cb-input"
+            :placeholder="`继承 ${state[K.SPELL].dc || '未设置'}`"
+          />
+        </label>
+        <label v-if="item.kind === '豁免'" class="cb-grid__cell">
+          <span class="cb-grid__label">成功效果</span>
+          <select v-model="item.saveSuccess" class="cb-select">
+            <option value="">未填写</option>
+            <option
+              v-for="item2 in enums.spell_save_success || []"
+              :key="item2"
+              :value="item2"
+            >
+              {{ item2 }}
+            </option>
+          </select>
+        </label>
+        <label
+          v-if="['攻击', '豁免', '自动'].includes(item.kind)"
+          class="cb-grid__cell cb-grid__cell--span2"
+        >
+          <span class="cb-grid__label">伤害</span>
+          <input v-model="item.damage" class="cb-input" placeholder="8d6火焰" />
+        </label>
+        <label v-if="item.kind" class="cb-grid__cell">
+          <span class="cb-grid__label">升环</span>
+          <input v-model="item.upcast" class="cb-input" placeholder="+1d6" />
+        </label>
+        <label v-if="item.kind" class="cb-grid__cell cb-grid__cell--span2">
+          <span class="cb-grid__label">效果</span>
+          <input v-model="item.effect" class="cb-input" placeholder="AC+5，持续到你的下回合开始" />
+        </label>
+      </div>
+      <div v-if="item.kind" class="cb-inline">
+        <span class="cb-muted">升环模板：</span>
+        <button
+          v-for="template in enums.spell_upcast_templates || []"
+          :key="template"
+          type="button"
+          class="cb-link"
+          @click="item.upcast = template"
+        >
+          {{ template }}
+        </button>
+      </div>
+      <p v-if="!item.kind" class="cb-muted">
+        不选类型也可以保存；.施法 只会扣环位并提示补录战斗数据。
+      </p>
     </template>
   </RepeaterRows>
 </template>

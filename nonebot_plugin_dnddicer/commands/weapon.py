@@ -258,6 +258,18 @@ def _normalize_separators(text: str) -> str:
     return "".join(_SEPARATOR_CANONICAL.get(char, char) for char in text)
 
 
+def split_damage_times(body: str) -> Tuple[int, str]:
+    """摘出伤害命令的 ``N#`` 前缀 → (次数, 剩余命令体)。
+
+    ``.3#灼热射线伤害`` 用于多道命中后逐次掷伤害；没有前缀时次数为 1。
+    """
+    matched = _WEAPON_TIMES_PATTERN.match(body)
+    if matched is None:
+        return 1, body
+    prefix = matched.group(1)
+    return int(prefix[:-1]), body[len(prefix):]
+
+
 def parse_weapon_entry(segment: str) -> Optional[Tuple[str, str, str]]:
     """解析单项武器命令体 → (名称段含后缀, 关键词, 修正串)；不匹配返回 None。
 
@@ -684,6 +696,7 @@ async def _handle_attack(
         check_label = f"{weapon.name}攻击检定"
         attack_hint = text.format_weapon_attack_hint(attack_bonus, advantage)
         template = text.TXT_WEAPON_ATTACK
+        shots = max(1, times)
     else:
         try:
             attack_bonus = spell_combat.get_attack_bonus(character, spell)
@@ -695,6 +708,10 @@ async def _handle_attack(
         template = text.TXT_SPELL_ATTACK_COMMAND
         _parts, spell_upcast_note = spell_combat.build_damage_parts(
             spell, spell_cast_level
+        )
+        shots = (
+            spell_combat.resolve_spell_shots(spell, spell_cast_level)
+            * max(1, times)
         )
 
     roll_exp = "D20"
@@ -708,7 +725,7 @@ async def _handle_attack(
     # 正式掷骰错误路径（归因到用户输入的修正串或攻击加值，给出可读提示）
     results: List[str] = []
     roll_results: List[RollResult] = []
-    for _ in range(times):
+    for _ in range(shots):
         try:
             roll_result = exec_roll_exp_unified(roll_exp)
         except RollDiceError as exc:
@@ -722,9 +739,31 @@ async def _handle_attack(
     name = await base.resolve_display_name(
         bot, event, target_qq, char_name=character.name
     )
+
+    if spell is not None and shots > 1:
+        lines = [
+            text.TXT_SPELL_ATTACK_COMMAND_MULTI_HEAD.format(
+                name=name, spell=spell.name, shots=shots
+            ),
+            attack_hint,
+        ]
+        for index, (result, roll_result) in enumerate(
+            zip(results, roll_results), start=1
+        ):
+            lines.append(
+                text.TXT_SPELL_MULTI_ATTACK_ITEM.format(
+                    no=index,
+                    result=result,
+                    marker=text.format_nat_shot_marker(roll_result),
+                )
+            )
+        if spell_upcast_note:
+            lines.append(spell_upcast_note)
+        await weapon_matcher.finish("\n".join(lines))
+
     display_check = check_label
-    if times > 1:
-        display_check = f"{times}次{display_check}"
+    if shots > 1:
+        display_check = f"{shots}次{display_check}"
 
     nat_state = text.format_nat_attack_state(roll_results, display_name)
     if nat_state:
@@ -749,8 +788,14 @@ async def _handle_damage(
     weapon_name: str,
     suffixes: List[str],
     tail: str,
+    times: int = 1,
 ) -> None:
-    """伤害结算：武器读 ``$武器$``，找不到时回退 ``$法术$`` 的伤害段。"""
+    """伤害结算：武器读 ``$武器$``，找不到时回退 ``$法术$`` 的伤害段。
+
+    ``times`` 来自命令的 ``N#`` 前缀：伤害命令默认只掷一次，多道命中后用
+    ``.3#灼热射线伤害`` 逐次补掷；``多发`` 只影响 ``.施法`` 的攻击次数与
+    自动型伤害次数，不会让伤害命令自动连掷。
+    """
     # 「伤害」之后的剩余文本：允许 @ 标记与 ± 临时加值（如升环火球术 .火球术伤害+1d6）
     target_qq, mod_str = base.split_target_mention(tail)
     if mod_str and not WEAPON_BONUS_RE.match(mod_str):
@@ -788,15 +833,57 @@ async def _handle_damage(
             spell, cast_level, mod_str
         )
         try:
-            rolls = spell_combat.roll_damage_parts(parts, critical=is_crit)
+            if times > 1:
+                shot_rolls = spell_combat.roll_damage_shots(
+                    parts, times, critical=is_crit
+                )
+            else:
+                shot_rolls = [
+                    spell_combat.roll_damage_parts(parts, critical=is_crit)
+                ]
         except spell_combat.SpellCombatError as exc:
             await weapon_matcher.finish(str(exc))
 
         name = await base.resolve_display_name(
             bot, event, target_qq, char_name=character.name
         )
-        total = sum(roll.total for roll in rolls)
         note = text.TXT_SPELL_CRIT_NOTE if is_crit else ""
+
+        if times > 1:
+            all_rolls = [roll for shot in shot_rolls for roll in shot]
+            total = sum(roll.total for roll in all_rolls)
+            types = {roll.damage_type for roll in all_rolls if roll.damage_type}
+            type_summary = (
+                next(iter(types)) if len(types) == 1 else "多类型" if types else ""
+            )
+            lines = [
+                text.TXT_SPELL_REPEAT_DAMAGE_HEAD.format(
+                    name=name, spell=spell.name, times=times
+                )
+            ]
+            for index, shot in enumerate(shot_rolls, start=1):
+                lines.append(
+                    text.TXT_SPELL_SHOT_DAMAGE_ITEM.format(
+                        no=index,
+                        result=" + ".join(
+                            roll.result.get_complete_result() for roll in shot
+                        ),
+                        type=shot[0].damage_type if len(shot) == 1 else "多类型",
+                    )
+                )
+            lines.append(
+                text.TXT_REPEAT_DAMAGE_TOTAL.format(
+                    total=total, type=type_summary
+                )
+            )
+            if note:
+                lines.append(note)
+            if upcast_note:
+                lines.append(upcast_note)
+            await weapon_matcher.finish("\n".join(lines))
+
+        rolls = shot_rolls[0]
+        total = sum(roll.total for roll in rolls)
         if len(rolls) == 1:
             feedback = text.TXT_SPELL_DAMAGE.format(
                 name=name,
@@ -854,18 +941,41 @@ async def _handle_damage(
         await weapon_matcher.finish(error)
 
     try:
-        roll_result = exec_roll_exp_unified(expression)
+        roll_results = [
+            exec_roll_exp_unified(expression) for _ in range(max(1, times))
+        ]
     except RollDiceError as exc:
         await weapon_matcher.finish(
             text.TXT_WEAPON_BAD_MOD.format(mod=expression, reason=exc.info)
         )
-    total = roll_result.get_val()
 
     note = build_damage_note(suffixes, sneak_dice, is_crit)
 
     name = await base.resolve_display_name(
         bot, event, target_qq, char_name=character.name
     )
+    if times > 1:
+        total = sum(result.get_val() for result in roll_results)
+        lines = [
+            text.TXT_WEAPON_REPEAT_DAMAGE_HEAD.format(
+                name=name, weapon=weapon.name, times=times
+            )
+            + note
+        ]
+        for index, result in enumerate(roll_results, start=1):
+            lines.append(
+                text.TXT_WEAPON_REPEAT_DAMAGE_ITEM.format(
+                    no=index, result=result.get_complete_result()
+                )
+            )
+        lines.append(
+            text.TXT_REPEAT_DAMAGE_TOTAL.format(
+                total=total, type=weapon.damage_type
+            )
+        )
+        await weapon_matcher.finish("\n".join(lines))
+
+    total = roll_results[0].get_val()
     await weapon_matcher.finish(
         text.TXT_WEAPON_DAMAGE.format(
             name=name,
@@ -873,7 +983,7 @@ async def _handle_damage(
             total=total,
             type=weapon.damage_type,
             note=note,
-            result=roll_result.get_complete_result(),
+            result=roll_results[0].get_complete_result(),
         )
     )
 
@@ -1140,9 +1250,10 @@ async def handle_weapon(bot: Bot, event: MessageEvent) -> None:
     if attack is not None:
         await _handle_attack(bot, event, *attack)
         return
-    damage = parse_weapon_damage_body(body)
+    damage_times, damage_body = split_damage_times(body)
+    damage = parse_weapon_damage_body(damage_body)
     if damage is not None:
-        await _handle_damage(bot, event, *damage)
+        await _handle_damage(bot, event, *damage, times=damage_times)
         return
     # 理论不可达（rule 已过滤）：不响应
 

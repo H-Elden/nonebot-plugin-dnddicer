@@ -252,7 +252,7 @@ FEATURE_TEXT_MAX_LEN = 400
 #: ``$法术$`` 的保留头键（施法属性之外的两项）
 SPELL_DC_KEY = "豁免DC"
 SPELL_ATTACK_KEY = "法术攻击"
-#: ``$法术$`` 条目详情的键（顺序即回写顺序；前八项为 2026-11-02 新增的战斗字段）
+#: ``$法术$`` 条目详情的键（顺序即回写顺序；前九项为 2026-11-02 新增的战斗字段）
 SPELL_DETAIL_KEYS = (
     "类型",
     "攻击",
@@ -260,6 +260,7 @@ SPELL_DETAIL_KEYS = (
     "DC",
     "成功",
     "伤害",
+    "多发",
     "升环",
     "效果",
     "时间",
@@ -286,6 +287,8 @@ SPELL_KIND_LIST = (
 )
 #: 豁免成功后的效果（伤害型豁免必填）
 SPELL_SAVE_SUCCESS_LIST = ("半伤", "无伤")
+#: 多发法术的「发」数上限（攻击型逐发攻击 / 自动型逐发伤害）
+SPELL_SHOTS_MAX = 10
 #: 法术详情各字段长度上限
 SPELL_TIME_MAX_LEN = 12
 SPELL_RANGE_MAX_LEN = 12

@@ -234,6 +234,8 @@ export function createCardBuilder(spec) {
   const coinKeys = enums.coin_keys || []
   const recoverModes = enums.recover_modes || []
   const spellDetailKeys = enums.spell_detail_keys || []
+  const spellKinds = enums.spell_kinds || []
+  const spellSaveSuccess = enums.spell_save_success || []
 
   const segments = spec.segments.slice()
   const segmentMap = new Map(segments.map((segment) => [segment.key, segment]))
@@ -791,6 +793,15 @@ export function createCardBuilder(spec) {
 
   function emptySpellDetail() {
     return {
+      kind: '',
+      attackBonus: '',
+      saveAbility: '',
+      saveDc: '',
+      saveSuccess: '',
+      damage: '',
+      shots: '1',
+      upcast: '',
+      effect: '',
       time: '',
       range: '',
       concentration: false,
@@ -818,7 +829,68 @@ export function createCardBuilder(spec) {
       }
       if (seen.has(key)) fail(`法术详情重复: ${key}`)
       seen.add(key)
-      if (key === '时间') {
+      if (key === '类型') {
+        if (!spellKinds.includes(value)) {
+          fail(`法术类型无效: ${value}（可选：${spellKinds.join('/')}）`)
+        }
+        detail.kind = value
+      } else if (key === '攻击') {
+        if (charLength(value) > (limits.spell_attack_max_len || 12)) {
+          fail(`法术攻击加值过长（≤${limits.spell_attack_max_len || 12} 字）: ${value}`)
+        }
+        detail.attackBonus = normalizeSigned(value, '法术攻击')
+      } else if (key === '豁免') {
+        if (!abilities.includes(value)) {
+          fail(`法术豁免属性无效: ${value}（可选：${abilities.join('/')}）`)
+        }
+        detail.saveAbility = value
+      } else if (key === 'DC') {
+        if (
+          !/^\d+$/.test(value) ||
+          Number(value) < 1 ||
+          Number(value) > (limits.spell_dc_max || 99)
+        ) {
+          fail(`法术豁免 DC 必须是 1~${limits.spell_dc_max || 99} 的整数: ${value}`)
+        }
+        detail.saveDc = String(Number(value))
+      } else if (key === '成功') {
+        if (!spellSaveSuccess.includes(value)) {
+          fail(
+            `法术豁免成功效果无效: ${value}（可选：${spellSaveSuccess.join('/')}）`,
+          )
+        }
+        detail.saveSuccess = value
+      } else if (key === '伤害') {
+        parseSpellDamage(value)
+        detail.damage = value.replace(/\s+/g, '')
+      } else if (key === '多发') {
+        if (
+          !/^\d+$/.test(value) ||
+          Number(value) < 2 ||
+          Number(value) > (limits.spell_shots_max || 10)
+        ) {
+          fail(
+            `法术多发数必须是 2~${limits.spell_shots_max || 10} 的整数: ${value}`,
+          )
+        }
+        detail.shots = String(Number(value))
+      } else if (key === '升环') {
+        if (charLength(value) > (limits.spell_upcast_max_len || 30)) {
+          fail(`法术升环效应过长（≤${limits.spell_upcast_max_len || 30} 字）: ${value}`)
+        }
+        for (const char of [';', '|', '$']) {
+          if (value.includes(char)) fail(`法术升环效应不能包含符号「${char}」: ${value}`)
+        }
+        detail.upcast = value
+      } else if (key === '效果') {
+        if (charLength(value) < 1 || charLength(value) > (limits.spell_effect_max_len || 60)) {
+          fail(`法术效果过长（≤${limits.spell_effect_max_len || 60} 字）: ${value}`)
+        }
+        for (const char of [';', '|', '$']) {
+          if (value.includes(char)) fail(`法术效果不能包含符号「${char}」: ${value}`)
+        }
+        detail.effect = value
+      } else if (key === '时间') {
         if (charLength(value) < 1 || charLength(value) > (limits.spell_time_max_len || 12)) {
           fail(`法术施法时间过长（≤${limits.spell_time_max_len || 12} 字）: ${value}`)
         }
@@ -847,6 +919,168 @@ export function createCardBuilder(spec) {
     return detail
   }
 
+  function splitSpellDamageType(text) {
+    let expr = text
+    let damageType = ''
+    const typeNames = [...damageTypes, ...Object.keys(damageTypeSynonyms)].sort(
+      (left, right) => right.length - left.length,
+    )
+    for (const typeName of typeNames) {
+      if (text.endsWith(typeName) && text.length > typeName.length) {
+        expr = text.slice(0, -typeName.length)
+        damageType = normalizeDamageTypeName(typeName)
+        break
+      }
+    }
+    return { expr, damageType }
+  }
+
+  function parseSpellDamage(text) {
+    const raw = text.replace(/\s+/g, '')
+    const segments = raw.split('+').filter(Boolean)
+    let parts = []
+    if (segments.length >= 2) {
+      for (const segment of segments) {
+        const { expr, damageType } = splitSpellDamageType(segment)
+        if (
+          !damageType ||
+          !/\d*[dD]\d+/.test(expr) ||
+          !DAMAGE_ITEM_RE.test(expr)
+        ) {
+          parts = []
+          break
+        }
+        parts.push({ expr, damageType })
+      }
+    }
+    if (parts.length) {
+      if (parts.length > (limits.spell_damage_part_max || 3)) {
+        fail(`法术伤害最多 ${limits.spell_damage_part_max || 3} 段: ${text}`)
+      }
+      for (const part of parts) {
+        if (charLength(part.expr) > (limits.spell_damage_max_len || 40)) {
+          fail(`法术伤害表达式过长（每段 ≤${limits.spell_damage_max_len || 40} 字）: ${part.expr}`)
+        }
+      }
+      return parts
+    }
+    const { expr } = splitSpellDamageType(raw)
+    if (!DAMAGE_ITEM_RE.test(expr)) {
+      fail(`法术伤害表达式无效: ${text}（仅支持骰子与常数的加减组合，如 8d6 或 1d8+4）`)
+    }
+    if (charLength(expr) > (limits.spell_damage_max_len || 40)) {
+      fail(`法术伤害表达式过长（≤${limits.spell_damage_max_len || 40} 字）: ${expr}`)
+    }
+    return [{ expr }]
+  }
+
+  function splitSpellUpcastValue(value) {
+    const text = value.replace(/\s+/g, '')
+    const matched = /^\+((?:\d*[dD]\d+)(?:[+-](?:\d*[dD]\d+|\d+))*)\s*([^\d+-]*)$/.exec(
+      text,
+    )
+    if (matched) return { expr: matched[1], type: (matched[2] || '').trim() }
+    return null
+  }
+
+  function validateSpellCombat(detail, level) {
+    const kind = trimOf(detail.kind)
+    const combatFields = [
+      'attackBonus',
+      'saveAbility',
+      'saveDc',
+      'saveSuccess',
+      'damage',
+      'upcast',
+      'effect',
+    ]
+    const hasCombat = combatFields.some((field) => trimOf(detail[field]))
+    if (!kind) {
+      if (hasCombat) {
+        fail('法术写了战斗字段但没有写类型（类型:攻击/豁免/自动/辅助/治疗/特殊）')
+      }
+      return
+    }
+    if (kind === '攻击') {
+      if (
+        trimOf(detail.saveAbility) ||
+        trimOf(detail.saveDc) ||
+        trimOf(detail.saveSuccess)
+      ) {
+        fail('类型为攻击的法术不能写 豁免 / DC / 成功')
+      }
+    } else if (kind === '豁免') {
+      if (trimOf(detail.attackBonus)) fail('类型为豁免的法术不能写 攻击')
+      if (!trimOf(detail.saveAbility)) {
+        fail(`豁免型法术必须写 豁免:属性（可选：${abilities.join('/')}）`)
+      }
+      if (trimOf(detail.damage) && !trimOf(detail.saveSuccess)) {
+        fail('伤害型豁免法术必须写 成功:半伤 或 成功:无伤')
+      }
+    } else if (
+      trimOf(detail.attackBonus) ||
+      trimOf(detail.saveAbility) ||
+      trimOf(detail.saveDc) ||
+      trimOf(detail.saveSuccess)
+    ) {
+      fail(`类型为${kind}的法术不能写 攻击 / 豁免 / DC / 成功`)
+    }
+
+    const upcast = trimOf(detail.upcast)
+    if (Number(level) === 0 && upcast && upcast !== '无') {
+      fail('戏法不能升环；戏法成长请直接把当前等级的伤害写进 伤害')
+    }
+    const shots = Number(trimOf(detail.shots) || 1)
+    if (shots > 1) {
+      if (!['攻击', '自动'].includes(kind)) {
+        fail(
+          `类型为${kind}的法术不能写 多发（只有攻击型与自动型可以逐发结算）`,
+        )
+      }
+      if (trimOf(detail.damage)) {
+        const parts = parseSpellDamage(trimOf(detail.damage))
+        if (parts.length > 1) {
+          fail('多发法术只支持单段伤害，多段伤害请拆成多条法术')
+        }
+      }
+    }
+    if (upcast) {
+      const shotsMatched = /^\+(\d+)发$/.exec(upcast.replace(/\s+/g, ''))
+      if (shotsMatched) {
+        if (!['攻击', '自动'].includes(kind)) {
+          fail(`类型为${kind}的法术不能写 升环:+N发`)
+        }
+        const increase = Number(shotsMatched[1])
+        if (
+          increase < 1 ||
+          increase > (limits.spell_shots_max || 10)
+        ) {
+          fail(
+            `升环加发数必须是 1~${limits.spell_shots_max || 10} 的整数: ${upcast}`,
+          )
+        }
+      } else {
+        const parsed = splitSpellUpcastValue(upcast)
+        if (parsed) {
+          const upType = normalizeDamageTypeName(parsed.type)
+          if (parsed.type && !upType) fail(`升环伤害类型无效: ${parsed.type}`)
+          const damageText = trimOf(detail.damage)
+          const parts = damageText ? parseSpellDamage(damageText) : []
+          if (parts.length > 1 && !upType) {
+            fail('多段伤害的升环必须写伤害类型（如 升环:+1d10钝击）')
+          }
+          if (
+            upType &&
+            parts.length &&
+            !parts.some((part) => part.damageType === upType)
+          ) {
+            fail(`升环伤害类型「${upType}」与基础伤害类型不匹配`)
+          }
+        }
+      }
+    }
+  }
+
   function parseSpellFlag(value, label) {
     if (['是', '有', '1'].includes(value)) return true
     if (['否', '无', '0'].includes(value)) return false
@@ -873,6 +1107,7 @@ export function createCardBuilder(spec) {
       fail(`法术环阶无效: ${item}（写 0~9 的数字，0 = 戏法）`)
     }
     const detail = detailText === '' ? emptySpellDetail() : parseSpellDetail(detailText)
+    validateSpellCombat(detail, level)
     return { name, level: String(level), prepared, ...detail }
   }
 
@@ -1927,6 +2162,26 @@ export function createCardBuilder(spec) {
 
   function spellDetailText(spell) {
     const parts = []
+    const kind = trimOf(spell.kind)
+    const attackBonus = trimOf(spell.attackBonus)
+    const saveAbility = trimOf(spell.saveAbility)
+    const saveDc = trimOf(spell.saveDc)
+    const saveSuccess = trimOf(spell.saveSuccess)
+    const damage = trimOf(spell.damage)
+    const shots = trimOf(spell.shots)
+    const upcast = trimOf(spell.upcast)
+    const effect = trimOf(spell.effect)
+    if (kind) parts.push(`类型:${kind}`)
+    if (attackBonus) {
+      parts.push(`攻击:${normalizeSigned(attackBonus, '法术攻击')}`)
+    }
+    if (saveAbility) parts.push(`豁免:${saveAbility}`)
+    if (saveDc) parts.push(`DC:${normalizeIntText(saveDc)}`)
+    if (saveSuccess) parts.push(`成功:${saveSuccess}`)
+    if (damage) parts.push(`伤害:${damage.replace(/\s+/g, '')}`)
+    if (Number(shots) > 1) parts.push(`多发:${normalizeIntText(shots)}`)
+    if (upcast) parts.push(`升环:${upcast}`)
+    if (effect) parts.push(`效果:${effect}`)
     if (trimOf(spell.time)) parts.push(`时间:${trimOf(spell.time)}`)
     if (trimOf(spell.range)) parts.push(`距离:${trimOf(spell.range)}`)
     if (spell.concentration) parts.push('专注:是')
@@ -1950,6 +2205,15 @@ export function createCardBuilder(spec) {
     const rows = spells.list.filter(
       (row) =>
         trimOf(row.name) ||
+        trimOf(row.kind) ||
+        trimOf(row.attackBonus) ||
+        trimOf(row.saveAbility) ||
+        trimOf(row.saveDc) ||
+        trimOf(row.saveSuccess) ||
+        trimOf(row.damage) ||
+        Number(trimOf(row.shots)) > 1 ||
+        trimOf(row.upcast) ||
+        trimOf(row.effect) ||
         trimOf(row.time) ||
         trimOf(row.range) ||
         trimOf(row.note) ||
@@ -1986,6 +2250,7 @@ export function createCardBuilder(spec) {
       let text = `${name}:${normalizeIntText(row.level || '0')}${row.prepared ? '*' : ''}`
       const detail = spellDetailText(row)
       if (detail) text += `|${detail}`
+      parseSpellEntry(text)
       items.push(text)
     }
     return items.join('; ')

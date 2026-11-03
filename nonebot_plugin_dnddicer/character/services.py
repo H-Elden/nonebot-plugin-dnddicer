@@ -125,6 +125,7 @@ from .constants import (
     SPELL_NOTE_MAX_LEN,
     SPELL_RANGE_MAX_LEN,
     SPELL_SAVE_SUCCESS_LIST,
+    SPELL_SHOTS_MAX,
     SPELL_SLOT_MAX,
     SPELL_TIME_MAX_LEN,
     SPELL_UPCAST_MAX_LEN,
@@ -603,8 +604,8 @@ SPELL_UPCAST_DICE_RE = re.compile(
 def split_spell_upcast(value: str) -> Tuple[Optional[Tuple[str, str]], str]:
     """拆升环写法 → ``((加骰表达式, 类型原文), "")`` 或 ``(None, 原文)``。
 
-    只有"含骰子的加法表达式"才返回加骰形态；``+1束`` / ``+1枚`` / ``+1目标``
-    与自由文本都走第二项，由调用方按"只展示、手动处理"处理。类型原文由
+    只有"含骰子的加法表达式"才返回加骰形态；``+N发`` / ``+1目标``
+    与自由文本都走第二项，由调用方按"加发、只展示或手动处理"处理。类型原文由
     调用方用 ``normalize_damage_type`` 归一后再比较。
     """
     text = value.strip().replace(" ", "")
@@ -612,6 +613,12 @@ def split_spell_upcast(value: str) -> Tuple[Optional[Tuple[str, str]], str]:
     if matched:
         return (matched.group(1), matched.group(2).strip()), ""
     return None, value.strip()
+
+
+def split_spell_shots_upcast(value: str) -> Optional[int]:
+    """拆 ``+N发`` 升环写法 → N；不是加发写法时返回 None。"""
+    matched = re.fullmatch(r"\+(\d+)发", value.strip().replace(" ", ""))
+    return int(matched.group(1)) if matched else None
 
 
 def _validate_spell_combat(result: Dict[str, object], level: int) -> None:
@@ -657,25 +664,45 @@ def _validate_spell_combat(result: Dict[str, object], level: int) -> None:
             "戏法不能升环；戏法成长请直接把当前等级的伤害写进 伤害"
         )
 
+    shots = int(result.get("shots", 1))
+    if shots > 1:
+        if kind not in (SPELL_KIND_ATTACK, SPELL_KIND_AUTO):
+            raise AssertionError(
+                f"类型为{kind}的法术不能写 多发（只有攻击型与自动型可以逐发结算）"
+            )
+        if len(result.get("damage_parts") or []) > 1:
+            raise AssertionError("多发法术只支持单段伤害，多段伤害请拆成多条法术")
+
     upcast = str(result.get("upcast", ""))
     if upcast:
-        dice_upcast, _ = split_spell_upcast(upcast)
-        if dice_upcast is not None:
-            _up_expr, up_type_raw = dice_upcast
-            up_type = normalize_damage_type(up_type_raw)
-            if up_type_raw and not up_type:
-                raise AssertionError(f"升环伤害类型无效: {up_type_raw}")
-            parts = result.get("damage_parts") or []
-            if len(parts) > 1 and not up_type:
+        shots_up = split_spell_shots_upcast(upcast)
+        if shots_up is not None:
+            if kind not in (SPELL_KIND_ATTACK, SPELL_KIND_AUTO):
                 raise AssertionError(
-                    "多段伤害的升环必须写伤害类型（如 升环:+1d10钝击）"
+                    f"类型为{kind}的法术不能写 升环:+N发"
                 )
-            if up_type and parts and not any(
-                part.damage_type == up_type for part in parts
-            ):
+            if not 1 <= shots_up <= SPELL_SHOTS_MAX:
                 raise AssertionError(
-                    f"升环伤害类型「{up_type}」与基础伤害类型不匹配"
+                    f"升环加发数必须是 1~{SPELL_SHOTS_MAX} 的整数: {upcast}"
                 )
+        else:
+            dice_upcast, _ = split_spell_upcast(upcast)
+            if dice_upcast is not None:
+                _up_expr, up_type_raw = dice_upcast
+                up_type = normalize_damage_type(up_type_raw)
+                if up_type_raw and not up_type:
+                    raise AssertionError(f"升环伤害类型无效: {up_type_raw}")
+                parts = result.get("damage_parts") or []
+                if len(parts) > 1 and not up_type:
+                    raise AssertionError(
+                        "多段伤害的升环必须写伤害类型（如 升环:+1d10钝击）"
+                    )
+                if up_type and parts and not any(
+                    part.damage_type == up_type for part in parts
+                ):
+                    raise AssertionError(
+                        f"升环伤害类型「{up_type}」与基础伤害类型不匹配"
+                    )
 
 
 def _parse_spell_details(text: str, level: int = -1) -> Dict[str, object]:
@@ -740,6 +767,12 @@ def _parse_spell_details(text: str, level: int = -1) -> Dict[str, object]:
             result["save_success"] = value
         elif key == "伤害":
             result["damage_parts"] = parse_spell_damage(value)
+        elif key == "多发":
+            if not value.isdigit() or not 2 <= int(value) <= SPELL_SHOTS_MAX:
+                raise AssertionError(
+                    f"法术多发数必须是 2~{SPELL_SHOTS_MAX} 的整数: {value}"
+                )
+            result["shots"] = int(value)
         elif key == "升环":
             if len(value) > SPELL_UPCAST_MAX_LEN:
                 raise AssertionError(
@@ -2060,91 +2093,116 @@ def gen_template_char(group_id: str = "", user_id: str = "") -> DNDCharacter:
     character.spellcasting_ability = "智力"
     character.spell_dc = "15"
     character.spell_attack = "+8"
+    def _spell_damage(expr: str, damage_type: str):
+        """模板卡法术伤害段的简写（仅本函数内使用）。"""
+        return [SpellDamagePart(expr=expr, damage_type=damage_type)]
+
     character.spells = [
         SpellEntry(
-            name="火焰箭", level=0,
-            cast_time="1动作", range="120尺", note="2d10 火焰 / 法术攻击",
+            name="火焰箭", level=0, kind="攻击",
+            damage_parts=_spell_damage("2d10", "火焰"),
+            cast_time="1动作", range="120尺",
         ),
         SpellEntry(
-            name="冷冻射线", level=0,
-            cast_time="1动作", range="60尺", note="2d8 寒冷 / 速度-10",
+            name="冷冻射线", level=0, kind="攻击",
+            damage_parts=_spell_damage("2d8", "寒冷"),
+            effect="速度-10",
+            cast_time="1动作", range="60尺",
         ),
         SpellEntry(
-            name="法师之手", level=0,
-            cast_time="1动作", range="30尺", note="操控物件 / 1分钟",
+            name="法师之手", level=0, kind="辅助",
+            effect="操控物件", note="1分钟",
+            cast_time="1动作", range="30尺",
         ),
         SpellEntry(
-            name="次级幻象", level=0,
+            name="次级幻象", level=0, kind="辅助",
+            effect="声音或影像", note="1分钟",
             cast_time="1动作", range="30尺", material=True,
-            note="声音或影像 / 1分钟",
         ),
         SpellEntry(
-            name="魔法伎俩", level=0,
-            cast_time="1动作", range="10尺", note="无害小魔法 / 至多1小时",
+            name="魔法伎俩", level=0, kind="辅助",
+            effect="无害小魔法", note="至多1小时",
+            cast_time="1动作", range="10尺",
         ),
         SpellEntry(
-            name="光亮术", level=0,
+            name="光亮术", level=0, kind="辅助",
+            effect="20尺明亮光照", note="1小时",
             cast_time="1动作", range="触碰", material=True,
-            note="20尺明亮光照 / 1小时",
         ),
         SpellEntry(
-            name="心灵之楔", level=0,
-            cast_time="1动作", range="60尺", note="2d6 心灵 / 智力豁免",
+            name="心灵之楔", level=0, kind="豁免",
+            save_ability="智力", save_success="无伤",
+            damage_parts=_spell_damage("2d6", "心灵"),
+            effect="下次豁免-1d4",
+            cast_time="1动作", range="60尺",
         ),
         SpellEntry(
-            name="护盾术", level=1, prepared=True,
-            cast_time="1反应", range="自身", note="+5 AC / 1轮 / 学徒免位1次",
+            name="护盾术", level=1, prepared=True, kind="辅助",
+            effect="AC+5，持续到你的下回合开始", note="学徒免位1次",
+            cast_time="1反应", range="自身",
         ),
         SpellEntry(
-            name="魔法飞弹", level=1, prepared=True,
-            cast_time="1动作", range="120尺", note="3d4+3 力场 / 升环+1飞镖",
+            name="魔法飞弹", level=1, prepared=True, kind="自动",
+            damage_parts=_spell_damage("1d4+1", "力场"),
+            shots=3,
+            upcast="+1发",
+            cast_time="1动作", range="120尺",
         ),
         SpellEntry(
-            name="法师护甲", level=1, prepared=True,
+            name="法师护甲", level=1, prepared=True, kind="辅助",
+            effect="AC=13+敏捷", note="8小时",
             cast_time="1动作", range="触碰", material=True,
-            note="AC 13+敏捷 / 8小时",
         ),
         SpellEntry(
-            name="侦测魔法", level=1, prepared=True,
+            name="侦测魔法", level=1, prepared=True, kind="辅助",
+            effect="30尺灵光", note="血系免位1次",
             cast_time="1动作或仪式", range="自身",
-            concentration=True, ritual=True, note="30尺灵光 / 血系免位1次",
+            concentration=True, ritual=True,
         ),
         SpellEntry(
-            name="羽落术", level=1, prepared=True,
+            name="羽落术", level=1, prepared=True, kind="辅助",
+            effect="至多5个生物", note="1分钟",
             cast_time="1反应", range="60尺", material=True,
-            note="至多5个生物 / 1分钟",
         ),
         SpellEntry(
-            name="迷踪步", level=2, prepared=True,
-            cast_time="1附赠动作", range="自身", note="传送30尺 / 血系免位1次",
+            name="迷踪步", level=2, prepared=True, kind="辅助",
+            effect="传送30尺", note="血系免位1次",
+            cast_time="1附赠动作", range="自身",
         ),
         SpellEntry(
-            name="蛛网术", level=2, prepared=True,
+            name="蛛网术", level=2, prepared=True, kind="豁免",
+            save_ability="敏捷", save_success="无伤", effect="束缚",
+            note="20尺立方",
             cast_time="1动作", range="60尺", concentration=True, material=True,
-            note="20尺立方 / 束缚",
         ),
         SpellEntry(
-            name="镜影术", level=2, prepared=True,
-            cast_time="1动作", range="自身", note="3个分身 / 1分钟",
+            name="镜影术", level=2, prepared=True, kind="辅助",
+            effect="3个分身", note="1分钟",
+            cast_time="1动作", range="自身",
         ),
         SpellEntry(
-            name="火球术", level=3, prepared=True,
+            name="火球术", level=3, prepared=True, kind="豁免",
+            save_ability="敏捷", save_success="半伤",
+            damage_parts=_spell_damage("8d6", "火焰"),
+            upcast="+1d6", note="20尺半径",
             cast_time="1动作", range="150尺", material=True,
-            note="20尺半径 / 8d6 火焰 / 敏捷",
         ),
         SpellEntry(
-            name="闪电束", level=3, prepared=True,
+            name="闪电束", level=3, prepared=True, kind="豁免",
+            save_ability="敏捷", save_success="半伤",
+            damage_parts=_spell_damage("8d6", "闪电"),
+            upcast="+1d6", note="100尺线",
             cast_time="1动作", range="自身", material=True,
-            note="100尺线 / 8d6 闪电 / 敏捷",
         ),
         SpellEntry(
-            name="法术反制", level=3, prepared=True,
-            cast_time="1反应", range="60尺", note="体质豁免 / 打断施法",
+            name="法术反制", level=3, prepared=True, kind="特殊",
+            effect="打断施法",
+            cast_time="1反应", range="60尺",
         ),
         SpellEntry(
-            name="加速术", level=3, prepared=True,
+            name="加速术", level=3, prepared=True, kind="辅助",
+            effect="速度翻倍、AC+2、额外动作",
             cast_time="1动作", range="30尺", concentration=True, material=True,
-            note="速度翻倍 / +2 AC / 额外动作",
         ),
     ]
     character.spell_slots = SpellSlots(

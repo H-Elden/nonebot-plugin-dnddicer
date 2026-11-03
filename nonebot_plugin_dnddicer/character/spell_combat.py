@@ -24,6 +24,7 @@ from .models import DNDCharacter, SpellDamagePart, SpellEntry
 from .services import (
     apply_critical_to_damage,
     normalize_damage_type,
+    split_spell_shots_upcast,
     split_spell_upcast,
 )
 
@@ -130,6 +131,17 @@ def combine_damage_terms(expr: str) -> str:
     return text
 
 
+def resolve_spell_shots(spell: SpellEntry, cast_level: int) -> int:
+    """实际发数：条目 ``多发`` + 升环 ``+N发`` 按环差叠加。"""
+    shots = max(1, spell.shots)
+    delta = max(0, cast_level - spell.level)
+    if delta and spell.upcast:
+        increase = split_spell_shots_upcast(spell.upcast)
+        if increase:
+            shots += increase * delta
+    return shots
+
+
 def build_damage_parts(
     spell: SpellEntry,
     cast_level: int,
@@ -155,7 +167,8 @@ def build_damage_parts(
     if delta and spell.upcast and spell.upcast != "无":
         dice_upcast, text = split_spell_upcast(spell.upcast)
         if dice_upcast is None:
-            note = f"（升环效应：{text}，本期需手动处理）"
+            if split_spell_shots_upcast(spell.upcast) is None:
+                note = f"（升环效应：{text}，本期需手动处理）"
         else:
             up_expr, up_type_raw = dice_upcast
             up_type = normalize_damage_type(up_type_raw)
@@ -213,6 +226,19 @@ def roll_damage_parts(
             )
         )
     return rolls
+
+
+def roll_damage_shots(
+    parts: Sequence[SpellDamagePart],
+    shots: int,
+    *,
+    critical: bool = False,
+) -> List[List[SpellDamagePartRoll]]:
+    """按发数逐次掷骰；每一发都重新掷一次，而不是把骰数乘大发数。"""
+    return [
+        roll_damage_parts(parts, critical=critical)
+        for _ in range(max(1, shots))
+    ]
 
 
 def roll_expression(expression: str) -> RollResult:

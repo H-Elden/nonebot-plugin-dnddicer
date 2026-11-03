@@ -21,6 +21,34 @@ function thousands(value) {
   return /^\d+$/.test(text) ? Number(text).toLocaleString('en-US') : text
 }
 
+/** 法术战斗摘要（与插件 SpellEntry.get_combat_summary 一致）。 */
+function spellCombatSummary(row, globalAttack, globalDc) {
+  const kind = trimOf(row.kind)
+  if (!kind) return ''
+  const parts = []
+  if (kind === '攻击') {
+    const bonus = trimOf(row.attackBonus) || trimOf(globalAttack)
+    parts.push(bonus ? `法术攻击 ${bonus}` : '法术攻击')
+  } else if (kind === '豁免') {
+    let label = trimOf(row.saveAbility) ? `${trimOf(row.saveAbility)}豁免` : '豁免'
+    const dc = trimOf(row.saveDc) || trimOf(globalDc)
+    if (dc) label += ` DC ${dc}`
+    if (trimOf(row.saveSuccess)) label += `（成功${trimOf(row.saveSuccess)}）`
+    parts.push(label)
+  } else if (kind === '自动') {
+    parts.push('自动命中')
+  } else {
+    parts.push(kind)
+  }
+  if (trimOf(row.damage)) parts.push(trimOf(row.damage))
+  if (Number(trimOf(row.shots) || 1) > 1) {
+    parts.push(`${Number(trimOf(row.shots))} 发`)
+  }
+  if (trimOf(row.upcast)) parts.push(`升环${trimOf(row.upcast)}`)
+  if (trimOf(row.effect)) parts.push(trimOf(row.effect))
+  return parts.join(' · ')
+}
+
 function escapeHtml(value) {
   return textOf(value)
     .replace(/&/g, '&amp;')
@@ -265,6 +293,7 @@ export function buildPreviewView(builder, state, options = {}, portraitDataUrl =
       concentration: Boolean(row.concentration),
       ritual: Boolean(row.ritual),
       material: Boolean(row.material),
+      combat: spellCombatSummary(row, spellAttack, spellDc),
       note: trimOf(row.note),
     })
   }
@@ -565,9 +594,15 @@ export function renderPreviewHtml(view, css) {
                     spell.range || '—',
                   )}</td><td class="s-conc">${box(spell.concentration)}C</td><td class="s-ritual">${box(
                     spell.ritual,
-                  )}R</td><td class="s-material">${box(spell.material)}M</td><td class="s-note">${escapeHtml(
-                    spell.note || '—',
-                  )}</td></tr>`,
+                  )}R</td><td class="s-material">${box(spell.material)}M</td><td class="s-note">${
+                    spell.combat ? escapeHtml(spell.combat) : ''
+                  }${spell.combat && spell.note ? '<br>' : ''}${
+                    spell.note
+                      ? escapeHtml(spell.note)
+                      : spell.combat
+                        ? ''
+                        : '—'
+                  }</td></tr>`,
               )
               .join('')}`,
         )
