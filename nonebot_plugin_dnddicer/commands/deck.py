@@ -2,12 +2,13 @@
 
 一条命令承担全部入口：
 
-- ``.draw``：列出牌堆；
-- ``.draw 名称 [次数] [放回]``：抽取，默认单次命令内不放回；
-- ``.draw 搜索 关键词`` / ``.draw 详情 名称``：搜索与详情；
+- ``.draw``：列出牌堆第一页；
+- ``.draw 列表 [页码]``：翻页，每页 10 个，列表项带全局编号；
+- ``.draw 名称|编号 [次数] [放回]``：抽取，默认单次命令内不放回；
+- ``.draw 搜索 关键词`` / ``.draw 详情 名称|编号``：搜索与详情；
 - ``.draw 重载``：骰主私聊重载。
 
-牌堆名精确优先，未命中再按子串匹配；多候选列清单不猜。
+牌堆名精确优先，其次纯数字编号，未命中再按子串匹配；多候选列清单不猜。
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ from ..deck import (
     DeckEmpty,
     DeckImageError,
     DeckImagePart,
+    DeckIndexOutOfRange,
     DeckLibrary,
     DeckNotFound,
     DeckTextPart,
@@ -45,12 +47,19 @@ from ..deck import (
 from . import base, text
 
 _HELP = (
-    ".draw [名称] [次数] [放回]\n"
-    "  无参数列出牌堆；.抽牌 / .牌堆 等价\n"
+    ".draw [名称|编号] [次数] [放回]\n"
+    "  无参数列出牌堆；.draw 列表 [页码] 翻页\n"
+    "  .抽牌 / .牌堆 等价\n"
     "  次数 1-10，默认不放回；放回 允许重复\n"
-    "  .draw 搜索 关键词 / .draw 详情 名称\n"
+    "  .draw 搜索 关键词 / .draw 详情 名称|编号\n"
     "  骰主：.draw 重载"
 )
+
+#: 列表每页条数
+_LIST_PAGE_SIZE = 10
+
+#: 搜索与多候选最多展示条数
+_LIST_SHOW_LIMIT = 10
 
 deck_matcher = base.on_dnd_command(
     "draw",
@@ -112,6 +121,20 @@ def _check_times(times: int) -> None:
 
 
 def _resolve_deck(library: DeckLibrary, name: str) -> Deck:
+    """名称精确优先，其次纯数字编号，最后子串匹配。
+
+    纯数字排在子串匹配之前，保证 ``.draw 12`` 始终指向列表第 12 项；
+    名称恰好是数字的牌堆仍由精确匹配先命中。
+    """
+    exact = library.exact(name)
+    if exact is not None:
+        return exact
+    if name.isdecimal():
+        decks = library.visible()
+        index = int(name)
+        if 1 <= index <= len(decks):
+            return decks[index - 1]
+        raise DeckIndexOutOfRange(index, len(decks))
     resolution = library.resolve(name)
     if resolution.deck is not None:
         return resolution.deck
@@ -126,7 +149,7 @@ def parse_draw_args(library: DeckLibrary, value: str) -> Optional[DrawArgs]:
     """解析 ``.draw`` 的抽取参数；空参数返回 None（列表入口）。
 
     Raises:
-        DeckNotFound / DeckAmbiguous / DeckCountOutOfRange
+        DeckNotFound / DeckAmbiguous / DeckIndexOutOfRange / DeckCountOutOfRange
     """
     value = _normalize(value)
     if not value:
@@ -169,22 +192,33 @@ def parse_draw_args(library: DeckLibrary, value: str) -> Optional[DrawArgs]:
 # ── 展示 ────────────────────────────────────────────────────────────────
 
 
-def _format_list_item(deck: Deck) -> str:
-    return text.TXT_DECK_LIST_ITEM.format(name=deck.name, count=deck.count)
+def _format_list_item(deck: Deck, index: int) -> str:
+    return text.TXT_DECK_LIST_ITEM.format(
+        index=index, name=deck.name, count=deck.count
+    )
 
 
 def _format_candidate(deck: Deck) -> str:
     return text.TXT_DECK_CANDIDATE.format(name=deck.name, count=deck.count)
 
 
-def _format_list(library: DeckLibrary) -> str:
+def _list_pages(library: DeckLibrary) -> int:
+    return max(1, (len(library.visible()) + _LIST_PAGE_SIZE - 1) // _LIST_PAGE_SIZE)
+
+
+def _format_list(library: DeckLibrary, page: int = 1) -> str:
     decks = library.visible()
+    pages = _list_pages(library)
+    start = (page - 1) * _LIST_PAGE_SIZE
+    shown = decks[start : start + _LIST_PAGE_SIZE]
     lines: list[str] = [text.TXT_DECK_LIST_CUSTOM.format(count=len(decks))]
-    if decks:
-        shown = decks[:30]
-        lines.extend(_format_list_item(deck) for deck in shown)
-        if len(decks) > len(shown):
-            lines.append(text.TXT_DECK_LIST_MORE.format(count=len(shown)))
+    if shown:
+        lines.extend(
+            _format_list_item(deck, start + offset)
+            for offset, deck in enumerate(shown, start=1)
+        )
+        if pages > 1:
+            lines.append(text.TXT_DECK_LIST_PAGE.format(page=page, pages=pages))
     else:
         lines.append(text.TXT_DECK_LIST_EMPTY)
 
@@ -222,21 +256,34 @@ def _format_not_found(library: DeckLibrary, name: str) -> str:
 
 
 def _format_ambiguous(name: str, candidates: list[str]) -> str:
-    return text.TXT_DECK_AMBIGUOUS.format(
-        name=name, names="、".join(candidates)
-    )
+    shown = candidates[:_LIST_SHOW_LIMIT]
+    body = text.TXT_DECK_AMBIGUOUS.format(name=name, names="、".join(shown))
+    if len(candidates) > len(shown):
+        body += "\n" + text.TXT_DECK_AMBIGUOUS_MORE.format(
+            total=len(candidates), shown=len(shown)
+        )
+    return body
 
 
 def _format_search(library: DeckLibrary, keyword: str) -> str:
-    matches = library.search(keyword)
+    matches = library.search(keyword, limit=None)
     if not matches:
         lines = [text.TXT_DECK_SEARCH_NONE.format(keyword=keyword)]
         suggestions = library.suggestions(keyword)
         if suggestions:
             lines.append(text.TXT_DECK_SUGGEST.format(names="、".join(suggestions)))
         return "\n".join(lines)
-    lines = [text.TXT_DECK_SEARCH_HEADER.format(keyword=keyword, count=len(matches))]
-    lines.extend(_format_candidate(deck) for deck in matches)
+    shown = matches[:_LIST_SHOW_LIMIT]
+    if len(matches) > len(shown):
+        header = text.TXT_DECK_SEARCH_HEADER_MORE.format(
+            keyword=keyword, total=len(matches), shown=len(shown)
+        )
+    else:
+        header = text.TXT_DECK_SEARCH_HEADER.format(
+            keyword=keyword, count=len(matches)
+        )
+    lines = [header]
+    lines.extend(_format_candidate(deck) for deck in shown)
     return "\n".join(lines)
 
 
@@ -385,7 +432,17 @@ async def handle_draw(event: MessageEvent) -> None:
     tail = tail.strip()
 
     if first == "列表":
-        await _send_text(_format_list(library))
+        page = 1
+        if tail:
+            if not tail.isdecimal():
+                await deck_matcher.finish(text.TXT_DECK_LIST_PAGE_USAGE)
+            page = int(tail)
+            pages = _list_pages(library)
+            if page < 1 or page > pages:
+                await deck_matcher.finish(
+                    text.TXT_DECK_LIST_PAGE_RANGE.format(pages=pages)
+                )
+        await _send_text(_format_list(library, page))
     if first == "搜索":
         if not tail:
             await deck_matcher.finish(text.TXT_DECK_USAGE)
@@ -397,6 +454,10 @@ async def handle_draw(event: MessageEvent) -> None:
             deck = _resolve_deck(library, tail)
         except DeckNotFound:
             await deck_matcher.finish(_format_not_found(library, tail))
+        except DeckIndexOutOfRange as exc:
+            await deck_matcher.finish(
+                text.TXT_DECK_INDEX_RANGE.format(index=exc.index, total=exc.total)
+            )
         except DeckAmbiguous as exc:
             await deck_matcher.finish(_format_ambiguous(exc.name, exc.candidates))
         await _send_text(_format_detail(deck))
@@ -427,6 +488,10 @@ async def handle_draw(event: MessageEvent) -> None:
         await deck_matcher.finish(text.TXT_DECK_COUNT_RANGE)
     except DeckNotFound as exc:
         await deck_matcher.finish(_format_not_found(library, exc.name))
+    except DeckIndexOutOfRange as exc:
+        await deck_matcher.finish(
+            text.TXT_DECK_INDEX_RANGE.format(index=exc.index, total=exc.total)
+        )
     except DeckAmbiguous as exc:
         await deck_matcher.finish(_format_ambiguous(exc.name, exc.candidates))
 

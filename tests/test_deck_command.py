@@ -15,7 +15,7 @@ from fake_event import fake_group_message_event_v11, fake_private_message_event_
 
 from nonebot_plugin_dnddicer.commands import deck as deck_command
 from nonebot_plugin_dnddicer.commands.deck import deck_matcher, parse_draw_args
-from nonebot_plugin_dnddicer.deck.errors import DeckCountOutOfRange
+from nonebot_plugin_dnddicer.deck.errors import DeckCountOutOfRange, DeckIndexOutOfRange
 from nonebot_plugin_dnddicer.deck.library import DeckLibrary
 from nonebot_plugin_dnddicer.deck.runtime import (
     SequenceDeckRuntime,
@@ -58,6 +58,47 @@ async def library(tmp_path: Path) -> DeckLibrary:
         deck_command.set_library(original)
 
 
+@pytest.fixture
+async def big_library(tmp_path: Path) -> DeckLibrary:
+    """12 个同名前缀牌堆，用于分页与搜索截断。"""
+    custom = tmp_path / "big"
+    custom.mkdir()
+    (custom / "decks.json").write_text(
+        json.dumps(
+            {f"牌堆{index:02d}": ["x"] for index in range(1, 13)},
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    lib = DeckLibrary(custom_dir=custom)
+    await lib.reload()
+    original = deck_command._library
+    deck_command.set_library(lib)
+    try:
+        yield lib
+    finally:
+        deck_command.set_library(original)
+
+
+@pytest.fixture
+async def numeric_library(tmp_path: Path) -> DeckLibrary:
+    """牌堆名本身是数字时，精确名优先于列表编号。"""
+    custom = tmp_path / "numeric"
+    custom.mkdir()
+    (custom / "decks.json").write_text(
+        json.dumps({"1": ["数字一"]}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    lib = DeckLibrary(custom_dir=custom)
+    await lib.reload()
+    original = deck_command._library
+    deck_command.set_library(lib)
+    try:
+        yield lib
+    finally:
+        deck_command.set_library(original)
+
+
 def _event(text: str, *, private: bool = False):
     if private:
         return fake_private_message_event_v11(message=Message(text))
@@ -87,6 +128,21 @@ async def test_parse_draw_args(library: DeckLibrary):
     args = parse_draw_args(library, "甲 2 放回 不放回")
     assert (args.times, args.replace) == (2, False)
 
+    # 列表编号：按 visible() 排序 1-based
+    args = parse_draw_args(library, "1")
+    assert (args.deck.name, args.times) == ("乙", 1)
+    args = parse_draw_args(library, "1 2")
+    assert (args.deck.name, args.times) == ("乙", 2)
+    args = parse_draw_args(library, "2#1")
+    assert (args.deck.name, args.times) == ("乙", 2)
+    args = parse_draw_args(library, "4 放回")
+    assert (args.deck.name, args.replace) == ("甲", True)
+
+    with pytest.raises(DeckIndexOutOfRange):
+        parse_draw_args(library, "0")
+    with pytest.raises(DeckIndexOutOfRange):
+        parse_draw_args(library, "99")
+
     with pytest.raises(DeckCountOutOfRange):
         parse_draw_args(library, "甲 11")
     with pytest.raises(DeckCountOutOfRange):
@@ -99,21 +155,21 @@ async def test_list_search_detail_and_errors(app: App, library: DeckLibrary):
         app,
         _event(".draw"),
         "自定义牌堆（4）：\n"
-        "- 乙（2 条）\n"
-        "- 图（1 条）\n"
-        "- 图缺（1 条）\n"
-        "- 甲（3 条）\n"
-        "用 .draw 名称 [次数] 抽取；.draw 搜索 关键词 搜索。",
+        "- 1. 乙（2 条）\n"
+        "- 2. 图（1 条）\n"
+        "- 3. 图缺（1 条）\n"
+        "- 4. 甲（3 条）\n"
+        "用 .draw 编号 或 .draw 名称 [次数] 抽取；.draw 搜索 关键词 搜索。",
     )
     await _expect(
         app,
         _event(".牌堆"),
         "自定义牌堆（4）：\n"
-        "- 乙（2 条）\n"
-        "- 图（1 条）\n"
-        "- 图缺（1 条）\n"
-        "- 甲（3 条）\n"
-        "用 .draw 名称 [次数] 抽取；.draw 搜索 关键词 搜索。",
+        "- 1. 乙（2 条）\n"
+        "- 2. 图（1 条）\n"
+        "- 3. 图缺（1 条）\n"
+        "- 4. 甲（3 条）\n"
+        "用 .draw 编号 或 .draw 名称 [次数] 抽取；.draw 搜索 关键词 搜索。",
     )
     await _expect(
         app,
@@ -135,8 +191,110 @@ async def test_list_search_detail_and_errors(app: App, library: DeckLibrary):
         _event(".draw 甲 11"),
         "次数需要在 1 到 10 之间。",
     )
+    await _expect(
+        app,
+        _event(".draw 详情 1"),
+        "牌堆：乙\n条目：2 条\n用 .draw 乙 [次数] 抽取。",
+    )
+    await _expect(app, _event(".draw 列表 abc"), "用法：.draw 列表 [页码]")
+    await _expect(app, _event(".draw 列表 2"), "牌堆列表共 1 页。")
+    await _expect(app, _event(".draw 列表 0"), "牌堆列表共 1 页。")
     await _expect(app, _event(".draw 重载"), "仅骰主私聊可用。")
     await _expect(app, _event(".draw 重载", private=True), "仅骰主私聊可用。")
+
+
+@pytest.mark.asyncio
+async def test_draw_by_index(app: App, library: DeckLibrary):
+    token = set_runtime(SequenceDeckRuntime([1]))
+    try:
+        await _expect(app, _event(".draw 1"), "从【乙】抽到：\nb1")
+    finally:
+        reset_runtime(token)
+
+    token = set_runtime(SequenceDeckRuntime([1, 1]))
+    try:
+        await _expect(
+            app,
+            _event(".draw 1 2"),
+            "从【乙】抽了 2 条：\n1. b1\n2. b2",
+        )
+    finally:
+        reset_runtime(token)
+
+    token = set_runtime(SequenceDeckRuntime([1, 1, 1]))
+    try:
+        await _expect(
+            app,
+            _event(".draw 3#1"),
+            "从【乙】抽了 2 条：\n1. b1\n2. b2\n（牌堆已抽完，本次只抽到 2 条。）",
+        )
+    finally:
+        reset_runtime(token)
+
+    await _expect(
+        app,
+        _event(".draw 0"),
+        "没有第 0 个牌堆（共 4 个）。用 .draw 列表 查看编号。",
+    )
+    await _expect(
+        app,
+        _event(".draw 99"),
+        "没有第 99 个牌堆（共 4 个）。用 .draw 列表 查看编号。",
+    )
+
+
+@pytest.mark.asyncio
+async def test_numeric_deck_name_beats_index(app: App, numeric_library: DeckLibrary):
+    token = set_runtime(SequenceDeckRuntime([1]))
+    try:
+        await _expect(app, _event(".draw 1"), "从【1】抽到：\n数字一")
+    finally:
+        reset_runtime(token)
+
+
+@pytest.mark.asyncio
+async def test_list_pagination(app: App, big_library: DeckLibrary):
+    first_page = "\n".join(
+        f"- {index}. 牌堆{index:02d}（1 条）" for index in range(1, 11)
+    )
+    await _expect(
+        app,
+        _event(".draw"),
+        "自定义牌堆（12）：\n"
+        f"{first_page}\n"
+        "第 1/2 页，用 .draw 列表 页码 翻页。\n"
+        "用 .draw 编号 或 .draw 名称 [次数] 抽取；.draw 搜索 关键词 搜索。",
+    )
+    await _expect(
+        app,
+        _event(".draw 列表 2"),
+        "自定义牌堆（12）：\n"
+        "- 11. 牌堆11（1 条）\n"
+        "- 12. 牌堆12（1 条）\n"
+        "第 2/2 页，用 .draw 列表 页码 翻页。\n"
+        "用 .draw 编号 或 .draw 名称 [次数] 抽取；.draw 搜索 关键词 搜索。",
+    )
+    await _expect(app, _event(".draw 列表 3"), "牌堆列表共 2 页。")
+
+
+@pytest.mark.asyncio
+async def test_search_truncated_shows_total(app: App, big_library: DeckLibrary):
+    expected = (
+        "搜索「牌堆」（共 12 个，仅显示前 10 个）：\n"
+        + "\n".join(f"- 牌堆{index:02d}（1 条）" for index in range(1, 11))
+    )
+    await _expect(app, _event(".draw 搜索 牌堆"), expected)
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_candidates_truncated(app: App, big_library: DeckLibrary):
+    expected = (
+        "牌堆「牌堆」匹配到多个："
+        + "、".join(f"牌堆{index:02d}" for index in range(1, 11))
+        + "\n请写得更完整一些。\n"
+        "（共 12 个匹配，仅显示前 10 个；用 .draw 搜索 关键词 缩小范围。）"
+    )
+    await _expect(app, _event(".draw 牌堆"), expected)
 
 
 @pytest.mark.asyncio

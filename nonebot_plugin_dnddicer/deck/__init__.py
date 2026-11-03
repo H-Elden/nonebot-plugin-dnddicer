@@ -16,6 +16,7 @@ from .errors import (
     DeckCountOutOfRange,
     DeckEmpty,
     DeckError,
+    DeckIndexOutOfRange,
     DeckNotFound,
 )
 from .library import DeckLibrary, DeckResolution
@@ -58,6 +59,7 @@ __all__ = [
     "DeckFileError",
     "DeckImageError",
     "DeckImagePart",
+    "DeckIndexOutOfRange",
     "DeckItem",
     "DeckLibrary",
     "DeckMeta",

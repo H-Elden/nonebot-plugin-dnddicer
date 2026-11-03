@@ -32,6 +32,15 @@ class DeckNotFound(DeckError):
         super().__init__(f"找不到牌堆「{name}」")
 
 
+class DeckIndexOutOfRange(DeckError):
+    """纯数字编号超出可见牌堆范围。"""
+
+    def __init__(self, index: int, total: int):
+        self.index = index
+        self.total = total
+        super().__init__(f"牌堆编号 {index} 超出 1..{total}")
+
+
 class DeckAmbiguous(DeckError):
     """牌堆名匹配到多个候选。"""
 
@@ -46,5 +55,6 @@ __all__ = [
     "DeckCountOutOfRange",
     "DeckEmpty",
     "DeckError",
+    "DeckIndexOutOfRange",
     "DeckNotFound",
 ]

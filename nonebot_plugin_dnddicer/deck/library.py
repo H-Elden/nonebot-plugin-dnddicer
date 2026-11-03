@@ -121,8 +121,11 @@ class DeckLibrary:
             return DeckResolution(deck=matches[0])
         return DeckResolution(candidates=matches)
 
-    def search(self, keyword: str, limit: int = 10) -> list[Deck]:
-        """按名称搜索可见牌组；完全匹配排在最前。"""
+    def search(self, keyword: str, limit: Optional[int] = 10) -> list[Deck]:
+        """按名称搜索可见牌组；完全匹配排在最前。
+
+        ``limit`` 为 None 时返回全部命中，供命令层展示总数后自行截断。
+        """
         key = normalize_name(keyword)
         if not key:
             return []
@@ -137,6 +140,8 @@ class DeckLibrary:
                 deck.name.casefold(),
             )
         )
+        if limit is None:
+            return matches
         return matches[:limit]
 
     def suggestions(self, name: str, limit: int = 3) -> list[str]:
