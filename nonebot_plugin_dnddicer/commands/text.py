@@ -487,7 +487,7 @@ TXT_CAST_NO_SLOT = "没有可用的{level}环法术位（当前可用：{availab
 
 # ── 施法战斗：类型 / 攻击 / 豁免 / 伤害（2026-11-02 新增）──────────────────
 #: 旧卡或未配置战斗字段：只扣环位并引导补录
-TXT_CAST_NO_COMBAT = "「{spell}」尚未配置法术战斗数据，可用 .设置法术 补充类型/伤害。"
+TXT_CAST_NO_COMBAT = "「{spell}」尚未配置法术战斗数据，可用 .设置法术 补充类型/伤害/治疗。"
 #: 法术攻击检定行（.施法 攻击型；标题行已由 TXT_CAST_HEAD 输出）
 TXT_SPELL_ATTACK_LINE = "{spell}法术攻击检定：\n{result}"
 #: 法术攻击的过程说明（与武器攻击的「武器命中加值」区分）
@@ -502,6 +502,12 @@ TXT_CAST_SAVE_HEAD = "目标{ability}豁免 DC {dc}，成功{success}："
 TXT_CAST_UPCAST_MANUAL = "（升环效应：{upcast}，本期需手动处理）"
 #: 法术伤害（单段；{note} 可放升环提示）
 TXT_SPELL_DAMAGE = "{name}的「{spell}」造成了 {total} 点{type}伤害{note}：\n{result}"
+#: 法术治疗（有骰子成分；{note} 可放升环提示）
+TXT_SPELL_HEAL = "{name}的「{spell}」恢复了 {total} 点生命值{note}：\n{result}"
+#: 法术治疗（纯固定值，如医疗术 70，不输出 70=70）
+TXT_SPELL_HEAL_FLAT = "{name}的「{spell}」恢复了 {total} 点生命值{note}。"
+#: 治疗型法术被要求掷攻击或伤害
+TXT_SPELL_IS_HEAL = "「{spell}」是治疗法术，请使用 .施法 {spell}。"
 #: 法术多段伤害的标题行（逐段明细与合计复用武器的多段组装）
 TXT_SPELL_MULTI_DAMAGE_HEAD = "{name}的「{spell}」造成了 {total} 点{type}伤害{note}："
 #: 法术伤害命令（.X伤害 读法术段）的标题行

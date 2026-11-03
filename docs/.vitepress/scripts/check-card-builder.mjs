@@ -805,6 +805,100 @@ function main() {
     JSON.stringify(badShots.errors),
   )
 
+  const healState = baseState()
+  healState[K.NAME] = '测试'
+  healState[K.SPELL] = {
+    ability: '感知',
+    dc: '15',
+    attack: '+7',
+    dcManual: true,
+    attackManual: true,
+    list: [
+      {
+        name: '治疗真言',
+        level: '1',
+        prepared: true,
+        kind: '治疗',
+        attackBonus: '',
+        saveAbility: '',
+        saveDc: '',
+        saveSuccess: '',
+        damage: '',
+        heal: '2d4+4',
+        shots: '1',
+        upcast: '+2d4',
+        effect: '',
+        time: '1附赠动作',
+        range: '60尺',
+        concentration: false,
+        ritual: false,
+        material: false,
+        note: '',
+      },
+    ],
+  }
+  const healText = builder.contentFor(healState, K.SPELL)
+  checkEqual(
+    '治疗法术回写',
+    healText,
+    '施法属性:感知; 豁免DC:15; 法术攻击:+7; '
+      + '治疗真言:1*|类型:治疗|治疗:2d4+4|升环:+2d4|时间:1附赠动作|距离:60尺',
+  )
+  const healParsed = builder.parseCardText(
+    `${CARD_MODIFY_COMMAND} ${TEST_CARD_NAME} $法术$ ${healText}`,
+  )
+  check(
+    '治疗法术可导入',
+    healParsed.errors.length === 0,
+    JSON.stringify(healParsed.errors),
+  )
+  checkEqual('治疗法术治疗量', healParsed.state[K.SPELL].list[0].heal, '2d4+4')
+  const healPreview = buildPreviewView(builder, healState, { rulesVersion: '5r' }, '')
+  check(
+    '预览治疗摘要',
+    healPreview.spellGroups[0].spells[0].combat.includes('治疗 2d4+4'),
+    healPreview.spellGroups[0].spells[0].combat,
+  )
+
+  const flatHealText = '医疗术:6|类型:治疗|治疗:70|升环:+10'
+  const flatHealParsed = builder.parseCardText(
+    `${CARD_MODIFY_COMMAND} ${TEST_CARD_NAME} $法术$ ${flatHealText}`,
+  )
+  check(
+    '固定值治疗可导入',
+    flatHealParsed.errors.length === 0,
+    JSON.stringify(flatHealParsed.errors),
+  )
+  checkEqual(
+    '固定值治疗回写稳定',
+    builder.contentFor(flatHealParsed.state, K.SPELL),
+    flatHealText,
+  )
+
+  const badHeal = builder.parseCardText(
+    `${CARD_MODIFY_COMMAND} ${TEST_CARD_NAME} $法术$ 治疗真言:1|类型:治疗`,
+  )
+  check(
+    '治疗型缺治疗量被拦截',
+    badHeal.errors.some(
+      (error) => error.key === K.SPELL && error.message.includes('必须写 治疗'),
+    ),
+    JSON.stringify(badHeal.errors),
+  )
+  const badHealDamage = builder.parseCardText(
+    `${CARD_MODIFY_COMMAND} ${TEST_CARD_NAME} $法术$ `
+      + '治疗真言:1|类型:治疗|治疗:2d4+3|伤害:2d6火焰',
+  )
+  check(
+    '治疗型写伤害被拦截',
+    badHealDamage.errors.some(
+      (error) =>
+        error.key === K.SPELL
+        && error.message.includes('治疗型法术不能写'),
+    ),
+    JSON.stringify(badHealDamage.errors),
+  )
+
   const badCombat = () => {
     const next = baseState()
     next[K.SPELL] = {

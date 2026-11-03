@@ -643,6 +643,8 @@ async def resolve_spell_target(
             if not 1 <= cast_level <= SPELL_LEVEL_MAX:
                 await matcher.finish(text.TXT_CAST_LEVEL_RANGE)
 
+    if spell.kind == "治疗":
+        await matcher.finish(text.TXT_SPELL_IS_HEAL.format(spell=spell.name))
     if need_attack and spell.kind != "攻击":
         await matcher.finish(text.TXT_SPELL_NOT_ATTACK.format(spell=spell.name))
     return spell, cast_level

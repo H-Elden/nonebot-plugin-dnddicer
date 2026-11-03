@@ -37,6 +37,9 @@ function spellCombatSummary(row, globalAttack, globalDc) {
     parts.push(label)
   } else if (kind === '自动') {
     parts.push('自动命中')
+  } else if (kind === '治疗') {
+    const heal = trimOf(row.heal)
+    parts.push(heal ? `治疗 ${heal}` : '治疗')
   } else {
     parts.push(kind)
   }

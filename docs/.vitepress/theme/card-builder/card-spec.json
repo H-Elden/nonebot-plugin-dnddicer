@@ -325,6 +325,7 @@
     "spell_note_max_len": 40,
     "spell_attack_max_len": 12,
     "spell_damage_max_len": 40,
+    "spell_heal_max_len": 40,
     "spell_damage_part_max": 3,
     "spell_shots_max": 10,
     "spell_upcast_max_len": 30,
@@ -413,6 +414,7 @@
       "DC",
       "成功",
       "伤害",
+      "治疗",
       "多发",
       "升环",
       "效果",
@@ -442,6 +444,7 @@
       "+1d4+1",
       "+1发",
       "+1目标",
+      "+10",
       "无"
     ],
     "background_keys_5r": [

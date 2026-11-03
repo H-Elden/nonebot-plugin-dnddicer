@@ -799,6 +799,7 @@ export function createCardBuilder(spec) {
       saveDc: '',
       saveSuccess: '',
       damage: '',
+      heal: '',
       shots: '1',
       upcast: '',
       effect: '',
@@ -863,6 +864,18 @@ export function createCardBuilder(spec) {
       } else if (key === '伤害') {
         parseSpellDamage(value)
         detail.damage = value.replace(/\s+/g, '')
+      } else if (key === '治疗') {
+        const expr = value.replace(/\s+/g, '')
+        if (!expr) fail('法术治疗量不能为空（示例：2d4+3）')
+        if (!DAMAGE_ITEM_RE.test(expr)) {
+          fail(
+            `法术治疗量无效: ${value}（仅支持骰子与常数的加减组合，如 2d4+3 或 70）`,
+          )
+        }
+        if (charLength(expr) > (limits.spell_heal_max_len || 40)) {
+          fail(`法术治疗量过长（≤${limits.spell_heal_max_len || 40} 字）: ${expr}`)
+        }
+        detail.heal = expr
       } else if (key === '多发') {
         if (
           !/^\d+$/.test(value) ||
@@ -980,6 +993,8 @@ export function createCardBuilder(spec) {
       text,
     )
     if (matched) return { expr: matched[1], type: (matched[2] || '').trim() }
+    const flat = /^\+(\d+)$/.exec(text)
+    if (flat) return { expr: flat[1], type: '' }
     return null
   }
 
@@ -991,6 +1006,7 @@ export function createCardBuilder(spec) {
       'saveDc',
       'saveSuccess',
       'damage',
+      'heal',
       'upcast',
       'effect',
     ]
@@ -1001,7 +1017,24 @@ export function createCardBuilder(spec) {
       }
       return
     }
-    if (kind === '攻击') {
+    if (kind !== '治疗' && trimOf(detail.heal)) {
+      fail(`类型为${kind}的法术不能写 治疗`)
+    }
+    if (kind === '治疗') {
+      if (!trimOf(detail.heal)) {
+        fail('治疗型法术必须写 治疗:表达式（如 2d4+3，固定值写 70）')
+      }
+      if (
+        trimOf(detail.attackBonus) ||
+        trimOf(detail.saveAbility) ||
+        trimOf(detail.saveDc) ||
+        trimOf(detail.saveSuccess) ||
+        trimOf(detail.damage) ||
+        Number(trimOf(detail.shots) || 1) > 1
+      ) {
+        fail('治疗型法术不能写 攻击 / 豁免 / DC / 成功 / 伤害 / 多发')
+      }
+    } else if (kind === '攻击') {
       if (
         trimOf(detail.saveAbility) ||
         trimOf(detail.saveDc) ||
@@ -1064,6 +1097,9 @@ export function createCardBuilder(spec) {
         if (parsed) {
           const upType = normalizeDamageTypeName(parsed.type)
           if (parsed.type && !upType) fail(`升环伤害类型无效: ${parsed.type}`)
+          if (kind === '治疗' && parsed.type) {
+            fail('治疗型升环不能写伤害类型')
+          }
           const damageText = trimOf(detail.damage)
           const parts = damageText ? parseSpellDamage(damageText) : []
           if (parts.length > 1 && !upType) {
@@ -2168,6 +2204,7 @@ export function createCardBuilder(spec) {
     const saveDc = trimOf(spell.saveDc)
     const saveSuccess = trimOf(spell.saveSuccess)
     const damage = trimOf(spell.damage)
+    const heal = trimOf(spell.heal)
     const shots = trimOf(spell.shots)
     const upcast = trimOf(spell.upcast)
     const effect = trimOf(spell.effect)
@@ -2179,6 +2216,7 @@ export function createCardBuilder(spec) {
     if (saveDc) parts.push(`DC:${normalizeIntText(saveDc)}`)
     if (saveSuccess) parts.push(`成功:${saveSuccess}`)
     if (damage) parts.push(`伤害:${damage.replace(/\s+/g, '')}`)
+    if (heal) parts.push(`治疗:${heal.replace(/\s+/g, '')}`)
     if (Number(shots) > 1) parts.push(`多发:${normalizeIntText(shots)}`)
     if (upcast) parts.push(`升环:${upcast}`)
     if (effect) parts.push(`效果:${effect}`)

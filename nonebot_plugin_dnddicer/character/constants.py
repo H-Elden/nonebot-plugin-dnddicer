@@ -252,7 +252,7 @@ FEATURE_TEXT_MAX_LEN = 400
 #: ``$法术$`` 的保留头键（施法属性之外的两项）
 SPELL_DC_KEY = "豁免DC"
 SPELL_ATTACK_KEY = "法术攻击"
-#: ``$法术$`` 条目详情的键（顺序即回写顺序；前九项为 2026-11-02 新增的战斗字段）
+#: ``$法术$`` 条目详情的键（顺序即回写顺序；前十项为战斗字段）
 SPELL_DETAIL_KEYS = (
     "类型",
     "攻击",
@@ -260,6 +260,7 @@ SPELL_DETAIL_KEYS = (
     "DC",
     "成功",
     "伤害",
+    "治疗",
     "多发",
     "升环",
     "效果",
@@ -295,6 +296,7 @@ SPELL_RANGE_MAX_LEN = 12
 SPELL_NOTE_MAX_LEN = 40
 SPELL_ATTACK_MAX_LEN = 12
 SPELL_DAMAGE_MAX_LEN = 40
+SPELL_HEAL_MAX_LEN = 40
 SPELL_DAMAGE_PART_MAX = 3
 SPELL_UPCAST_MAX_LEN = 30
 SPELL_EFFECT_MAX_LEN = 60

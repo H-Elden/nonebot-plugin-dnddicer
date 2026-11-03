@@ -119,7 +119,7 @@
 
       <div class="cb-subhead">
         战斗数据
-        <HintDot text="选择类型后填写；不填则只记录法术，.施法 会提示补录。攻击加值与豁免 DC 留空时继承上方的全局值；伤害写表达式加类型，多段用 + 连接。" />
+        <HintDot text="选择类型后填写；不填则只记录法术，.施法 会提示补录。攻击加值与豁免 DC 留空时继承上方的全局值；伤害写表达式加类型，多段用 + 连接；治疗写完整表达式（2d4+3 或 70），不自动加施法属性调整值，升环可写 +2d4 或 +10。" />
       </div>
       <div class="cb-grid cb-grid--3">
         <label class="cb-grid__cell">
@@ -187,6 +187,13 @@
         >
           <span class="cb-grid__label">伤害</span>
           <input v-model="item.damage" class="cb-input" placeholder="8d6火焰" />
+        </label>
+        <label
+          v-if="item.kind === '治疗'"
+          class="cb-grid__cell cb-grid__cell--span2"
+        >
+          <span class="cb-grid__label">治疗量</span>
+          <input v-model="item.heal" class="cb-input" placeholder="2d4+3" />
         </label>
         <label v-if="item.kind" class="cb-grid__cell">
           <span class="cb-grid__label">升环</span>

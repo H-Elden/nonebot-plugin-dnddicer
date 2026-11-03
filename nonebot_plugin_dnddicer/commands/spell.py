@@ -49,8 +49,8 @@ spell_matcher = base.on_dnd_command("法术", _HELP_SPELL, doc="guide/resources"
 _HELP_SET_SPELL = (
     ".设置法术 名称:环阶[*] （多项用 ; 分隔）\n"
     "  可写 施法属性:智力; 豁免DC:15; 法术攻击:+8\n"
-    "  战斗字段：类型:攻击/豁免/自动/辅助\n"
-    "  伤害:8d6火焰; 多发:3; 升环:+1d6\n"
+    "  战斗字段：类型:攻击/豁免/自动/辅助/治疗/特殊\n"
+    "  伤害:8d6火焰; 治疗:2d4+3; 多发:3; 升环:+1d6\n"
     "  豁免型写 豁免:敏捷; 成功:半伤/无伤；多段伤害用 + 连接\n"
     "  示例：.设置法术 火球术:3*|类型:豁免|豁免:敏捷|伤害:8d6火焰"
 )
@@ -299,6 +299,7 @@ async def handle_set_spell(event: MessageEvent) -> None:
                 existing.save_dc = spell.save_dc
                 existing.save_success = spell.save_success
                 existing.damage_parts = spell.damage_parts
+                existing.heal_expr = spell.heal_expr
                 existing.upcast = spell.upcast
                 existing.effect = spell.effect
         else:
@@ -647,10 +648,10 @@ async def handle_spell_slots(bot: Bot, event: MessageEvent) -> None:
 
 _HELP_CAST = (
     ".施法 法术名[N环|+N环] / 环阶（.cast）\n"
-    "  环阶一律来自卡面；升环写 火球术4环 或 火球术+1环\n"
-    "  .施法 3 直接消耗 1 个 3 环位；戏法不耗位\n"
-    "  仪式施法不消耗法术位，不需要使用本命令\n"
-    "  未准备的法术照常施放，只附一句提醒\n"
+    "  环阶来自卡面；升环写 火球术4环 或 +1环\n"
+    "  .施法 3 用一个 3 环位；戏法不耗位\n"
+    "  攻击掷攻击、豁免/自动掷伤害、治疗掷治疗量\n"
+    "  仪式施法不耗位；未准备照常施放，只附提醒\n"
     "  示例：.施法 火球术 ｜ .施法 魔法飞弹2 ｜ .施法 2"
 )
 cast_matcher = base.on_dnd_command(
@@ -735,6 +736,7 @@ class _CastCombat(NamedTuple):
     save_success: str
     effect: str
     shots: int = 1
+    heal_expression: str = ""
 
 
 def _build_cast_combat(
@@ -769,6 +771,11 @@ def _build_cast_combat(
         return _CastCombat(
             "自动", "", parts, note, "", "", "", spell.effect,
             spell_combat.resolve_spell_shots(spell, cast_level),
+        )
+    if spell.kind == "治疗":
+        expr, note = spell_combat.build_heal_expression(spell, cast_level)
+        return _CastCombat(
+            "治疗", "", [], note, "", "", "", spell.effect, 1, expr
         )
     return _CastCombat(spell.kind, "", [], "", "", "", "", spell.effect)
 
@@ -863,6 +870,32 @@ def _append_cast_combat(
     """执行战斗计划并把结果追加到回复行。"""
     if combat is None:
         lines.append(text.TXT_CAST_NO_COMBAT.format(spell=spell.name))
+        return
+
+    if combat.kind == "治疗":
+        result = spell_combat.roll_heal(combat.heal_expression)
+        total = result.get_val()
+        if re.fullmatch(r"\d+", combat.heal_expression):
+            lines.append(
+                text.TXT_SPELL_HEAL_FLAT.format(
+                    name=display_name,
+                    spell=spell.name,
+                    total=total,
+                    note=combat.upcast_note,
+                )
+            )
+        else:
+            lines.append(
+                text.TXT_SPELL_HEAL.format(
+                    name=display_name,
+                    spell=spell.name,
+                    total=total,
+                    note=combat.upcast_note,
+                    result=result.get_complete_result(),
+                )
+            )
+        if combat.effect:
+            lines.append(combat.effect)
         return
 
     if combat.kind == "攻击":

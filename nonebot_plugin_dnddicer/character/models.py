@@ -705,8 +705,10 @@ class SpellEntry(BaseModel):
     ``kind`` 是施法方式（攻击/豁免/自动/辅助/治疗/特殊）；
     ``attack_bonus`` 覆盖头键 ``法术攻击``；``save_ability`` / ``save_dc`` /
     ``save_success`` 只对豁免型有意义；``damage_parts`` 支持多段多类型；
-    ``upcast`` 记录升环效应（``+1d6`` 自动加骰，``+1束`` 等只展示）；
-    ``effect`` 是辅助/治疗/特殊法术的效果文本，只展示不掷骰。
+    ``heal_expr`` 是治疗型的治疗量表达式（2026-11-03 新增，写完整表达式）；
+    ``upcast`` 记录升环效应（``+1d6`` 自动加骰，``+10`` 自动加固定值，
+    ``+1发`` 按加发处理，其余只展示）；``effect`` 是辅助/治疗/特殊法术的
+    效果文本，只展示不掷骰。
     """
 
     name: str
@@ -718,6 +720,7 @@ class SpellEntry(BaseModel):
     save_dc: str = ""              # 覆盖头键「豁免DC」
     save_success: str = ""         # 半伤 / 无伤
     damage_parts: List[SpellDamagePart] = Field(default_factory=list)
+    heal_expr: str = ""            # 治疗量表达式（完整表达式，允许纯数字）
     shots: int = 1                 # 多发：逐发攻击 / 逐发伤害（2~10）
     upcast: str = ""               # 升环效应（+1d6 / +1发 / 自由文本）
     effect: str = ""               # 辅助效果文本
@@ -745,6 +748,8 @@ class SpellEntry(BaseModel):
             parts.append(
                 "伤害:" + "+".join(part.get_info() for part in self.damage_parts)
             )
+        if self.heal_expr:
+            parts.append(f"治疗:{self.heal_expr}")
         if self.shots > 1:
             parts.append(f"多发:{self.shots}")
         if self.upcast:
@@ -798,7 +803,10 @@ class SpellEntry(BaseModel):
         elif self.kind == "辅助":
             parts.append("辅助")
         elif self.kind == "治疗":
-            parts.append("治疗")
+            label = "治疗"
+            if self.heal_expr:
+                label += f" {self.heal_expr}"
+            parts.append(label)
         else:
             parts.append(self.kind)
         if self.damage_parts:

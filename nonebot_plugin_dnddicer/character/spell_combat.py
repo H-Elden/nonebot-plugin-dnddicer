@@ -193,6 +193,46 @@ def format_damage_parts(parts: Sequence[SpellDamagePart]) -> str:
     )
 
 
+def build_heal_expression(
+    spell: SpellEntry, cast_level: int
+) -> Tuple[str, str]:
+    """按实际施法环阶生成治疗表达式 → ``(表达式, 升环手动提示)``。
+
+    加骰（``+2d4``）与固定值（``+10``）都按 ``cast_level - spell.level``
+    的次数叠加；``+N发`` 在解析阶段已拒绝，这里防御性跳过；自由文本返回提示。
+    """
+    expr = spell.heal_expr.strip()
+    if not expr:
+        raise SpellCombatError(
+            f"「{spell.name}」缺少治疗量：请在法术条目里写 治疗:2d4+3。"
+        )
+    note = ""
+    delta = max(0, cast_level - spell.level)
+    if delta and spell.upcast and spell.upcast != "无":
+        if split_spell_shots_upcast(spell.upcast) is None:
+            dice_upcast, upcast_text = split_spell_upcast(spell.upcast)
+            if dice_upcast is None:
+                note = f"（升环效应：{upcast_text}，本期需手动处理）"
+            else:
+                up_expr, up_type_raw = dice_upcast
+                if up_type_raw:
+                    note = f"（升环效应：{spell.upcast}，本期需手动处理）"
+                else:
+                    scaled = scale_damage_expression(up_expr, delta)
+                    expr += scaled if scaled.startswith("-") else f"+{scaled}"
+    return combine_damage_terms(expr), note
+
+
+def roll_heal(expression: str) -> RollResult:
+    """掷一条治疗表达式，失败转成用户可读错误。"""
+    try:
+        return exec_roll_exp_unified(expression)
+    except RollDiceError as exc:
+        raise SpellCombatError(
+            f"法术治疗掷骰失败: {expression}（{exc.info}）"
+        ) from exc
+
+
 def format_type_summary(parts: Sequence[SpellDamagePart]) -> str:
     """伤害类型汇总（去重、保持出现顺序）；没有类型返回空串。"""
     types: List[str] = []

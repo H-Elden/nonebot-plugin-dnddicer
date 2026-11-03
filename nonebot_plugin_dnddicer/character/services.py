@@ -113,8 +113,10 @@ from .constants import (
     SPELL_DC_MAX,
     SPELL_DETAIL_KEYS,
     SPELL_EFFECT_MAX_LEN,
+    SPELL_HEAL_MAX_LEN,
     SPELL_KIND_ATTACK,
     SPELL_KIND_AUTO,
+    SPELL_KIND_HEAL,
     SPELL_KIND_LIST,
     SPELL_KIND_SAVE,
     SPELL_KIND_SUPPORT,
@@ -599,19 +601,26 @@ def _parse_spell_flag(value: str, label: str) -> bool:
 SPELL_UPCAST_DICE_RE = re.compile(
     r"^\+((?:\d*[dD]\d+)(?:[+-](?:\d*[dD]\d+|\d+))*)\s*([^\d+\-]*)$"
 )
+#: 升环固定值：整串 `+N`（如医疗术每环 +10）。只认纯数字，避免与
+#: `+1目标` / `+1发` 这类自由文本或加发写法混淆。
+SPELL_UPCAST_FLAT_RE = re.compile(r"^\+(\d+)$")
 
 
 def split_spell_upcast(value: str) -> Tuple[Optional[Tuple[str, str]], str]:
-    """拆升环写法 → ``((加骰表达式, 类型原文), "")`` 或 ``(None, 原文)``。
+    """拆升环写法 → ``((加骰或固定值表达式, 类型原文), "")`` 或 ``(None, 原文)``。
 
-    只有"含骰子的加法表达式"才返回加骰形态；``+N发`` / ``+1目标``
-    与自由文本都走第二项，由调用方按"加发、只展示或手动处理"处理。类型原文由
-    调用方用 ``normalize_damage_type`` 归一后再比较。
+    含骰子的加法表达式（``+2d4`` / ``+1d6+1``）与整串固定值（``+10``）返回
+    第一项；``+N发`` / ``+1目标`` 与自由文本都走第二项，由调用方按
+    "加发、只展示或手动处理"处理。类型原文由调用方用 ``normalize_damage_type``
+    归一后再比较。
     """
     text = value.strip().replace(" ", "")
     matched = SPELL_UPCAST_DICE_RE.match(text)
     if matched:
         return (matched.group(1), matched.group(2).strip()), ""
+    flat = SPELL_UPCAST_FLAT_RE.match(text)
+    if flat:
+        return (flat.group(1), ""), ""
     return None, value.strip()
 
 
@@ -630,6 +639,7 @@ def _validate_spell_combat(result: Dict[str, object], level: int) -> None:
         "save_dc",
         "save_success",
         "damage_parts",
+        "heal_expr",
         "upcast",
         "effect",
     )
@@ -640,7 +650,29 @@ def _validate_spell_combat(result: Dict[str, object], level: int) -> None:
             )
         return
 
-    if kind == SPELL_KIND_ATTACK:
+    if kind != SPELL_KIND_HEAL and "heal_expr" in result:
+        raise AssertionError(f"类型为{kind}的法术不能写 治疗")
+
+    if kind == SPELL_KIND_HEAL:
+        if "heal_expr" not in result:
+            raise AssertionError(
+                "治疗型法术必须写 治疗:表达式（如 2d4+3，固定值写 70）"
+            )
+        if any(
+            key in result
+            for key in (
+                "attack_bonus",
+                "save_ability",
+                "save_dc",
+                "save_success",
+                "damage_parts",
+                "shots",
+            )
+        ):
+            raise AssertionError(
+                "治疗型法术不能写 攻击 / 豁免 / DC / 成功 / 伤害 / 多发"
+            )
+    elif kind == SPELL_KIND_ATTACK:
         if any(key in result for key in ("save_ability", "save_dc", "save_success")):
             raise AssertionError("类型为攻击的法术不能写 豁免 / DC / 成功")
     elif kind == SPELL_KIND_SAVE:
@@ -692,6 +724,8 @@ def _validate_spell_combat(result: Dict[str, object], level: int) -> None:
                 up_type = normalize_damage_type(up_type_raw)
                 if up_type_raw and not up_type:
                     raise AssertionError(f"升环伤害类型无效: {up_type_raw}")
+                if kind == SPELL_KIND_HEAL and up_type_raw:
+                    raise AssertionError("治疗型升环不能写伤害类型")
                 parts = result.get("damage_parts") or []
                 if len(parts) > 1 and not up_type:
                     raise AssertionError(
@@ -767,6 +801,20 @@ def _parse_spell_details(text: str, level: int = -1) -> Dict[str, object]:
             result["save_success"] = value
         elif key == "伤害":
             result["damage_parts"] = parse_spell_damage(value)
+        elif key == "治疗":
+            expr = value.replace(" ", "")
+            if not expr:
+                raise AssertionError("法术治疗量不能为空（示例：2d4+3）")
+            if len(expr) > SPELL_HEAL_MAX_LEN:
+                raise AssertionError(
+                    f"法术治疗量过长（≤{SPELL_HEAL_MAX_LEN} 字）: {expr}"
+                )
+            if _WEAPON_DAMAGE_ITEM_RE.match(expr) is None:
+                raise AssertionError(
+                    f"法术治疗量无效: {value}"
+                    "（仅支持骰子与常数的加减组合，如 2d4+3 或 70）"
+                )
+            result["heal_expr"] = expr
         elif key == "多发":
             if not value.isdigit() or not 2 <= int(value) <= SPELL_SHOTS_MAX:
                 raise AssertionError(
