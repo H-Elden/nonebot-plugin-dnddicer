@@ -84,7 +84,7 @@ jobs:
           cache-dependency-path: package-lock.json
       - name: 安装文档站依赖
         run: npm ci
-      # docs:build 自带「从 CHANGELOG.md 生成《更新日志》页」一步，站点更新日志随仓库同步
+      # 《更新日志》页在发版批次由 npm run docs:sync-changelog 生成并提交，构建直接使用仓库里的生成结果
       - name: 构建文档站
         run: npm run docs:build
       - uses: actions/configure-pages@v5
