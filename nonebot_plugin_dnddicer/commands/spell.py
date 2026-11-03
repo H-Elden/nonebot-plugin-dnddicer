@@ -44,7 +44,7 @@ _HELP_SPELL = (
     "  准备/取消切换标记；戏法无需准备\n"
     "  录入用 .设置法术 名称:环阶"
 )
-spell_matcher = base.on_dnd_command("法术", _HELP_SPELL, doc="guide/resources")
+spell_matcher = base.on_dnd_command("法术", _HELP_SPELL, doc="guide/spellcasting")
 
 _HELP_SET_SPELL = (
     ".设置法术 名称:环阶[*] （多项用 ; 分隔）\n"
@@ -55,7 +55,7 @@ _HELP_SET_SPELL = (
     "  示例：.设置法术 火球术:3*|类型:豁免|豁免:敏捷|伤害:8d6火焰"
 )
 set_spell_matcher = base.on_dnd_command(
-    "设置法术", _HELP_SET_SPELL, doc="guide/resources"
+    "设置法术", _HELP_SET_SPELL, doc="guide/spellcasting"
 )
 
 _HELP_DEL_SPELL = (
@@ -64,7 +64,7 @@ _HELP_DEL_SPELL = (
     "  未找到或名称不明确时逐项回报"
 )
 del_spell_matcher = base.on_dnd_command(
-    "删除法术", _HELP_DEL_SPELL, doc="guide/resources"
+    "删除法术", _HELP_DEL_SPELL, doc="guide/spellcasting"
 )
 
 _HELP_SPELL_SLOTS = (
@@ -74,7 +74,7 @@ _HELP_SPELL_SLOTS = (
     "  契约 指契约魔法；reset 恢复全部（长休规则）"
 )
 spell_slots_matcher = base.on_dnd_command(
-    "法术位", _HELP_SPELL_SLOTS, aliases=("ss",), doc="guide/resources"
+    "法术位", _HELP_SPELL_SLOTS, aliases=("ss",), doc="guide/spellcasting"
 )
 
 #: 法术位目标 + 增减：``1 -1`` / ``契约 +1``（N 缺省 1）
@@ -655,7 +655,7 @@ _HELP_CAST = (
     "  示例：.施法 火球术 ｜ .施法 魔法飞弹2 ｜ .施法 2"
 )
 cast_matcher = base.on_dnd_command(
-    "施法", _HELP_CAST, aliases=("cast",), doc="guide/resources"
+    "施法", _HELP_CAST, aliases=("cast",), doc="guide/spellcasting"
 )
 
 #: 全角数字与加号 → 半角（环阶写法容错）

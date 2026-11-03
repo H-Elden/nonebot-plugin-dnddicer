@@ -3,8 +3,8 @@
 入口（2026-09-28 重做，版式表见 ``commands/help_layout.py``）：
 
 - 无参数：总览（版本 + 简介 + 开关骰娘 + 四个入口）；
-- ``.help 命令``：8 组目录（``列表`` / ``指令`` / ``菜单`` / ``list`` 为静默别名）；
-- ``.help 组名``：该组命令清单（掷骰 / 角色 / 武器 / 资源 / 生命 / 先攻 / 查询 / 管理；
+- ``.help 命令``：10 组目录（``列表`` / ``指令`` / ``菜单`` / ``list`` 为静默别名）；
+- ``.help 组名``：该组命令清单（掷骰 / 角色 / 武器 / 法术 / 资源 / 生命 / 先攻 / 查询 / 牌堆 / 管理；
   另接受少量静默别名，如 ``血量`` → 生命）；
 - ``.help 命令名 / 别名``：命令详情；
 - ``.help 写法``：只进帮助的条目（检定点 / 豁免 / 先攻检定 / 武器命令族），
@@ -13,9 +13,10 @@
 - ``.help 关于`` / ``.help 骰主`` / ``.help 联系``：插件信息 / 骰主指令 / 联系方式；
 - 未命中：一行提示 + 指向 ``.help 命令``。
 
-匹配顺序：专用入口 → 组名（含别名）→ 命令名（含别名，大小写不敏感）→
+匹配顺序：专用入口 → ``.help 命令名 详情`` → 组名（含别名）→ 命令名（含别名，大小写不敏感）→
 只进帮助的条目（先精确、再取最长包含）→ 未命中。组名优先于命令名，
-因此 ``.help 查询`` 给「查询」组清单、``.help q`` 才是 ``.查询`` 命令详情。
+因此 ``.help 查询`` 给「查询」组清单、``.help q`` 才是 ``.查询`` 命令详情；
+组名与命令同名时（如 ``.法术``）用 ``.help 法术 详情`` 查看命令详情。
 
 回复末尾的文档站链接行由 ``.help 链接 on/off`` 控制：**群聊默认关、私聊默认开**，
 按群 / 私聊分别持久（见 ``data/help_settings.py``）；链接地址取**条目对应的文档页
@@ -178,23 +179,29 @@ async def handle_help(event: MessageEvent) -> None:
     if first == help_layout.CONTACT_KEYWORD:
         await help_matcher.finish(_render_contact())
 
-    # ③ 组名 / 组别名：该组命令清单
+    # ③ 命令详情：``.help 法术 详情``（组名与命令名同名时绕过组清单）
+    if action == "详情":
+        detail, doc = _find_command(first)
+        if detail:
+            await help_matcher.finish(await _with_doc_line(detail, event, doc))
+
+    # ④ 组名 / 组别名：该组命令清单
     group = help_layout.find_group(keyword)
     if group is not None:
         name, lines, doc = group
         await help_matcher.finish(await _with_doc_line("\n".join(lines), event, doc))
 
-    # ④ 命令名 / 别名：命令详情
+    # ⑤ 命令名 / 别名：命令详情
     detail, doc = _find_command(keyword)
     if detail:
         await help_matcher.finish(await _with_doc_line(detail, event, doc))
 
-    # ⑤ 只进帮助的条目（检定点 / 豁免 / 先攻检定 / 武器命令族 / .master）
+    # ⑥ 只进帮助的条目（检定点 / 豁免 / 先攻检定 / 武器命令族 / .master）
     entry = help_layout.find_help_only(keyword)
     if entry is not None:
         await help_matcher.finish(await _with_doc_line(entry.text, event, entry.doc))
 
-    # ⑥ 未命中
+    # ⑦ 未命中
     await help_matcher.finish(
         "\n".join(
             (

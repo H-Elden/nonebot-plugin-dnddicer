@@ -33,7 +33,7 @@ _DETAIL_LINE_LIMIT = 40
 _DETAIL_TOTAL_LIMIT = 6
 
 #: 组清单里不是「命令写法」的行（标题、前置提示、后缀说明）
-_NON_COMMAND_PREFIXES = ("【", "⚠️", "后缀支持")
+_NON_COMMAND_PREFIXES = ("【", "⚠️", "后缀支持", "提示：")
 
 
 def _detail_texts() -> dict[str, str]:
@@ -134,7 +134,7 @@ def test_entry_limits():
         version=__version__, repo="https://example.com", group="1"
     )
     assert len(landing.splitlines()) <= 9
-    assert len(catalog.splitlines()) <= 10
+    assert len(catalog.splitlines()) <= 11
     assert len(link.splitlines()) <= 7
     assert len(about.splitlines()) <= 8
     assert len(cmd_text.TXT_HELP_MASTER.splitlines()) <= 4

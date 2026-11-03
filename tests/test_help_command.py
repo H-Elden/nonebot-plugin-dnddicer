@@ -69,7 +69,8 @@ _CATALOG = (
     ".help 掷骰 查看掷骰相关命令\n"
     ".help 角色 查看角色卡命令\n"
     ".help 武器 查看武器使用命令\n"
-    ".help 资源 查看限定资源与法术命令\n"
+    ".help 法术 查看法术清单与施法命令\n"
+    ".help 资源 查看限定资源命令\n"
     ".help 生命 查看生命值命令\n"
     ".help 先攻 查看先攻/战斗命令\n"
     ".help 查询 查看规则查询命令\n"
@@ -90,15 +91,22 @@ _LIFE_GROUP = (
     ".npc 持久/临时 名称　#NPC血量跨战斗保持开关"
 )
 
-_RESOURCE_GROUP = (
-    "【能力与法术命令】\n"
+_SPELL_GROUP = (
+    "【法术命令】\n"
+    "⚠️以下命令需要先在本群绑定角色卡：\n"
+    ".法术 [准备|取消]　#法术清单与准备\n"
+    ".设置法术 名称:环阶　#记录法术\n"
+    ".删除法术 名称　#删除卡上法术\n"
+    ".法术位 / .ss [目标]　#查看与调整法术位\n"
+    ".施法 名称[N环|+N环]　#消耗法术位\n"
+    "提示：.法术 详情用 .help 法术 详情 查看"
+)
+_ABILITY_GROUP = (
+    "【限定资源命令】\n"
     "⚠️以下命令需要先在本群绑定角色卡：\n"
     ".能力 [目标] [名称]　#限定资源次数与恢复\n"
     ".设置能力 名称:…　#记录或覆盖限定资源\n"
-    ".法术 [准备|取消]　#法术清单与准备\n"
-    ".设置法术 名称:环阶　#记录法术\n"
-    ".法术位 / .ss [目标]　#查看与调整法术位\n"
-    ".施法 名称[N环|+N环]　#消耗法术位"
+    ".删除能力 名称　#删除卡上限定资源"
 )
 
 _QUERY_GROUP = (
@@ -206,9 +214,26 @@ async def test_group_listing(app: App, keyword: str):
 
 
 @pytest.mark.asyncio
+async def test_spell_group_listing(app: App):
+    """.help 法术：法术命令组（组名优先于 .法术 命令详情）。"""
+    await _expect_group(app, ".help 法术", _SPELL_GROUP)
+
+
+@pytest.mark.asyncio
+async def test_spell_command_detail_bypass_group(app: App):
+    """.help 法术 详情：组名与命令同名时，仍可查看 .法术 命令详情。"""
+    from nonebot_plugin_dnddicer.commands import base
+
+    detail = base.get_registered_commands(include_hidden=True)["法术"]
+    await _expect_private(
+        app, ".help 法术 详情", f"{detail}\n{_doc_line('guide/spellcasting')}"
+    )
+
+
+@pytest.mark.asyncio
 async def test_resource_group_listing(app: App):
-    """.help 资源：能力与法术命令组（2026-10-20 批②新增）。"""
-    await _expect_group(app, ".help 资源", _RESOURCE_GROUP)
+    """.help 资源：限定资源命令组（2026-11-03 拆分后只保留能力命令）。"""
+    await _expect_group(app, ".help 资源", _ABILITY_GROUP)
 
 
 @pytest.mark.asyncio
@@ -268,7 +293,13 @@ def _reply_body(keyword: str) -> str:
         ("dnd", "guide/character-card"),
         ("物品", "guide/character-card"),
         ("状态", "guide/hp"),
+        ("法术", "guide/spellcasting"),
+        ("资源", "guide/resources"),
         ("长休", "guide/resources"),
+        ("法术", "guide/spellcasting"),
+        ("设置法术", "guide/spellcasting"),
+        ("法术位", "guide/spellcasting"),
+        ("施法", "guide/spellcasting"),
         ("npc", "guide/hp"),
         ("ri", "guide/initiative"),
         ("br", "guide/battle"),
