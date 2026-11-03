@@ -302,8 +302,8 @@ async def test_set_spell_heal_overrides(app: App):
         (
             "已设置法术：治疗真言（当前共 3 项）\n"
             "1. 治疗真言 1环（已准备）\n"
-            "2. 医疗术 6环（已准备）\n"
-            "3. 群体治愈真言 3环（已准备）"
+            "2. 群体治愈真言 3环（已准备）\n"
+            "3. 医疗术 6环（已准备）"
         ),
     )
     token = set_runtime(SequenceRuntime([5, 6]))

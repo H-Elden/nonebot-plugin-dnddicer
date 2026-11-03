@@ -227,9 +227,9 @@ async def test_spell_list_prepare_and_cancel(app: App):
     await _expect(
         app, spell_matcher, _event(".法术"),
         "当前法术（3 项，施法属性：智力）：\n"
-        "1. 火球术 3环（已准备）\n"
-        "2. 闪电束 3环\n"
-        "3. 火焰箭 戏法\n"
+        "1. 火焰箭 戏法\n"
+        "2. 火球术 3环（已准备）\n"
+        "3. 闪电束 3环\n"
         "用法：.法术 准备/取消 名称；记录用 .设置法术 名称:环阶",
     )
     await _expect(
@@ -308,19 +308,19 @@ async def test_set_and_delete_spell(app: App):
     await _expect(
         app, set_spell_matcher, _event(".设置法术 魔法飞弹:1*"),
         "已设置法术：魔法飞弹（当前共 4 项）\n"
-        "1. 火球术 3环（已准备）\n"
-        "2. 闪电束 3环\n"
-        "3. 火焰箭 戏法\n"
-        "4. 魔法飞弹 1环（已准备）",
+        "1. 火焰箭 戏法\n"
+        "2. 魔法飞弹 1环（已准备）\n"
+        "3. 火球术 3环（已准备）\n"
+        "4. 闪电束 3环",
     )
     # 普通设置不抹掉已准备标记；改环阶生效
     await _expect(
         app, set_spell_matcher, _event(".设置法术 火球术:4"),
         "已设置法术：火球术（当前共 4 项）\n"
-        "1. 火球术 4环（已准备）\n"
-        "2. 闪电束 3环\n"
-        "3. 火焰箭 戏法\n"
-        "4. 魔法飞弹 1环（已准备）",
+        "1. 火焰箭 戏法\n"
+        "2. 魔法飞弹 1环（已准备）\n"
+        "3. 闪电束 3环\n"
+        "4. 火球术 4环（已准备）",
     )
     await _expect(
         app, set_spell_matcher, _event(".设置法术 施法属性:感知"),
@@ -329,10 +329,10 @@ async def test_set_and_delete_spell(app: App):
     await _expect(
         app, spell_matcher, _event(".法术"),
         "当前法术（4 项，施法属性：感知）：\n"
-        "1. 火球术 4环（已准备）\n"
-        "2. 闪电束 3环\n"
-        "3. 火焰箭 戏法\n"
-        "4. 魔法飞弹 1环（已准备）\n"
+        "1. 火焰箭 戏法\n"
+        "2. 魔法飞弹 1环（已准备）\n"
+        "3. 闪电束 3环\n"
+        "4. 火球术 4环（已准备）\n"
         "用法：.法术 准备/取消 名称；记录用 .设置法术 名称:环阶",
     )
     await _expect(

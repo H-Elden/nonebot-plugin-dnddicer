@@ -84,9 +84,14 @@ _SLOTS_ACTION_RE = re.compile(
 
 
 def _format_spell_lines(spells: List[SpellEntry]) -> str:
-    """法术清单的编号多行展示（清单 / 设置反馈共用）。"""
+    """法术清单的编号多行展示（清单 / 设置反馈共用）。
+
+    按环阶从低到高排列，同环内保持卡面录入顺序（``sorted`` 是稳定排序）。
+    """
     lines: List[str] = []
-    for index, spell in enumerate(spells, start=1):
+    for index, spell in enumerate(
+        sorted(spells, key=lambda item: item.level), start=1
+    ):
         template = (
             text.TXT_SPELL_ITEM_PREPARED
             if spell.prepared
