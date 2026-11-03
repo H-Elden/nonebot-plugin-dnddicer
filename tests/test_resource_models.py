@@ -258,7 +258,7 @@ def test_template_contains_new_segments_and_roundtrips():
     assert (char.spell_dc, char.spell_attack) == ("15", "+8")
     by_name = {spell.name: spell for spell in char.spells}
     assert by_name["火球术"].prepared is True
-    assert by_name["火球术"].cast_time == "1动作"
+    assert by_name["火球术"].cast_time == "动作"
     assert by_name["火球术"].material is True
     assert char.spell_slots.get_char_info() == "$法术位$ 1:4/4; 2:3/3; 3:2/2"
 

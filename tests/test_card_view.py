@@ -238,7 +238,7 @@ def test_spells_grouped_by_level() -> None:
     assert view.spell_groups[1].spells[0].prepared is True
     assert view.spell_groups[3].spells[1].prepared is True
     fireball = view.spell_groups[3].spells[0]
-    assert (fireball.time, fireball.range, fireball.material) == ("1动作", "150尺", True)
+    assert (fireball.time, fireball.range, fireball.material) == ("动作", "150尺", True)
     assert fireball.note == "20尺半径"
     assert "敏捷豁免（成功半伤）" in fireball.combat
     assert "8d6 火焰" in fireball.combat

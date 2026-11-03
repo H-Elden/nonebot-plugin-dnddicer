@@ -752,14 +752,14 @@ def _parse_spell_details(text: str, level: int = -1) -> Dict[str, object]:
         piece = piece.strip()
         if not piece:
             raise AssertionError(
-                "法术详情中有空项（用竖线分隔，如 时间:1动作|距离:150尺）"
+                "法术详情中有空项（用竖线分隔，如 时间:动作|距离:150尺）"
             )
         key, separator, value = piece.partition(":")
         key, value = key.strip(), value.strip()
         if not separator or key not in SPELL_DETAIL_KEYS:
             raise AssertionError(
                 f"法术详情写法无效: {piece}"
-                f"（可用：{'/'.join(SPELL_DETAIL_KEYS)}，如 时间:1动作）"
+                f"（可用：{'/'.join(SPELL_DETAIL_KEYS)}，如 时间:动作）"
             )
         if key in seen:
             raise AssertionError(f"法术详情重复: {key}")
@@ -868,7 +868,7 @@ def parse_spell_item(item: str) -> SpellEntry:
     """解析单条法术：``名称:环阶[*已准备][|详情]``。
 
     例：``火球术:3*``、``火焰箭:0``、
-    ``火球术:3*|时间:1动作|距离:150尺|材料:是``。
+    ``火球术:3*|时间:动作|距离:150尺|材料:是``。
     环阶 0 = 戏法；``*`` = 今日已准备；``|`` 之后为卡面展示用的详情
     （时间/距离/专注/仪式/材料/备注，2026-10-21 批②）。校验失败抛 AssertionError。
     """
@@ -2149,108 +2149,108 @@ def gen_template_char(group_id: str = "", user_id: str = "") -> DNDCharacter:
         SpellEntry(
             name="火焰箭", level=0, kind="攻击",
             damage_parts=_spell_damage("2d10", "火焰"),
-            cast_time="1动作", range="120尺",
+            cast_time="动作", range="120尺",
         ),
         SpellEntry(
             name="冷冻射线", level=0, kind="攻击",
             damage_parts=_spell_damage("2d8", "寒冷"),
             effect="速度-10",
-            cast_time="1动作", range="60尺",
+            cast_time="动作", range="60尺",
         ),
         SpellEntry(
             name="法师之手", level=0, kind="辅助",
             effect="操控物件", note="1分钟",
-            cast_time="1动作", range="30尺",
+            cast_time="动作", range="30尺",
         ),
         SpellEntry(
             name="次级幻象", level=0, kind="辅助",
             effect="声音或影像", note="1分钟",
-            cast_time="1动作", range="30尺", material=True,
+            cast_time="动作", range="30尺", material=True,
         ),
         SpellEntry(
             name="魔法伎俩", level=0, kind="辅助",
             effect="无害小魔法", note="至多1小时",
-            cast_time="1动作", range="10尺",
+            cast_time="动作", range="10尺",
         ),
         SpellEntry(
             name="光亮术", level=0, kind="辅助",
             effect="20尺明亮光照", note="1小时",
-            cast_time="1动作", range="触碰", material=True,
+            cast_time="动作", range="触碰", material=True,
         ),
         SpellEntry(
             name="心灵之楔", level=0, kind="豁免",
             save_ability="智力", save_success="无伤",
             damage_parts=_spell_damage("2d6", "心灵"),
             effect="下次豁免-1d4",
-            cast_time="1动作", range="60尺",
+            cast_time="动作", range="60尺",
         ),
         SpellEntry(
             name="护盾术", level=1, prepared=True, kind="辅助",
             effect="AC+5，持续到你的下回合开始", note="学徒免位1次",
-            cast_time="1反应", range="自身",
+            cast_time="反应", range="自身",
         ),
         SpellEntry(
             name="魔法飞弹", level=1, prepared=True, kind="自动",
             damage_parts=_spell_damage("1d4+1", "力场"),
             shots=3,
             upcast="+1发",
-            cast_time="1动作", range="120尺",
+            cast_time="动作", range="120尺",
         ),
         SpellEntry(
             name="法师护甲", level=1, prepared=True, kind="辅助",
             effect="AC=13+敏捷", note="8小时",
-            cast_time="1动作", range="触碰", material=True,
+            cast_time="动作", range="触碰", material=True,
         ),
         SpellEntry(
             name="侦测魔法", level=1, prepared=True, kind="辅助",
             effect="30尺灵光", note="血系免位1次",
-            cast_time="1动作或仪式", range="自身",
+            cast_time="动作或仪式", range="自身",
             concentration=True, ritual=True,
         ),
         SpellEntry(
             name="羽落术", level=1, prepared=True, kind="辅助",
             effect="至多5个生物", note="1分钟",
-            cast_time="1反应", range="60尺", material=True,
+            cast_time="反应", range="60尺", material=True,
         ),
         SpellEntry(
             name="迷踪步", level=2, prepared=True, kind="辅助",
             effect="传送30尺", note="血系免位1次",
-            cast_time="1附赠动作", range="自身",
+            cast_time="附赠动作", range="自身",
         ),
         SpellEntry(
             name="蛛网术", level=2, prepared=True, kind="豁免",
             save_ability="敏捷", save_success="无伤", effect="束缚",
             note="20尺立方",
-            cast_time="1动作", range="60尺", concentration=True, material=True,
+            cast_time="动作", range="60尺", concentration=True, material=True,
         ),
         SpellEntry(
             name="镜影术", level=2, prepared=True, kind="辅助",
             effect="3个分身", note="1分钟",
-            cast_time="1动作", range="自身",
+            cast_time="动作", range="自身",
         ),
         SpellEntry(
             name="火球术", level=3, prepared=True, kind="豁免",
             save_ability="敏捷", save_success="半伤",
             damage_parts=_spell_damage("8d6", "火焰"),
             upcast="+1d6", note="20尺半径",
-            cast_time="1动作", range="150尺", material=True,
+            cast_time="动作", range="150尺", material=True,
         ),
         SpellEntry(
             name="闪电束", level=3, prepared=True, kind="豁免",
             save_ability="敏捷", save_success="半伤",
             damage_parts=_spell_damage("8d6", "闪电"),
             upcast="+1d6", note="100尺线",
-            cast_time="1动作", range="自身", material=True,
+            cast_time="动作", range="自身", material=True,
         ),
         SpellEntry(
             name="法术反制", level=3, prepared=True, kind="特殊",
             effect="打断施法",
-            cast_time="1反应", range="60尺",
+            cast_time="反应", range="60尺",
         ),
         SpellEntry(
             name="加速术", level=3, prepared=True, kind="辅助",
             effect="速度翻倍、AC+2、额外动作",
-            cast_time="1动作", range="30尺", concentration=True, material=True,
+            cast_time="动作", range="30尺", concentration=True, material=True,
         ),
     ]
     character.spell_slots = SpellSlots(

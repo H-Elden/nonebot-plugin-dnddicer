@@ -390,6 +390,31 @@ def test_spell_details_parsing() -> None:
         parse_spell_item("火球术:3|备注:" + "长" * 41)
 
 
+def test_spell_time_is_free_text() -> None:
+    """施法时间是自由文本：动作、1动作与 1 动作都原样保存与回写。"""
+    char = _parse(
+        "$姓名$ 测试\n$等级$ 5\n$属性$ 10/10/10/10/10/10\n"
+        "$法术$ 火焰箭:0|时间:动作|距离:120尺; "
+        "火球术:3*|时间:1动作|距离:150尺; "
+        "护盾术:1|时间:1 动作|距离:自身"
+    )
+    assert [spell.cast_time for spell in char.spells] == ["动作", "1动作", "1 动作"]
+    text = char.get_char_info()
+    assert "时间:动作|距离:120尺" in text
+    assert "时间:1动作|距离:150尺" in text
+    assert "时间:1 动作|距离:自身" in text
+    assert _parse(text).get_char_info() == text
+
+
+def test_spell_time_max_len_boundary() -> None:
+    """施法时间上限 16 字：复合值与 16 字通过，17 字报错。"""
+    composite = "动作（繁茂）或8小时（丰产）"
+    assert parse_spell_item(f"植物滋长:3|时间:{composite}").cast_time == composite
+    assert parse_spell_item("火球术:3|时间:" + "长" * 16).cast_time == "长" * 16
+    with pytest.raises(AssertionError, match="施法时间过长（≤16 字）"):
+        parse_spell_item("火球术:3|时间:" + "长" * 17)
+
+
 def test_spell_setting_header_keys() -> None:
     ability, spells, dc, attack = parse_spell_setting(
         "施法属性:智力; 豁免DC:15; 法术攻击:+8; 火球术:3"

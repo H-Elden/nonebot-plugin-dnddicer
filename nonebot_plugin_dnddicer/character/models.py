@@ -698,7 +698,7 @@ class SpellEntry(BaseModel):
 
     卡面展示用的元数据与备注：
     ``cast_time`` / ``range`` / ``concentration`` / ``ritual`` / ``material`` /
-    ``note``，写在条目末尾的 ``|`` 之后（``时间:1动作|距离:150尺|专注:是``），
+    ``note``，写在条目末尾的 ``|`` 之后（``时间:动作|距离:150尺|专注:是``），
     只用于渲染卡面图，不参与施法结算。
 
     战斗字段（2026-11-02 新增，写在同一条 ``|`` 详情里）：
@@ -724,7 +724,7 @@ class SpellEntry(BaseModel):
     shots: int = 1                 # 多发：逐发攻击 / 逐发伤害（2~10）
     upcast: str = ""               # 升环效应（+1d6 / +1发 / 自由文本）
     effect: str = ""               # 辅助效果文本
-    cast_time: str = ""            # 施法时间（如 "1动作"）
+    cast_time: str = ""            # 施法时间（如 "动作"）
     range: str = ""                # 施法距离（如 "150尺"、"自身"）
     concentration: bool = False    # 专注
     ritual: bool = False           # 仪式

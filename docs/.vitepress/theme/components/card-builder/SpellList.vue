@@ -105,7 +105,7 @@
       <div class="cb-grid cb-grid--3">
         <label class="cb-grid__cell">
           <span class="cb-grid__label">施法时间</span>
-          <input v-model="item.time" class="cb-input" placeholder="1动作" />
+          <input v-model="item.time" class="cb-input" placeholder="动作" />
         </label>
         <label class="cb-grid__cell">
           <span class="cb-grid__label">距离</span>

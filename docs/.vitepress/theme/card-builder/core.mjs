@@ -818,14 +818,14 @@ export function createCardBuilder(spec) {
     for (const piece of source.split('|')) {
       const text = piece.trim()
       if (!text) {
-        fail('法术详情中有空项（用竖线分隔，如 时间:1动作|距离:150尺）')
+        fail('法术详情中有空项（用竖线分隔，如 时间:动作|距离:150尺）')
       }
       const [rawKey, rawValue] = partition(text, ':')
       const key = rawKey.trim()
       const value = rawValue.trim()
       if (!spellDetailKeys.includes(key)) {
         fail(
-          `法术详情写法无效: ${text}（可用：${spellDetailKeys.join('/')}，如 时间:1动作）`,
+          `法术详情写法无效: ${text}（可用：${spellDetailKeys.join('/')}，如 时间:动作）`,
         )
       }
       if (seen.has(key)) fail(`法术详情重复: ${key}`)
@@ -904,8 +904,8 @@ export function createCardBuilder(spec) {
         }
         detail.effect = value
       } else if (key === '时间') {
-        if (charLength(value) < 1 || charLength(value) > (limits.spell_time_max_len || 12)) {
-          fail(`法术施法时间过长（≤${limits.spell_time_max_len || 12} 字）: ${value}`)
+        if (charLength(value) < 1 || charLength(value) > (limits.spell_time_max_len || 16)) {
+          fail(`法术施法时间过长（≤${limits.spell_time_max_len || 16} 字）: ${value}`)
         }
         detail.time = value
       } else if (key === '距离') {
