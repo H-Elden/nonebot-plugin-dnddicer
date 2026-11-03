@@ -1334,7 +1334,7 @@ resource_slots = Scene(
 # 闪电束已准备、法术位 reset 满），演示环阶消耗、未准备提醒与短休/长休。
 cast_resources = Scene(
     id="cast_resources",
-    title="施法：攻击、豁免、自动、辅助与升环",
+    title="施法：攻击、豁免、自动、治疗、辅助与升环",
     steps=[
         Step("小满", ".施法 火焰箭", dice=[7]),
         Step("小满", ".火焰箭伤害", dice=[6, 4]),
@@ -1352,6 +1352,9 @@ cast_resources = Scene(
         Step("小满", ".施法 护盾术"),
         Step("小满", ".施法 闪电束", dice=[2] * 8),
         Step("小满", ".施法 3"),
+        # 治疗型：1 环与 2 环升环（布鲁姆的感知 18，2d4+4）
+        Step("阿岩", ".施法 治疗真言", dice=[2, 3]),
+        Step("阿岩", ".施法 治疗真言2环", dice=[1, 2, 3, 4]),
     ],
 )
 
